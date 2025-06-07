@@ -28,10 +28,8 @@ export default function TeacherAttendancePage() {
 
   useEffect(() => {
     // Initialize date on client-side to prevent hydration mismatch
-    if (typeof window !== 'undefined' && !attendanceDate) {
-      setAttendanceDate(new Date());
-    }
-  }, [attendanceDate]); // Runs once when attendanceDate is undefined, then stable
+    setAttendanceDate(new Date());
+  }, []); 
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -41,28 +39,40 @@ export default function TeacherAttendancePage() {
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
             const parsedUser: AuthUser = JSON.parse(storedUser);
+            console.log("TeacherAttendancePage: Parsed user from localStorage:", JSON.stringify(parsedUser, null, 2)); // DIAGNOSTIC LOG
+
             if (parsedUser && parsedUser.role === 'teacher') {
                  userFromStorage = parsedUser;
                  if (parsedUser.classId && typeof parsedUser.classId === 'string' && parsedUser.classId.trim() !== "") {
                     classNameFromStorage = parsedUser.classId.trim();
+                    console.log("TeacherAttendancePage: Successfully extracted classId from parsedUser:", classNameFromStorage); // DIAGNOSTIC LOG
+                 } else {
+                    console.warn("TeacherAttendancePage: classId issue. parsedUser.classId value:", parsedUser.classId, "type:", typeof parsedUser.classId); // DIAGNOSTIC LOG
+                    // classNameFromStorage remains null
                  }
             } else if (parsedUser && parsedUser.role !== 'teacher') {
                 toast({ variant: "destructive", title: "Access Denied", description: "You must be a teacher to mark attendance." });
             }
         } catch(e) {
-            console.error("Failed to parse user from localStorage in TeacherAttendancePage:", e);
+            console.error("TeacherAttendancePage: Failed to parse user from localStorage:", e);
         }
+    } else {
+        console.log("TeacherAttendancePage: No valid user in localStorage or storedUser is 'undefined'/'null'."); // DIAGNOSTIC LOG
     }
     setAuthUser(userFromStorage);
     setAssignedClassName(classNameFromStorage);
-  }, [toast]); // This effect should primarily run once on mount
+  }, [toast]);
 
   const fetchStudents = useCallback(async () => {
     if (!authUser || !authUser.schoolId || !assignedClassName) {
       setStudentAttendance([]);
       setIsLoadingStudents(false);
+      if (authUser && !assignedClassName) {
+        console.log("TeacherAttendancePage: fetchStudents - authUser present but assignedClassName is missing or empty."); // DIAGNOSTIC LOG
+      }
       return;
     }
+    console.log("TeacherAttendancePage: Fetching students for schoolId:", authUser.schoolId, "className:", assignedClassName); // DIAGNOSTIC LOG
     setIsLoadingStudents(true);
     const result = await getStudentsByClass(authUser.schoolId.toString(), assignedClassName);
     if (result.success && result.users) {
@@ -72,8 +82,8 @@ export default function TeacherAttendancePage() {
         status: 'present' as AttendanceStatus, 
       }));
       setStudentAttendance(studentsForAttendance);
-      if (studentsForAttendance.length === 0 && authUser.classId) { // Check authUser.classId to ensure message context
-        toast({ title: "No Students", description: `No students found in your assigned class: ${authUser.classId}. Please contact admin.` });
+      if (studentsForAttendance.length === 0 && authUser.classId) {
+        toast({ title: "No Students", description: `No students found in your assigned class: ${assignedClassName}. Please contact admin.` });
       }
     } else {
       toast({ variant: "destructive", title: "Error Loading Students", description: result.message || "Could not fetch students for the class." });
@@ -102,7 +112,7 @@ export default function TeacherAttendancePage() {
   }
 
   const handleSubmitAttendance = async () => {
-    if (!authUser || !authUser.schoolId || !authUser._id || !assignedClassName) { // Check assignedClassName
+    if (!authUser || !authUser.schoolId || !authUser._id || !assignedClassName) { 
       toast({ variant: "destructive", title: "Error", description: "User or class information not found. Please log in again or contact admin if class is not assigned."});
       return;
     }
@@ -114,8 +124,8 @@ export default function TeacherAttendancePage() {
     setIsSubmitting(true);
 
     const payload: AttendanceSubmissionPayload = {
-      classId: assignedClassName, // Use assignedClassName from state
-      className: assignedClassName, // Use assignedClassName from state
+      classId: assignedClassName, 
+      className: assignedClassName, 
       schoolId: authUser.schoolId.toString(),
       date: attendanceDate,
       entries: studentAttendance,
@@ -264,5 +274,3 @@ export default function TeacherAttendancePage() {
     </div>
   );
 }
-
-    
