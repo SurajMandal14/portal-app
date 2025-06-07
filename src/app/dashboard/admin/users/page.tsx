@@ -129,22 +129,20 @@ export default function AdminUserManagementPage() {
   }, [authUser, fetchInitialData]);
 
   useEffect(() => {
-    // Reset form when switching between add and edit mode, or when editingUser changes
     if (editingUser) {
       form.reset({
         name: editingUser.name || "",
         email: editingUser.email || "",
-        password: "", // Always clear password for edit
+        password: "", 
         role: editingUser.role as 'teacher' | 'student' | undefined,
-        classId: editingUser.classId || "", // classId is the className string
+        classId: editingUser.classId || "", 
       });
     } else {
       form.reset({
         name: "", email: "", password: "", role: undefined, classId: "",
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingUser, form.reset]); // form.reset should be stable
+  }, [editingUser, form]); 
 
   async function onSubmit(values: CreateSchoolUserFormData | UpdateSchoolUserFormData) {
     if (!authUser || !authUser.schoolId) {
@@ -163,8 +161,9 @@ export default function AdminUserManagementPage() {
 
     if (result.success) {
       toast({ title: editingUser ? "User Updated" : "User Created", description: result.message });
-      setEditingUser(null); // Exit edit mode
-      fetchInitialData(); // Refresh user list
+      setEditingUser(null); 
+      form.reset({ name: "", email: "", password: "", role: undefined, classId: "" });
+      fetchInitialData(); 
     } else {
       toast({ variant: "destructive", title: editingUser ? "Update Failed" : "Creation Failed", description: result.error || result.message });
     }
@@ -177,6 +176,7 @@ export default function AdminUserManagementPage() {
 
   const cancelEdit = () => {
     setEditingUser(null);
+    form.reset({ name: "", email: "", password: "", role: undefined, classId: "" });
   };
 
   const handleDeleteClick = (user: SchoolUser) => {
@@ -259,6 +259,7 @@ export default function AdminUserManagementPage() {
                       <FormLabel>Password</FormLabel>
                       <FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} /></FormControl>
                       {editingUser && <FormDescription className="text-xs">Leave blank to keep current password.</FormDescription>}
+                      {!editingUser && <FormDescription className="text-xs">Must be at least 6 characters.</FormDescription>}
                       <FormMessage />
                     </FormItem>
                 )}/>
@@ -279,7 +280,7 @@ export default function AdminUserManagementPage() {
                  {(selectedRole === 'teacher' || selectedRole === 'student') && availableClasses.length > 0 && (
                     <FormField control={form.control} name="classId" render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Assign to Class {selectedRole === 'student' ? '(Required)' : '(Optional)'}</FormLabel>
+                            <FormLabel>Assign to Class {selectedRole === 'student' ? '(Required for Students)' : '(Optional for Teachers)'}</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting}>
                                 <FormControl><SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger></FormControl>
                                 <SelectContent>{availableClasses.map((className) => (<SelectItem key={className} value={className}>{className}</SelectItem>))}</SelectContent>
@@ -369,3 +370,4 @@ export default function AdminUserManagementPage() {
     </div>
   );
 }
+

@@ -31,6 +31,11 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
 
     const { name, email, password, role, classId } = validatedFields.data;
 
+    // Server-side check: classId is required if role is student
+    if (role === 'student' && (!classId || classId.trim() === "")) {
+      return { success: false, message: 'Validation failed', error: 'A class assignment is required for students.' };
+    }
+
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<Omit<User, '_id'>>('users');
 
@@ -48,7 +53,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
       password: hashedPassword,
       role: role as UserRole,
       schoolId: userSchoolId,
-      classId: classId || undefined, // classId from form is className string
+      classId: classId || undefined, 
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -141,6 +146,11 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
 
     const { name, email, password, role, classId } = validatedFields.data;
 
+    // Server-side check: classId is required if role is student
+    if (role === 'student' && (!classId || classId.trim() === "")) {
+      return { success: false, message: 'Validation failed', error: 'A class assignment is required for students.' };
+    }
+
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
 
@@ -155,14 +165,14 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
       return { success: false, message: 'This email is already in use by another account.', error: 'Email already in use.' };
     }
     
-    const updateData: Partial<Omit<User, '_id' | 'role'>> & { role?: UserRole } = { // Role can be updated conceptually, but UI might restrict
+    const updateData: Partial<Omit<User, '_id' | 'role'>> & { role?: UserRole } = { 
       name,
       email,
       classId: classId || undefined,
       updatedAt: new Date(),
     };
 
-    if (role && (role === 'teacher' || role === 'student')) { // Ensure role is valid
+    if (role && (role === 'teacher' || role === 'student')) { 
         updateData.role = role;
     }
 
@@ -185,21 +195,21 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
     
     revalidatePath('/dashboard/admin/users');
     
-    const updatedUser = await usersCollection.findOne({ _id: new ObjectId(userId) as any });
-    if (!updatedUser) {
+    const updatedUserDoc = await usersCollection.findOne({ _id: new ObjectId(userId) as any });
+    if (!updatedUserDoc) {
       return { success: false, message: 'Failed to retrieve user after update.', error: 'Could not fetch updated user.' };
     }
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password: _p, ...userWithoutPassword } = updatedUser;
+    const { password: _p, ...userWithoutPassword } = updatedUserDoc;
 
     return {
       success: true,
       message: 'User updated successfully!',
       user: {
         ...userWithoutPassword,
-        _id: updatedUser._id.toString(),
-        schoolId: updatedUser.schoolId?.toString(),
-        classId: updatedUser.classId || undefined,
+        _id: updatedUserDoc._id.toString(),
+        schoolId: updatedUserDoc.schoolId?.toString(),
+        classId: updatedUserDoc.classId || undefined,
       }
     };
 
@@ -225,7 +235,6 @@ export async function deleteSchoolUser(userId: string, schoolId: string): Promis
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
 
-    // Ensure the user belongs to the school and is either a teacher or student before deleting
     const result = await usersCollection.deleteOne({ 
       _id: new ObjectId(userId) as any, 
       schoolId: new ObjectId(schoolId) as any,
@@ -260,9 +269,9 @@ export async function getStudentsByClass(schoolId: string, className: string): P
 
     const students = await usersCollection.find({
       schoolId: new ObjectId(schoolId) as any,
-      classId: className, // Querying by className string
+      classId: className, 
       role: 'student'
-    }).project({ password: 0 }).sort({ name: 1 }).toArray(); // Sort by name
+    }).project({ password: 0 }).sort({ name: 1 }).toArray(); 
 
     const studentsWithStrId = students.map(student => ({
       ...student,
@@ -278,3 +287,4 @@ export async function getStudentsByClass(schoolId: string, className: string): P
     return { success: false, error: errorMessage, message: 'Failed to fetch students for the class.' };
   }
 }
+
