@@ -15,8 +15,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { submitAttendance } from "@/app/actions/attendance";
 import { getStudentsByClass } from "@/app/actions/schoolUsers";
 import type { AttendanceEntry, AttendanceStatus, AttendanceSubmissionPayload } from "@/types/attendance";
-// import type { User as AppUser } from "@/types/user"; // For student user type - not directly used here
-import type { AuthUser } from "@/types/user"; // Using central AuthUser
+import type { AuthUser } from "@/types/user";
 
 export default function TeacherAttendancePage() {
   const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(undefined);
@@ -29,65 +28,67 @@ export default function TeacherAttendancePage() {
 
   useEffect(() => {
     // Initialize date on client-side to prevent hydration mismatch
-    setAttendanceDate(new Date());
+    if (typeof window !== 'undefined' && !attendanceDate) {
+      setAttendanceDate(new Date());
+    }
+  }, [attendanceDate]); // Runs once when attendanceDate is undefined, then stable
 
+  useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
+    let userFromStorage: AuthUser | null = null;
+    let classNameFromStorage: string | null = null;
+
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
             const parsedUser: AuthUser = JSON.parse(storedUser);
             if (parsedUser && parsedUser.role === 'teacher') {
-                 setAuthUser(parsedUser);
-                 if (parsedUser.classId) {
-                    setAssignedClassName(parsedUser.classId);
+                 userFromStorage = parsedUser;
+                 if (parsedUser.classId && typeof parsedUser.classId === 'string' && parsedUser.classId.trim() !== "") {
+                    classNameFromStorage = parsedUser.classId.trim();
                  }
-            } else {
-                setAuthUser(null);
-                setAssignedClassName(null);
-                 toast({ variant: "destructive", title: "Access Denied", description: "You must be a teacher to mark attendance." });
+            } else if (parsedUser && parsedUser.role !== 'teacher') {
+                toast({ variant: "destructive", title: "Access Denied", description: "You must be a teacher to mark attendance." });
             }
         } catch(e) {
             console.error("Failed to parse user from localStorage in TeacherAttendancePage:", e);
-            setAuthUser(null);
-            setAssignedClassName(null);
         }
-    } else {
-      setAuthUser(null);
-      setAssignedClassName(null);
     }
-  }, [toast]);
+    setAuthUser(userFromStorage);
+    setAssignedClassName(classNameFromStorage);
+  }, [toast]); // This effect should primarily run once on mount
 
   const fetchStudents = useCallback(async () => {
-    if (!authUser || !authUser.schoolId || !authUser.classId) {
+    if (!authUser || !authUser.schoolId || !assignedClassName) {
       setStudentAttendance([]);
       setIsLoadingStudents(false);
       return;
     }
     setIsLoadingStudents(true);
-    const result = await getStudentsByClass(authUser.schoolId.toString(), authUser.classId);
+    const result = await getStudentsByClass(authUser.schoolId.toString(), assignedClassName);
     if (result.success && result.users) {
       const studentsForAttendance: AttendanceEntry[] = result.users.map(student => ({
         studentId: student._id!.toString(),
         studentName: student.name || 'Unknown Student',
-        status: 'present' as AttendanceStatus, // Default to present
+        status: 'present' as AttendanceStatus, 
       }));
       setStudentAttendance(studentsForAttendance);
-      if (studentsForAttendance.length === 0) {
-        toast({ title: "No Students", description: `No students found in class: ${authUser.classId}. Please assign students via Admin panel.` });
+      if (studentsForAttendance.length === 0 && authUser.classId) { // Check authUser.classId to ensure message context
+        toast({ title: "No Students", description: `No students found in your assigned class: ${authUser.classId}. Please contact admin.` });
       }
     } else {
       toast({ variant: "destructive", title: "Error Loading Students", description: result.message || "Could not fetch students for the class." });
       setStudentAttendance([]);
     }
     setIsLoadingStudents(false);
-  }, [authUser, toast]);
+  }, [authUser, assignedClassName, toast]);
 
   useEffect(() => {
-    if (authUser && authUser.schoolId && authUser.classId) {
+    if (authUser && authUser.schoolId && assignedClassName) {
       fetchStudents();
     } else {
-      setStudentAttendance([]); // Clear if no authUser or classId
+      setStudentAttendance([]); 
     }
-  }, [authUser, fetchStudents]);
+  }, [authUser, assignedClassName, fetchStudents]);
 
 
   const handleAttendanceChange = (studentId: string, status: AttendanceStatus) => {
@@ -101,8 +102,8 @@ export default function TeacherAttendancePage() {
   }
 
   const handleSubmitAttendance = async () => {
-    if (!authUser || !authUser.schoolId || !authUser._id || !authUser.classId) {
-      toast({ variant: "destructive", title: "Error", description: "User or class information not found. Please log in again."});
+    if (!authUser || !authUser.schoolId || !authUser._id || !assignedClassName) { // Check assignedClassName
+      toast({ variant: "destructive", title: "Error", description: "User or class information not found. Please log in again or contact admin if class is not assigned."});
       return;
     }
     if (!attendanceDate || studentAttendance.length === 0) {
@@ -113,8 +114,8 @@ export default function TeacherAttendancePage() {
     setIsSubmitting(true);
 
     const payload: AttendanceSubmissionPayload = {
-      classId: authUser.classId, 
-      className: authUser.classId,
+      classId: assignedClassName, // Use assignedClassName from state
+      className: assignedClassName, // Use assignedClassName from state
       schoolId: authUser.schoolId.toString(),
       date: attendanceDate,
       entries: studentAttendance,
@@ -185,7 +186,11 @@ export default function TeacherAttendancePage() {
         </CardHeader>
         <CardContent>
           {!authUser ? (
-            <p className="text-center text-destructive py-4">User information not loaded. Please try refreshing or logging in again.</p>
+            <div className="text-center py-6">
+                 <Info className="mx-auto h-12 w-12 text-muted-foreground" />
+                <p className="mt-4 text-lg font-semibold">User Not Loaded</p>
+                <p className="text-muted-foreground">Please try refreshing or logging in again.</p>
+            </div>
           ) : !assignedClassName ? (
              <div className="text-center py-6">
                 <Info className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -243,7 +248,7 @@ export default function TeacherAttendancePage() {
             </Table>
           ) : (
             <p className="text-center text-muted-foreground py-4">
-              No students found for class: {assignedClassName}. Please ensure students are assigned by the admin.
+              No students found for your assigned class: {assignedClassName}. Please ensure students are assigned by the admin.
             </p>
           )}
            {authUser && assignedClassName && studentAttendance.length > 0 && (
@@ -259,3 +264,5 @@ export default function TeacherAttendancePage() {
     </div>
   );
 }
+
+    
