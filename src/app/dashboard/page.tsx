@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowRight, UserCog, ShieldAlert, BookUser, User, DollarSign, CheckSquare, Users, LayoutDashboard, Home, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation"; // Added usePathname
-import type { User as AppUser } from "@/types/user"; // Renamed to avoid conflict
+import { useRouter, usePathname } from "next/navigation";
+import type { User as AppUser } from "@/types/user";
 
 type AuthUser = Pick<AppUser, 'email' | 'name' | 'role' | '_id' | 'schoolId'>;
 
@@ -40,42 +40,72 @@ export default function DashboardPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname(); // Get current pathname
+  const pathname = usePathname();
 
   useEffect(() => {
+    setIsLoading(true); // Ensure loading is true at the start of the effect
     const storedUser = localStorage.getItem('loggedInUser');
-    if (storedUser) {
+
+    if (storedUser && storedUser !== 'undefined' && storedUser !== 'null') {
       try {
-        const parsedUser = JSON.parse(storedUser);
-        setAuthUser(parsedUser);
-        // Redirect to role-specific dashboard if on generic /dashboard
-        if (pathname === '/dashboard') {
+        const parsedUser = JSON.parse(storedUser) as AuthUser;
+        if (parsedUser && parsedUser.role) { // Check for a valid user object
+          setAuthUser(parsedUser);
+          if (pathname === '/dashboard') {
             if (parsedUser.role === 'superadmin') router.replace("/dashboard/super-admin");
             else if (parsedUser.role === 'admin') router.replace("/dashboard/admin");
             else if (parsedUser.role === 'teacher') router.replace("/dashboard/teacher");
             else if (parsedUser.role === 'student') router.replace("/dashboard/student");
+            // If role is unknown but user is on /dashboard, they will see the generic dashboard content below
+          }
+        } else {
+          // Parsed object is not a valid user
+          localStorage.removeItem('loggedInUser');
+          setAuthUser(null);
+          router.replace('/');
         }
       } catch (e) {
-        console.error("Failed to parse user from localStorage", e);
+        console.error("Failed to parse user from localStorage in DashboardPage:", e);
         localStorage.removeItem('loggedInUser');
-        router.replace('/'); // Redirect to login if corrupted
+        setAuthUser(null);
+        router.replace('/'); 
+      } finally {
+        setIsLoading(false);
       }
     } else {
-      router.replace('/'); // Redirect to login if no user
+      // No valid user string in localStorage
+      if (storedUser) { // If it was an invalid string like "undefined" or "null"
+         localStorage.removeItem('loggedInUser');
+      }
+      setAuthUser(null); // Ensure authUser state is null
+      router.replace('/'); 
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [router, pathname]); // Add pathname to dependency array
+  }, [router, pathname]);
 
-  if (isLoading || !authUser) {
+  if (isLoading || (!authUser && pathname === '/dashboard')) { // Show loader if loading, or if on /dashboard and authUser isn't set yet (before redirect)
     return (
       <div className="flex flex-1 items-center justify-center h-screen">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
       </div>
     );
   }
+  
+  // This part will render if on /dashboard and user is authenticated but role redirect hasn't happened or is not applicable
+  // Or if a user somehow lands here with a role not in the redirect list.
+  if (!authUser) { 
+    // This case should ideally be covered by the loader and redirect,
+    // but as a fallback if navigation directly to /dashboard happens and authUser is still null post-loading.
+    // It should be rare if redirects work correctly.
+    return (
+         <div className="flex flex-1 items-center justify-center h-screen">
+            <p>Redirecting...</p> {/* Or a more specific message */}
+            <Loader2 className="h-16 w-16 animate-spin text-primary ml-4" />
+        </div>
+    );
+  }
 
-  // This part might not be reached if redirection always happens
-  // but kept for graceful fallback or if /dashboard is meant to be a generic hub
+
   const links = roleSpecificLinks[authUser.role as keyof typeof roleSpecificLinks] || [];
   
   return (
@@ -88,7 +118,7 @@ export default function DashboardPage() {
           <CardDescription className="text-lg">Your central hub for campus management. You are logged in as a <span className="font-semibold capitalize">{authUser.role}</span>.</CardDescription>
         </CardHeader>
         <CardContent>
-           <p className="text-muted-foreground">Select an option below to navigate to your dashboard or manage specific areas.</p>
+           <p className="text-muted-foreground">Select an option below to navigate to your dashboard or manage specific areas. If you're not automatically redirected to your specific dashboard, please use the navigation menu.</p>
         </CardContent>
       </Card>
 
@@ -112,7 +142,7 @@ export default function DashboardPage() {
          {links.length === 0 && (
             <Card className="md:col-span-2 lg:col-span-3">
                 <CardContent className="pt-6">
-                    <p className="text-center text-muted-foreground text-lg">No specific quick actions available for your role on this page, or your role is not fully configured for this view. Please use the navigation menu.</p>
+                    <p className="text-center text-muted-foreground text-lg">No specific quick actions available for your role on this page, or your role is not fully configured for this view. Please use the navigation menu or ensure you are on your role-specific dashboard page.</p>
                 </CardContent>
             </Card>
          )}

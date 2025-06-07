@@ -59,9 +59,22 @@ export function Header() {
   useEffect(() => {
     setIsLoadingUser(true);
     const storedUser = localStorage.getItem('loggedInUser');
-    if (storedUser) {
+    
+    if (storedUser && storedUser !== 'undefined' && storedUser !== 'null') {
       try {
-        setAuthUser(JSON.parse(storedUser));
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser && parsedUser.role) { // Check if parsedUser is a valid user object
+          setAuthUser(parsedUser);
+        } else {
+          // Parsed object is not a valid user, treat as session error
+          localStorage.removeItem('loggedInUser');
+          setAuthUser(null);
+          toast({
+            variant: "destructive",
+            title: "Session Error",
+            description: "Invalid session data. Please log in again.",
+          });
+        }
       } catch (e) {
         console.error("Failed to parse user from localStorage in Header:", e);
         localStorage.removeItem('loggedInUser');
@@ -69,18 +82,22 @@ export function Header() {
         toast({
           variant: "destructive",
           title: "Session Error",
-          description: "Your session data might be corrupted. Please try logging in again.",
+          description: "Your session data might be corrupted. Please log in again.",
         });
+      } finally {
+        setIsLoadingUser(false);
       }
     } else {
-      // If no user in localStorage, ensure internal authUser state is null.
-      // Only call setAuthUser if it's not already null to prevent potential loops.
-      if (authUser !== null) {
+      // No valid user string in localStorage
+      if (storedUser) { // If it was an invalid string like "undefined" or "null"
+        localStorage.removeItem('loggedInUser');
+      }
+      if (authUser !== null) { // Only update state if it's changing
         setAuthUser(null);
       }
+      setIsLoadingUser(false);
     }
-    setIsLoadingUser(false);
-  }, [pathname, toast]); // Corrected dependencies: authUser removed. toast is stable.
+  }, [pathname, toast]); // Correct dependencies: authUser removed
 
 
   const handleLogout = () => {
