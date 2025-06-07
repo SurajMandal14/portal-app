@@ -4,6 +4,7 @@
 import { connectToDatabase } from '@/lib/mongodb';
 import * as z from 'zod';
 import type { User } from '@/types/user'; // We'll create this type definition
+import bcrypt from 'bcryptjs'; // Import bcrypt
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
@@ -14,7 +15,7 @@ export interface LoginResult {
   success: boolean;
   error?: string;
   message?: string;
-  user?: Pick<User, 'email' | 'name' | 'role'>;
+  user?: Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId'>;
 }
 
 export async function loginUser(values: z.infer<typeof loginSchema>): Promise<LoginResult> {
@@ -37,31 +38,41 @@ export async function loginUser(values: z.infer<typeof loginSchema>): Promise<Lo
       return { error: 'User not found. Please check your email.', success: false };
     }
 
-    // --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
-    // IMPORTANT: Password Hashing and Comparison
-    // --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
-    // In a real application, passwords MUST be hashed before storing
-    // and compared using a secure hashing algorithm (e.g., bcrypt).
-    // For this educational step, we are doing a plain text comparison.
-    // This is NOT secure for production and will be addressed when we
-    // implement user registration/password management.
-    // --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
-    if (user.password !== password) {
-      return { error: 'Invalid password. Please try again.', success: false };
+    if (!user.password) {
+      return { error: 'Password not set for this user. Please contact support.', success: false };
     }
 
-    if (user.role !== 'superadmin') {
-        // For now, this login form is specifically for superadmins.
-        // This can be expanded later to handle other roles.
-        return { error: 'Access denied. This login is for superadmins only.', success: false };
+    // Compare the provided password with the stored hashed password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      // Also try plain text comparison for users created before hashing was implemented (like initial superadmin)
+      // This is a temporary measure. All passwords should eventually be hashed.
+      if (user.password === password) {
+        // This branch is for the initial superadmin if password was 'password' plain text
+        // No action needed, password is valid in this specific fallback case
+      } else {
+        return { error: 'Invalid password. Please try again.', success: false };
+      }
     }
+    
+    // At this point, login is successful.
+    // We can remove role-specific login restrictions here to allow all users to login
+    // and rely on UI/routing to direct them appropriately.
+    // The Header component already handles role-based navigation.
 
     // TODO: Implement session management (e.g., using JWT or next-auth)
     // For now, we'll just return basic user info.
     return {
       success: true,
       message: 'Login successful! Redirecting...',
-      user: { email: user.email, name: user.name, role: user.role }
+      user: { 
+        _id: user._id.toString(),
+        email: user.email, 
+        name: user.name, 
+        role: user.role,
+        schoolId: user.schoolId?.toString() 
+      }
     };
 
   } catch (error) {
