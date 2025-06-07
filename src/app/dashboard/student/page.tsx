@@ -3,13 +3,18 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, CheckSquare, Percent, BookOpen, UserCircle, Loader2, CalendarClock } from "lucide-react";
+import { DollarSign, CheckSquare, Percent, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { getStudentAttendanceRecords } from "@/app/actions/attendance";
+import { getFeePaymentsByStudent } from "@/app/actions/fees";
+import { getSchoolById } from "@/app/actions/schools";
 import type { AttendanceRecord, AuthUser } from "@/types/attendance";
+import type { FeePayment } from "@/types/fees";
+import type { School } from "@/types/school";
+
 
 interface AttendanceSummary {
   present: number;
@@ -19,22 +24,22 @@ interface AttendanceSummary {
   total: number;
 }
 
+interface FeeSummary {
+  totalFee: number;
+  totalPaid: number;
+  totalDue: number;
+  percentagePaid: number;
+}
+
+
 export default function StudentDashboardPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({
     present: 0, absent: 0, late: 0, percentage: 0, total: 0
   });
+  const [feeSummary, setFeeSummary] = useState<FeeSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-
-  // Mock fee data (can be made dynamic later)
-  const mockFees = {
-    total: 5000,
-    paid: 3000,
-    due: 2000,
-    status: "Partially Paid",
-  };
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -57,50 +62,83 @@ export default function StudentDashboardPage() {
     }
   }, [toast]);
 
-  const fetchAttendanceData = useCallback(async () => {
+  const calculateTotalFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
+    if (!className || !schoolConfig) return 0;
+    const classFeeConfig = schoolConfig.classFees.find(cf => cf.className === className);
+    if (!classFeeConfig) return 0;
+    return (classFeeConfig.tuitionFee || 0) + (classFeeConfig.busFee || 0) + (classFeeConfig.canteenFee || 0);
+  }, []);
+
+  const fetchAllStudentData = useCallback(async () => {
     if (!authUser || !authUser._id || !authUser.schoolId) {
       setIsLoading(false);
-      setAttendanceRecords([]);
       return;
     }
 
     setIsLoading(true);
-    const result = await getStudentAttendanceRecords(authUser._id.toString(), authUser.schoolId.toString());
-    
-    if (result.success && result.records) {
-      setAttendanceRecords(result.records);
-      calculateSummary(result.records);
-    } else {
-      toast({ variant: "destructive", title: "Failed to Load Attendance", description: result.error || "Could not fetch attendance data." });
-      setAttendanceRecords([]);
-      calculateSummary([]); // Reset summary
-    }
-    setIsLoading(false);
-  }, [authUser, toast]);
+    try {
+      const [attendanceResult, feePaymentsResult, schoolResult] = await Promise.all([
+        getStudentAttendanceRecords(authUser._id.toString(), authUser.schoolId.toString()),
+        getFeePaymentsByStudent(authUser._id.toString(), authUser.schoolId.toString()),
+        getSchoolById(authUser.schoolId.toString())
+      ]);
 
-  const calculateSummary = (records: AttendanceRecord[]) => {
-    const totalDays = records.length;
-    if (totalDays === 0) {
+      // Process Attendance
+      if (attendanceResult.success && attendanceResult.records) {
+        const records = attendanceResult.records;
+        const totalDays = records.length;
+        if (totalDays > 0) {
+          const present = records.filter(r => r.status === 'present').length;
+          const absent = records.filter(r => r.status === 'absent').length;
+          const late = records.filter(r => r.status === 'late').length;
+          const attendedDays = present + late;
+          const percentage = Math.round((attendedDays / totalDays) * 100);
+          setAttendanceSummary({ present, absent, late, percentage, total: totalDays });
+        } else {
+          setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
+        }
+      } else {
+        toast({ variant: "warning", title: "Attendance Info", description: attendanceResult.message || "Could not fetch attendance data." });
+        setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
+      }
+
+      // Process Fees
+      if (schoolResult.success && schoolResult.school) {
+        const schoolConfig = schoolResult.school;
+        const studentPayments = feePaymentsResult.success && feePaymentsResult.payments ? feePaymentsResult.payments : [];
+        
+        if (authUser.classId) {
+            const totalFee = calculateTotalFee(authUser.classId as string, schoolConfig);
+            const totalPaid = studentPayments.reduce((sum, payment) => sum + payment.amountPaid, 0);
+            const totalDue = totalFee - totalPaid;
+            const percentagePaid = totalFee > 0 ? Math.round((totalPaid / totalFee) * 100) : 0;
+            setFeeSummary({ totalFee, totalPaid, totalDue, percentagePaid });
+        } else {
+            // Student not assigned to a class, can't calculate fees.
+            setFeeSummary({ totalFee: 0, totalPaid: 0, totalDue: 0, percentagePaid: 0 });
+             toast({ variant: "info", title: "Fee Info", description: "You are not assigned to a class, so fee details cannot be calculated." });
+        }
+      } else {
+        toast({ variant: "destructive", title: "School Info Error", description: schoolResult.message || "Could not load school details for fee calculation." });
+        setFeeSummary(null);
+      }
+
+    } catch (error) {
+      toast({ variant: "destructive", title: "Dashboard Error", description: "An unexpected error occurred fetching dashboard data." });
       setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
-      return;
+      setFeeSummary(null);
+    } finally {
+      setIsLoading(false);
     }
-    const present = records.filter(r => r.status === 'present').length;
-    const absent = records.filter(r => r.status === 'absent').length;
-    const late = records.filter(r => r.status === 'late').length;
-    const attendedDays = present + late;
-    const percentage = totalDays > 0 ? Math.round((attendedDays / totalDays) * 100) : 0;
-    setAttendanceSummary({ present, absent, late, percentage, total: totalDays });
-  };
+  }, [authUser, toast, calculateTotalFee]);
   
   useEffect(() => {
     if (authUser?._id && authUser?.schoolId) {
-      fetchAttendanceData();
-    } else if (!authUser && !localStorage.getItem('loggedInUser')){ // Only set loading false if we are sure user is not logged in
+      fetchAllStudentData();
+    } else if (!authUser && !localStorage.getItem('loggedInUser')){ 
       setIsLoading(false);
     }
-    // If authUser is null but localStorage might still have a user, isLoading remains true
-    // until the first useEffect (for authUser) sets authUser or clears it.
-  }, [authUser, fetchAttendanceData]);
+  }, [authUser, fetchAllStudentData]);
 
 
   if (isLoading) {
@@ -132,7 +170,7 @@ export default function StudentDashboardPage() {
           <CardTitle className="text-2xl font-headline">Student Dashboard</CardTitle>
           <CardDescription>
             Welcome, {authUser.name}! 
-            {authUser.classId && ` (${authUser.classId})`}
+            {authUser.classId && ` (Class: ${authUser.classId})`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -147,15 +185,23 @@ export default function StudentDashboardPage() {
             <DollarSign className="h-6 w-6 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${mockFees.due.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Due out of ${mockFees.total.toLocaleString()}</p>
-            <Progress value={(mockFees.paid / mockFees.total) * 100} className="mt-2 h-3" />
-            <div className="mt-2 flex justify-between text-sm">
-              <span>Paid: ${mockFees.paid.toLocaleString()}</span>
-              <span className={`font-semibold ${mockFees.due > 0 ? 'text-destructive' : 'text-green-600'}`}>{mockFees.status}</span>
-            </div>
+            {feeSummary ? (
+              <>
+                <div className="text-3xl font-bold">${feeSummary.totalDue.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">Due out of ${feeSummary.totalFee.toLocaleString()}</p>
+                <Progress value={feeSummary.percentagePaid} className="mt-2 h-3" />
+                <div className="mt-2 flex justify-between text-sm">
+                  <span>Paid: ${feeSummary.totalPaid.toLocaleString()}</span>
+                  <span className={`font-semibold ${feeSummary.totalDue > 0 ? 'text-destructive' : 'text-green-600'}`}>
+                    {feeSummary.totalDue > 0 ? "Partially Paid" : "Fully Paid"}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">Fee details are loading or unavailable.</p>
+            )}
              <Button asChild variant="link" className="px-0 mt-2">
-                <Link href="/dashboard/student/fees">View Fee Details <Percent className="ml-1 h-4 w-4"/> </Link>
+                <Link href="/dashboard/student/fees">View Full Fee Details <ListChecks className="ml-1 h-4 w-4"/> </Link>
             </Button>
           </CardContent>
         </Card>
@@ -166,7 +212,7 @@ export default function StudentDashboardPage() {
             <CheckSquare className="h-6 w-6 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {attendanceRecords.length > 0 ? (
+            {attendanceSummary.total > 0 ? (
               <>
                 <div className="text-3xl font-bold">{attendanceSummary.percentage}%</div>
                 <p className="text-xs text-muted-foreground">
