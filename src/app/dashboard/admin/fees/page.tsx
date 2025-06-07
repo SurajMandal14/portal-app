@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ export default function FeeManagementPage() {
     } else {
       setPaymentAmount("");
     }
-  }, [selectedStudentId]);
+  }, [selectedStudentId, selectedStudent]);
 
   const handleRecordPayment = () => {
     if (!selectedStudent || !paymentAmount || +paymentAmount <= 0) {

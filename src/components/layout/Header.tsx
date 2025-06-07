@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert } from "lucide-react";
+import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,9 +16,9 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import type { User } from "@/types/user";
+import type { User as AppUser } from "@/types/user";
 
-type AuthUser = Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId'>;
+type AuthUser = Pick<AppUser, 'email' | 'name' | 'role' | '_id' | 'schoolId'>;
 
 const navLinksBase = {
   superadmin: [
@@ -35,13 +35,13 @@ const navLinksBase = {
   teacher: [
     { href: "/dashboard/teacher", label: "Teacher Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/teacher/attendance", label: "Mark Attendance", icon: CheckSquare },
-    // Add more teacher specific links here
+    { href: "/dashboard/teacher/profile", label: "My Profile", icon: User },
   ],
   student: [
     { href: "/dashboard/student", label: "Student Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/student/fees", label: "My Fees", icon: DollarSign },
     { href: "/dashboard/student/attendance", label: "My Attendance", icon: CheckSquare },
-    // Add more student specific links here
+    { href: "/dashboard/student/profile", label: "My Profile", icon: BookUser },
   ],
 };
 
@@ -63,15 +63,13 @@ export function Header() {
         setAuthUser(JSON.parse(storedUser));
       } catch (e) {
         console.error("Failed to parse user from localStorage", e);
-        localStorage.removeItem('loggedInUser'); // Clear corrupted item
-        router.push('/'); // Redirect to login if user data is corrupted
+        localStorage.removeItem('loggedInUser'); 
+        router.push('/'); 
       }
-    } else if (!pathname.startsWith('/dashboard')) {
-      // Allow access to non-dashboard pages like login
-    } else {
-        // If on a dashboard page and no user, redirect to login
-        // router.push('/'); 
-        // For now, let's allow rendering header, maybe a loading state or guest view
+    } else if (!pathname.startsWith('/')) { 
+      // No user and not on a public page (like login, assuming it's at root or similar)
+      // This condition might need adjustment based on your public routes.
+      // router.push('/');
     }
     setIsLoadingUser(false);
   }, [pathname, router]);
@@ -91,7 +89,6 @@ export function Header() {
   const currentNavLinks = currentRole ? navLinksBase[currentRole] || [] : [];
 
   if (isLoadingUser) {
-    // You can return a skeleton loader here if you prefer
     return (
       <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
         <div className="container flex h-16 items-center justify-between px-4 md:px-6">
@@ -99,7 +96,7 @@ export function Header() {
             <School className="h-7 w-7 text-primary" />
             <span className="font-headline">CampusFlow</span>
           </Link>
-          <div className="h-6 w-6 rounded-full bg-muted animate-pulse"></div>
+          <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div> {/* Skeleton for user icon */}
         </div>
       </header>
     );
@@ -115,7 +112,6 @@ export function Header() {
 
         {authUser && (
           <>
-            {/* Desktop Navigation */}
             <nav className="hidden md:flex gap-4 items-center">
               {currentNavLinks.map((link) => (
                 <Link
@@ -143,13 +139,13 @@ export function Header() {
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">{authUser.name}</p>
                       <p className="text-xs leading-none text-muted-foreground">
-                        {authUser.email} ({authUser.role})
+                        {authUser.email} ({authUser.role && authUser.role.charAt(0).toUpperCase() + authUser.role.slice(1)})
                       </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
-                    <UserCircle className="mr-2 h-4 w-4" /> Profile
+                    <User className="mr-2 h-4 w-4" /> Profile
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
                     <Settings className="mr-2 h-4 w-4" /> Settings
@@ -162,7 +158,6 @@ export function Header() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Mobile Navigation */}
               <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="icon" className="md:hidden">

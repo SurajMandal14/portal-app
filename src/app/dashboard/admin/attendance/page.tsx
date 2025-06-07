@@ -1,9 +1,10 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckSquare, Percent, CalendarDays, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { DatePickerWithRange } from "@/components/ui/date-picker-with-range"; // Assuming this component exists or will be created
+// import { DatePickerWithRange } from "@/components/ui/date-picker-with-range"; // Assuming this component exists or will be created
 
 // Mock data
 const mockAttendanceSummary = [
