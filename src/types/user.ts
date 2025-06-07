@@ -1,17 +1,28 @@
 
 // Basic User type definition
 // This will be expanded as we add more user-specific fields.
+
+import type { ObjectId } from 'mongodb';
+
+export type UserRole = 'superadmin' | 'admin' | 'teacher' | 'student';
+
 export interface User {
-  _id: string; // Or ObjectId if you prefer to use MongoDB's ObjectId type directly
+  _id: ObjectId | string; 
   email: string;
-  password?: string; // Password should ideally not be part of client-side user objects often
+  password?: string; 
   name: string;
-  role: 'superadmin' | 'admin' | 'teacher' | 'student';
-  schoolId?: string; // Or ObjectId
-  classId?: string; // Or ObjectId
+  role: UserRole;
+  schoolId?: ObjectId | string; 
+  classId?: ObjectId | string; 
   avatarUrl?: string;
   phone?: string;
   createdAt: Date;
   updatedAt: Date;
-  // Add other fields as necessary
+}
+
+export interface SchoolAdminFormData {
+  name: string;
+  email: string;
+  password?: string; // Optional for update, required for create
+  schoolId: string;
 }
