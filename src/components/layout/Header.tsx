@@ -57,16 +57,15 @@ export function Header() {
 
 
   useEffect(() => {
-    setIsLoadingUser(true); // Set loading true at the start of effect
+    setIsLoadingUser(true);
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) {
       try {
         setAuthUser(JSON.parse(storedUser));
       } catch (e) {
         console.error("Failed to parse user from localStorage in Header:", e);
-        localStorage.removeItem('loggedInUser'); 
-        setAuthUser(null); // Clear authUser state
-        // Do not redirect here to prevent loops, show toast instead
+        localStorage.removeItem('loggedInUser');
+        setAuthUser(null);
         toast({
           variant: "destructive",
           title: "Session Error",
@@ -74,14 +73,14 @@ export function Header() {
         });
       }
     } else {
-      // No stored user, ensure authUser state is null if not already
-      // This handles cases where user logs out on another tab, etc.
+      // If no user in localStorage, ensure internal authUser state is null.
+      // Only call setAuthUser if it's not already null to prevent potential loops.
       if (authUser !== null) {
         setAuthUser(null);
       }
     }
     setIsLoadingUser(false);
-  }, [pathname]); // Removed router from deps for this specific effect logic to avoid re-runs on router object change
+  }, [pathname, toast]); // Corrected dependencies: authUser removed. toast is stable.
 
 
   const handleLogout = () => {
@@ -91,9 +90,9 @@ export function Header() {
       title: "Logged Out",
       description: "You have been successfully logged out.",
     });
-    router.push("/"); 
+    router.push("/");
   };
-  
+
   const currentRole = authUser?.role as Role | undefined;
   const currentNavLinks = currentRole ? navLinksBase[currentRole] || [] : [];
 
@@ -208,4 +207,3 @@ export function Header() {
     </header>
   );
 }
-
