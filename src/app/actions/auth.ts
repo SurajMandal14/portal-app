@@ -15,7 +15,7 @@ export interface LoginResult {
   success: boolean;
   error?: string;
   message?: string;
-  user?: Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId'>;
+  user?: Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId' | 'classId'>;
 }
 
 export async function loginUser(values: z.infer<typeof loginSchema>): Promise<LoginResult> {
@@ -61,8 +61,6 @@ export async function loginUser(values: z.infer<typeof loginSchema>): Promise<Lo
     // and rely on UI/routing to direct them appropriately.
     // The Header component already handles role-based navigation.
 
-    // TODO: Implement session management (e.g., using JWT or next-auth)
-    // For now, we'll just return basic user info.
     return {
       success: true,
       message: 'Login successful! Redirecting...',
@@ -71,7 +69,8 @@ export async function loginUser(values: z.infer<typeof loginSchema>): Promise<Lo
         email: user.email, 
         name: user.name, 
         role: user.role,
-        schoolId: user.schoolId?.toString() 
+        schoolId: user.schoolId?.toString(),
+        classId: user.classId || undefined // Include classId
       }
     };
 
@@ -81,3 +80,4 @@ export async function loginUser(values: z.infer<typeof loginSchema>): Promise<Lo
     return { error: 'An unexpected error occurred during login. Please try again later.', success: false };
   }
 }
+
