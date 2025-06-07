@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, UserCog, ShieldAlert, BookUser, User } from "lucide-react";
+import { ArrowRight, UserCog, ShieldAlert, BookUser, User, DollarSign, CheckSquare, Users } from "lucide-react";
 
 // Mock user role for demonstration
 const userRole = "superadmin"; // Change this to 'admin', 'teacher', 'student' to see different views
