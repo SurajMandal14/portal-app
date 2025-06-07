@@ -70,6 +70,7 @@ export async function submitAttendance(payload: AttendanceSubmissionPayload): Pr
     
     revalidatePath('/dashboard/teacher/attendance');
     revalidatePath('/dashboard/admin/attendance');
+    revalidatePath('/dashboard/student/attendance');
 
 
     return {
@@ -109,7 +110,7 @@ export async function getDailyAttendanceForSchool(schoolId: string, date: Date):
     endDate.setDate(startDate.getDate() + 1);
     
     const records = await attendanceCollection.find({
-      schoolId: new ObjectId(schoolId) as any, // Cast to any for MongoDB driver compatibility
+      schoolId: new ObjectId(schoolId) as any, 
       date: {
         $gte: startDate,
         $lt: endDate,
@@ -128,5 +129,34 @@ export async function getDailyAttendanceForSchool(schoolId: string, date: Date):
     console.error('Get daily attendance server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch attendance records.' };
+  }
+}
+
+export async function getStudentAttendanceRecords(studentId: string, schoolId: string): Promise<GetAttendanceRecordsResult> {
+  try {
+    if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(studentId)) {
+        return { success: false, message: 'Invalid Student ID or School ID format.', error: 'Invalid ID format.'};
+    }
+
+    const { db } = await connectToDatabase();
+    const attendanceCollection = db.collection<AttendanceRecord>('attendances');
+    
+    const records = await attendanceCollection.find({
+      studentId: studentId, // Student ID is likely already a string from AuthUser, but ensure it matches storage type if not
+      schoolId: new ObjectId(schoolId) as any,
+    }).sort({ date: -1 }).toArray(); // Sort by date descending to show most recent first
+    
+    const recordsWithStrId = records.map(record => ({
+      ...record,
+      _id: record._id.toString(),
+      schoolId: record.schoolId.toString(),
+      markedByTeacherId: record.markedByTeacherId.toString(),
+    }));
+
+    return { success: true, records: recordsWithStrId };
+  } catch (error) {
+    console.error('Get student attendance records server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch student attendance records.' };
   }
 }
