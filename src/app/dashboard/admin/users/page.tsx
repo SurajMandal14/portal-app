@@ -4,7 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+// import { Label } from "@/components/ui/label"; // Not directly used, FormLabel is used
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase } from "lucide-react";
@@ -19,7 +19,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { createSchoolUser, getSchoolUsers, createSchoolUserFormSchema, type CreateSchoolUserFormData } from "@/app/actions/schoolUsers";
+import { createSchoolUser, getSchoolUsers } from "@/app/actions/schoolUsers";
+import { createSchoolUserFormSchema, type CreateSchoolUserFormData } from '@/types/user'; // Import from types
 import { getSchoolById } from "@/app/actions/schools";
 import type { User as AppUser, UserRole } from "@/types/user";
 import type { School, ClassFeeConfig } from "@/types/school";
@@ -90,9 +91,9 @@ export default function AdminUserManagementPage() {
 
       if (usersResult.success && usersResult.users) {
         // Map className to users
+        // Assuming user.classId stores the className string directly
         const usersWithClassNames = usersResult.users.map(user => {
-          const classConfig = schoolResult.school?.classFees.find(cf => cf.className === user.classId); // Assuming classId on user is className string
-          return { ...user, className: classConfig?.className || user.classId || 'N/A' };
+          return { ...user, className: user.classId || 'N/A' };
         });
         setSchoolUsers(usersWithClassNames);
       } else {
@@ -121,9 +122,7 @@ export default function AdminUserManagementPage() {
       return;
     }
     setIsSubmitting(true);
-    // For createSchoolUser, classId from form is expected to be the className string for now.
-    // The backend action might convert it to an ObjectId if you have a separate classes collection.
-    // Currently, user.classId is just a string placeholder.
+    // The `classId` from the form is the className string, which is what `createSchoolUser` expects
     const result = await createSchoolUser(values, authUser.schoolId.toString());
     setIsSubmitting(false);
 
@@ -255,7 +254,7 @@ export default function AdminUserManagementPage() {
                  {(selectedRole === 'teacher' || selectedRole === 'student') && availableClasses.length > 0 && (
                     <FormField
                         control={form.control}
-                        name="classId"
+                        name="classId" // This field will store the className string
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>Assign to Class (Optional for Teacher, Recommended for Student)</FormLabel>
@@ -362,3 +361,4 @@ export default function AdminUserManagementPage() {
     </div>
   );
 }
+

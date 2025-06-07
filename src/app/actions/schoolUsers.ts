@@ -5,18 +5,10 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/lib/mongodb';
 import type { User, UserRole } from '@/types/user';
+import { createSchoolUserFormSchema, type CreateSchoolUserFormData } from '@/types/user';
 import { revalidatePath } from 'next/cache';
 import { ObjectId } from 'mongodb';
 
-export const createSchoolUserFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  role: z.enum(['teacher', 'student'], { required_error: "Role is required." }),
-  classId: z.string().optional(), // Optional, can be class name or ID
-});
-
-export type CreateSchoolUserFormData = z.infer<typeof createSchoolUserFormSchema>;
 
 export interface CreateSchoolUserResult {
   success: boolean;
@@ -56,7 +48,10 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
       password: hashedPassword,
       role: role as UserRole,
       schoolId: userSchoolId,
-      classId: classId ? new ObjectId(classId) : undefined, // Assuming classId from form is an ObjectId string for now
+      // If classId from form is a className string, we store it as is for now.
+      // If your design evolves to have a separate 'classes' collection with ObjectIds for classes,
+      // this would need adjustment (e.g., find class ObjectId by name before saving).
+      classId: classId ? classId : undefined, 
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -78,7 +73,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
         ...userWithoutPassword, 
         _id: result.insertedId.toString(),
         schoolId: userSchoolId.toString(),
-        classId: classId ? new ObjectId(classId).toString() : undefined,
+        classId: classId ? classId.toString() : undefined, // Ensure classId is string if it exists
       },
     };
 
@@ -103,11 +98,6 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
     }
     const { db } = await connectToDatabase();
     
-    // Fetch users and attempt to join with classes if classId is present
-    // For simplicity, this example fetches users and then you might map class names on the client
-    // or do a more complex aggregation if class details are stored in a separate collection.
-    // Assuming `classId` on user refers to an _id in a 'classes' collection, or is a direct name for now.
-    // For now, we'll return users and classId as is. Client can map className if needed from school details.
     const usersFromDb = await db.collection<User>('users').find({ 
       schoolId: new ObjectId(schoolId) as any,
       role: { $in: ['teacher', 'student'] } 
@@ -120,7 +110,8 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         ...userWithoutPassword,
         _id: user._id.toString(),
         schoolId: user.schoolId?.toString(),
-        classId: user.classId?.toString(), // Convert classId to string if it exists
+        // classId is stored as string (className), so just ensure it's passed as string
+        classId: user.classId ? user.classId.toString() : undefined, 
       };
     });
 
@@ -131,3 +122,4 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
     return { success: false, error: errorMessage, message: 'Failed to fetch school users.' };
   }
 }
+
