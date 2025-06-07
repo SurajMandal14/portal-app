@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,10 +15,11 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { School } from "lucide-react";
+import { School, Loader2 } from "lucide-react"; // Added Loader2
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-
+import { loginUser, type LoginResult } from "@/app/actions/auth"; // Import the server action
+import { useState } from "react";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
@@ -27,6 +29,7 @@ const formSchema = z.object({
 export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -37,24 +40,34 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // TODO: Implement actual authentication logic with MongoDB
-    // For now, simulate login
-    if (values.email === "superadmin@example.com" && values.password === "password") {
-      toast({
-        title: "Login Successful",
-        description: "Redirecting to dashboard...",
-      });
-      // Simulate setting auth state and redirect
-      // In a real app, you'd set a cookie or session and then redirect
-      setTimeout(() => {
+    setIsLoading(true);
+    try {
+      const result: LoginResult = await loginUser(values);
+
+      if (result.success) {
+        toast({
+          title: "Login Successful",
+          description: result.message || "Redirecting to dashboard...",
+        });
+        // TODO: Store user session (e.g., using context, next-auth, or cookies)
+        // For now, we directly redirect.
         router.push("/dashboard");
-      }, 1000);
-    } else {
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: result.error || "An unknown error occurred.",
+        });
+      }
+    } catch (error) {
+      console.error("Login form submission error:", error);
       toast({
         variant: "destructive",
-        title: "Login Failed",
-        description: "Invalid email or password.",
+        title: "Login Error",
+        description: "An unexpected error occurred. Please try again.",
       });
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -77,7 +90,7 @@ export function LoginForm() {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="superadmin@example.com" {...field} />
+                    <Input placeholder="superadmin@example.com" {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -90,13 +103,14 @@ export function LoginForm() {
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90">
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Login
             </Button>
           </form>
