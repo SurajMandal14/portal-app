@@ -33,46 +33,64 @@ export default function TeacherAttendancePage() {
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
-    let userFromStorage: AuthUser | null = null;
-    let classNameFromStorage: string | null = null;
-
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
             const parsedUser: AuthUser = JSON.parse(storedUser);
-            console.log("TeacherAttendancePage: Parsed user from localStorage:", JSON.stringify(parsedUser, null, 2)); // DIAGNOSTIC LOG
+            console.log("TeacherAttendancePage: (Effect 1) Parsed user from localStorage:", JSON.stringify(parsedUser, null, 2));
 
             if (parsedUser && parsedUser.role === 'teacher') {
-                 userFromStorage = parsedUser;
-                 if (parsedUser.classId && typeof parsedUser.classId === 'string' && parsedUser.classId.trim() !== "") {
-                    classNameFromStorage = parsedUser.classId.trim();
-                    console.log("TeacherAttendancePage: Successfully extracted classId from parsedUser:", classNameFromStorage); // DIAGNOSTIC LOG
-                 } else {
-                    console.warn("TeacherAttendancePage: classId issue. parsedUser.classId value:", parsedUser.classId, "type:", typeof parsedUser.classId); // DIAGNOSTIC LOG
-                    // classNameFromStorage remains null
-                 }
+                setAuthUser(parsedUser); 
+
+                let className: string | null = null;
+                if (parsedUser.classId && typeof parsedUser.classId === 'string') {
+                    const trimmedClassId = parsedUser.classId.trim();
+                    if (trimmedClassId !== "") {
+                        className = trimmedClassId;
+                        console.log("TeacherAttendancePage: (Effect 1) Successfully derived className:", className);
+                    } else {
+                        console.warn("TeacherAttendancePage: (Effect 1) parsedUser.classId is an empty string after trim. Raw:", parsedUser.classId);
+                    }
+                } else {
+                     console.warn("TeacherAttendancePage: (Effect 1) parsedUser.classId is missing, not a string, or null. Raw:", parsedUser.classId);
+                }
+                setAssignedClassName(className);
+
             } else if (parsedUser && parsedUser.role !== 'teacher') {
+                setAuthUser(null); 
+                setAssignedClassName(null);
                 toast({ variant: "destructive", title: "Access Denied", description: "You must be a teacher to mark attendance." });
+            } else {
+                // Parsed user is not as expected or role is missing
+                setAuthUser(null); 
+                setAssignedClassName(null);
+                console.warn("TeacherAttendancePage: (Effect 1) Parsed user is invalid or role is not teacher.");
             }
         } catch(e) {
-            console.error("TeacherAttendancePage: Failed to parse user from localStorage:", e);
+            console.error("TeacherAttendancePage: (Effect 1) Failed to parse user from localStorage:", e);
+            setAuthUser(null);
+            setAssignedClassName(null);
         }
     } else {
-        console.log("TeacherAttendancePage: No valid user in localStorage or storedUser is 'undefined'/'null'."); // DIAGNOSTIC LOG
+      console.log("TeacherAttendancePage: (Effect 1) No valid user in localStorage or storedUser is 'undefined'/'null'.");
+      setAuthUser(null);
+      setAssignedClassName(null);
     }
-    setAuthUser(userFromStorage);
-    setAssignedClassName(classNameFromStorage);
-  }, [toast]);
+  }, [toast]); 
 
   const fetchStudents = useCallback(async () => {
     if (!authUser || !authUser.schoolId || !assignedClassName) {
       setStudentAttendance([]);
       setIsLoadingStudents(false);
       if (authUser && !assignedClassName) {
-        console.log("TeacherAttendancePage: fetchStudents - authUser present but assignedClassName is missing or empty."); // DIAGNOSTIC LOG
+        console.log("TeacherAttendancePage: fetchStudents - authUser present but assignedClassName is missing or empty. authUser.classId from AuthUser object:", authUser.classId, "Current assignedClassName state:", assignedClassName);
+      } else if (!authUser) {
+        console.log("TeacherAttendancePage: fetchStudents - authUser is null.");
+      } else if (authUser && !authUser.schoolId) {
+        console.log("TeacherAttendancePage: fetchStudents - authUser.schoolId is missing.");
       }
       return;
     }
-    console.log("TeacherAttendancePage: Fetching students for schoolId:", authUser.schoolId, "className:", assignedClassName); // DIAGNOSTIC LOG
+    console.log("TeacherAttendancePage: Fetching students for schoolId:", authUser.schoolId, "className:", assignedClassName);
     setIsLoadingStudents(true);
     const result = await getStudentsByClass(authUser.schoolId.toString(), assignedClassName);
     if (result.success && result.users) {
@@ -206,6 +224,7 @@ export default function TeacherAttendancePage() {
                 <Info className="mx-auto h-12 w-12 text-muted-foreground" />
                 <p className="mt-4 text-lg font-semibold">Not Assigned to a Class</p>
                 <p className="text-muted-foreground">You are not currently assigned to a class. Please contact your school administrator.</p>
+                 <p className="text-xs text-muted-foreground mt-2">(Ensure you have logged out and back in if your class was recently assigned.)</p>
             </div>
           ) : isLoadingStudents ? (
             <div className="flex items-center justify-center py-10">
@@ -274,3 +293,4 @@ export default function TeacherAttendancePage() {
     </div>
   );
 }
+
