@@ -7,31 +7,44 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DollarSign, Printer, Search, Filter, Loader2, Info } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DollarSign, Printer, Loader2, Info, CalendarDays, Edit, Trash2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/types/attendance";
 import type { User as AppUser } from "@/types/user";
-import type { School, ClassFeeConfig } from "@/types/school";
+import type { School } from "@/types/school";
+import type { FeePayment, FeePaymentPayload } from "@/types/fees";
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
+import { recordFeePayment, getFeePaymentsBySchool } from "@/app/actions/fees";
+import { format } from "date-fns";
 
-interface StudentFeeDetails extends AppUser {
+interface StudentFeeDetailsProcessed extends AppUser {
   totalFee: number;
-  paidAmount: number; // For future use
-  dueAmount: number; // For future use
-  className?: string; // From user.classId
+  paidAmount: number;
+  dueAmount: number;
+  className?: string; 
 }
 
 export default function FeeManagementPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
-  const [students, setStudents] = useState<AppUser[]>([]);
-  const [studentFeeList, setStudentFeeList] = useState<StudentFeeDetails[]>([]);
+  const [allStudents, setAllStudents] = useState<AppUser[]>([]); // Raw student list
+  const [allSchoolPayments, setAllSchoolPayments] = useState<FeePayment[]>([]); // All payments for the school
+  
+  const [studentFeeList, setStudentFeeList] = useState<StudentFeeDetailsProcessed[]>([]); // Processed list for display
   
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number | string>("");
+  const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
+  const [paymentNotes, setPaymentNotes] = useState<string>("");
+
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -39,11 +52,11 @@ export default function FeeManagementPage() {
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
       try {
         const parsedUser: AuthUser = JSON.parse(storedUser);
-        if (parsedUser && parsedUser.role === 'admin' && parsedUser.schoolId) {
+        if (parsedUser && parsedUser.role === 'admin' && parsedUser.schoolId && parsedUser._id) {
           setAuthUser(parsedUser);
         } else {
           setAuthUser(null);
-          toast({ variant: "destructive", title: "Access Denied", description: "You must be a school admin." });
+          toast({ variant: "destructive", title: "Access Denied", description: "You must be a school admin with valid session data." });
         }
       } catch (e) {
         console.error("FeeManagementPage: Failed to parse authUser", e);
@@ -61,16 +74,41 @@ export default function FeeManagementPage() {
     return (classFeeConfig.tuitionFee || 0) + (classFeeConfig.busFee || 0) + (classFeeConfig.canteenFee || 0);
   }, []);
 
-  const fetchSchoolData = useCallback(async () => {
+  const processStudentFeeDetails = useCallback(() => {
+    if (!schoolDetails || allStudents.length === 0) {
+      setStudentFeeList([]);
+      return;
+    }
+
+    const processedList = allStudents.map(student => {
+      const totalFee = calculateTotalFee(student.classId as string, schoolDetails);
+      const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id.toString());
+      const paidAmount = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
+      const dueAmount = totalFee - paidAmount;
+
+      return {
+        ...student,
+        className: student.classId as string,
+        totalFee,
+        paidAmount,
+        dueAmount,
+      };
+    }) as StudentFeeDetailsProcessed[];
+    setStudentFeeList(processedList);
+
+  }, [allStudents, schoolDetails, allSchoolPayments, calculateTotalFee]);
+
+  const fetchSchoolDataAndPayments = useCallback(async () => {
     if (!authUser || !authUser.schoolId) {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      const [schoolResult, usersResult] = await Promise.all([
+      const [schoolResult, usersResult, paymentsResult] = await Promise.all([
         getSchoolById(authUser.schoolId.toString()),
-        getSchoolUsers(authUser.schoolId.toString())
+        getSchoolUsers(authUser.schoolId.toString()),
+        getFeePaymentsBySchool(authUser.schoolId.toString())
       ]);
 
       if (schoolResult.success && schoolResult.school) {
@@ -82,80 +120,103 @@ export default function FeeManagementPage() {
 
       if (usersResult.success && usersResult.users) {
         const studentUsers = usersResult.users.filter(u => u.role === 'student');
-        setStudents(studentUsers);
-        
-        // Process student fee list after both schoolDetails and students are set
-        // This might require schoolDetails to be available, so we use a conditional effect or handle it here
-        if (schoolResult.success && schoolResult.school) {
-            const processedFeeList = studentUsers.map(student => {
-            const totalFee = calculateTotalFee(student.classId as string, schoolResult.school);
-            return {
-                ...student,
-                className: student.classId as string, // classId stores className
-                totalFee: totalFee,
-                paidAmount: 0, // Placeholder
-                dueAmount: totalFee, // Placeholder
-            };
-            }) as StudentFeeDetails[];
-           setStudentFeeList(processedFeeList);
-        }
-
-
+        setAllStudents(studentUsers);
       } else {
         toast({ variant: "destructive", title: "Error", description: usersResult.message || "Failed to load students." });
-        setStudents([]);
-        setStudentFeeList([]);
+        setAllStudents([]);
+      }
+
+      if (paymentsResult.success && paymentsResult.payments) {
+        setAllSchoolPayments(paymentsResult.payments);
+      } else {
+        toast({ variant: "warning", title: "Payment Info", description: paymentsResult.message || "Could not load payment history or none found." });
+        setAllSchoolPayments([]);
       }
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred fetching school data." });
       setSchoolDetails(null);
-      setStudents([]);
-      setStudentFeeList([]);
+      setAllStudents([]);
+      setAllSchoolPayments([]);
     } finally {
       setIsLoading(false);
     }
-  }, [authUser, toast, calculateTotalFee]);
+  }, [authUser, toast]);
+  
+  useEffect(() => {
+     processStudentFeeDetails();
+  }, [allStudents, schoolDetails, allSchoolPayments, processStudentFeeDetails]);
+
 
   useEffect(() => {
     if (authUser && authUser.schoolId) {
-      fetchSchoolData();
+      fetchSchoolDataAndPayments();
     } else {
-      setIsLoading(false); // Not logged in or no schoolId
+      setIsLoading(false);
       setSchoolDetails(null);
-      setStudents([]);
-      setStudentFeeList([]);
+      setAllStudents([]);
+      setAllSchoolPayments([]);
     }
-  }, [authUser, fetchSchoolData]);
+  }, [authUser, fetchSchoolDataAndPayments]);
   
 
-  const selectedStudentData = selectedStudentId ? studentFeeList.find(s => s._id.toString() === selectedStudentId) : null;
+  const selectedStudentFullData = selectedStudentId ? studentFeeList.find(s => s._id.toString() === selectedStudentId) : null;
 
   useEffect(() => {
-    if (selectedStudentData) {
-      setPaymentAmount(selectedStudentData.dueAmount > 0 ? selectedStudentData.dueAmount : "");
+    if (selectedStudentFullData) {
+      setPaymentAmount(selectedStudentFullData.dueAmount > 0 ? selectedStudentFullData.dueAmount : "");
+      setPaymentDate(new Date());
+      setPaymentMethod("");
+      setPaymentNotes("");
     } else {
       setPaymentAmount("");
     }
-  }, [selectedStudentId, selectedStudentData]);
+  }, [selectedStudentId, selectedStudentFullData]);
 
-  const handleRecordPayment = () => {
-    if (!selectedStudentData || !paymentAmount || +paymentAmount <= 0) {
-      toast({ variant: "destructive", title: "Error", description: "Please select a student and enter a valid payment amount." });
+  const handleRecordPayment = async () => {
+    if (!selectedStudentFullData || !paymentAmount || +paymentAmount <= 0 || !paymentDate || !authUser?._id || !authUser?.schoolId) {
+      toast({ variant: "destructive", title: "Error", description: "Please select a student, enter a valid payment amount, date, and ensure admin details are available." });
       return;
     }
-    // TODO: Implement actual payment recording logic (new server action)
-    console.log(`Recording payment for ${selectedStudentData.name}: ${paymentAmount}`);
-    toast({ title: "Payment Recorded (Simulated)", description: `Payment of ${paymentAmount} for ${selectedStudentData.name} logged.` });
-    // Placeholder: In future, refetch/update studentFeeList
-    // setSelectedStudentId(null);
-    // setPaymentAmount("");
+    setIsSubmittingPayment(true);
+
+    const payload: FeePaymentPayload = {
+      studentId: selectedStudentFullData._id.toString(),
+      studentName: selectedStudentFullData.name || 'N/A',
+      schoolId: authUser.schoolId.toString(),
+      classId: selectedStudentFullData.className || 'N/A',
+      amountPaid: +paymentAmount,
+      paymentDate: paymentDate,
+      recordedByAdminId: authUser._id.toString(),
+      paymentMethod: paymentMethod || undefined,
+      notes: paymentNotes || undefined,
+    };
+
+    const result = await recordFeePayment(payload);
+    setIsSubmittingPayment(false);
+
+    if (result.success) {
+      toast({ title: "Payment Recorded", description: result.message });
+      // Refetch payments to update UI
+      if (authUser?.schoolId) {
+        const paymentsResult = await getFeePaymentsBySchool(authUser.schoolId.toString());
+        if (paymentsResult.success && paymentsResult.payments) {
+          setAllSchoolPayments(paymentsResult.payments);
+        }
+      }
+      // Optionally reset form, or keep student selected to record another payment
+      setSelectedStudentId(null); // Deselect student after payment
+      setPaymentAmount("");
+      setPaymentMethod("");
+      setPaymentNotes("");
+    } else {
+      toast({ variant: "destructive", title: "Payment Failed", description: result.error || result.message });
+    }
   };
 
   const handleGenerateReceipt = (studentId: string) => {
     const student = studentFeeList.find(s => s._id.toString() === studentId);
     if (!student) return;
-    // TODO: Implement client-side PDF generation or server-side receipt generation
-    toast({ title: "Generate Receipt (Simulated)", description: `Generating PDF receipt for ${student.name}.` });
+    toast({ title: "Generate Receipt (Simulated)", description: `Generating PDF receipt for ${student.name}. This feature is not yet implemented.` });
   };
   
   if (isLoading) {
@@ -189,7 +250,7 @@ export default function FeeManagementPage() {
         </CardHeader>
         <CardContent>
           <p className="text-destructive">School details could not be loaded. Fee management requires school fee structures to be configured.</p>
-          <p className="mt-2 text-sm text-muted-foreground">Please ensure the school profile is correctly set up by a Super Admin.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Please ensure the school profile is correctly set up by a Super Admin, including class fee configurations.</p>
         </CardContent>
       </Card>
     );
@@ -216,13 +277,13 @@ export default function FeeManagementPage() {
               <Select 
                 onValueChange={setSelectedStudentId} 
                 value={selectedStudentId || ""}
-                disabled={students.length === 0}
+                disabled={allStudents.length === 0 || isSubmittingPayment}
               >
                 <SelectTrigger id="student-select">
-                  <SelectValue placeholder={students.length > 0 ? "Select a student" : "No students available"} />
+                  <SelectValue placeholder={allStudents.length > 0 ? "Select a student" : "No students available"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {students.map(student => (
+                  {allStudents.map(student => (
                     <SelectItem key={student._id.toString()} value={student._id.toString()}>
                       {student.name} ({student.classId || 'N/A'})
                     </SelectItem>
@@ -230,41 +291,91 @@ export default function FeeManagementPage() {
                 </SelectContent>
               </Select>
             </div>
-            {selectedStudentData && (
+            {selectedStudentFullData && (
               <>
-                <p className="text-sm">Class: {selectedStudentData.className || 'N/A'}</p>
-                <p className="text-sm">Total Fee: ${selectedStudentData.totalFee.toLocaleString()}</p>
-                <p className="text-sm">Amount Paid (Simulated): ${selectedStudentData.paidAmount.toLocaleString()}</p>
-                <p className="text-sm font-semibold">Amount Due (Simulated): ${selectedStudentData.dueAmount.toLocaleString()}</p>
+                <p className="text-sm">Class: {selectedStudentFullData.className || 'N/A'}</p>
+                <p className="text-sm">Total Fee: ${selectedStudentFullData.totalFee.toLocaleString()}</p>
+                <p className="text-sm">Amount Paid: ${selectedStudentFullData.paidAmount.toLocaleString()}</p>
+                <p className="text-sm font-semibold">Amount Due: ${selectedStudentFullData.dueAmount.toLocaleString()}</p>
+                
+                <div className="pt-2 space-y-3">
+                    <div>
+                        <Label htmlFor="payment-amount">Payment Amount</Label>
+                        <Input 
+                            id="payment-amount" 
+                            type="number" 
+                            placeholder="Enter amount" 
+                            value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(e.target.value)}
+                            disabled={!selectedStudentFullData || isSubmittingPayment || selectedStudentFullData.dueAmount <= 0}
+                        />
+                    </div>
+                    <div>
+                        <Label htmlFor="payment-date">Payment Date</Label>
+                         <Popover>
+                            <PopoverTrigger asChild>
+                            <Button
+                                id="payment-date"
+                                variant={"outline"}
+                                className="w-full justify-start text-left font-normal"
+                                disabled={!selectedStudentFullData || isSubmittingPayment}
+                            >
+                                <CalendarDays className="mr-2 h-4 w-4" />
+                                {paymentDate ? format(paymentDate, "PPP") : <span>Pick a date</span>}
+                            </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                            <Calendar
+                                mode="single"
+                                selected={paymentDate}
+                                onSelect={setPaymentDate}
+                                initialFocus
+                                disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
+                            />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                    <div>
+                        <Label htmlFor="payment-method">Payment Method (Optional)</Label>
+                        <Input 
+                            id="payment-method" 
+                            type="text" 
+                            placeholder="e.g., Cash, Card, Online" 
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            disabled={!selectedStudentFullData || isSubmittingPayment}
+                        />
+                    </div>
+                    <div>
+                        <Label htmlFor="payment-notes">Notes (Optional)</Label>
+                        <Textarea
+                            id="payment-notes"
+                            placeholder="e.g., Part payment for Term 1"
+                            value={paymentNotes}
+                            onChange={(e) => setPaymentNotes(e.target.value)}
+                            disabled={!selectedStudentFullData || isSubmittingPayment}
+                        />
+                    </div>
+                </div>
+
+                <Button 
+                  onClick={handleRecordPayment} 
+                  disabled={!selectedStudentFullData || !paymentAmount || +paymentAmount <= 0 || isSubmittingPayment || selectedStudentFullData.dueAmount <= 0 || !paymentDate} 
+                  className="w-full"
+                >
+                  {isSubmittingPayment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isSubmittingPayment ? "Recording..." : "Record Payment"}
+                </Button>
+                {selectedStudentFullData.dueAmount <= 0 && <p className="text-sm text-green-600 text-center">No amount due for this student.</p>}
               </>
             )}
-            <div>
-              <Label htmlFor="payment-amount">Payment Amount</Label>
-              <Input 
-                id="payment-amount" 
-                type="number" 
-                placeholder="Enter amount" 
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                disabled={!selectedStudentData}
-              />
-            </div>
-            <Button onClick={handleRecordPayment} disabled={!selectedStudentData || !paymentAmount || +paymentAmount <= 0} className="w-full">
-              Record Payment (Simulated)
-            </Button>
           </CardContent>
         </Card>
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Student Fee Records</CardTitle>
-            <CardDescription>Overview of total fees per student based on their class.</CardDescription>
-            {/* TODO: Add Search/Filter for student list */}
-            {/* <div className="flex items-center gap-2 pt-2">
-                <Input placeholder="Search students..." className="max-w-sm"/>
-                <Button variant="outline" size="icon"><Search className="h-4 w-4"/></Button>
-                <Button variant="outline" size="icon"><Filter className="h-4 w-4"/></Button>
-            </div> */}
+            <CardTitle>Student Fee Status</CardTitle>
+            <CardDescription>Overview of student fees, payments, and dues.</CardDescription>
           </CardHeader>
           <CardContent>
             {studentFeeList.length > 0 ? (
@@ -274,8 +385,8 @@ export default function FeeManagementPage() {
                     <TableHead>Student Name</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead>Total Fee</TableHead>
-                    <TableHead>Paid (Simulated)</TableHead>
-                    <TableHead>Due (Simulated)</TableHead>
+                    <TableHead>Paid</TableHead>
+                    <TableHead>Due</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -289,10 +400,16 @@ export default function FeeManagementPage() {
                       <TableCell className={student.dueAmount > 0 ? "text-destructive font-semibold" : "text-green-600"}>
                         ${student.dueAmount.toLocaleString()}
                       </TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => handleGenerateReceipt(student._id.toString())}>
-                          <Printer className="mr-2 h-4 w-4" /> Receipt
+                      <TableCell className="space-x-1">
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setSelectedStudentId(student._id.toString())} title="Record Payment">
+                          <DollarSign className="h-4 w-4" />
                         </Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleGenerateReceipt(student._id.toString())} title="Generate Receipt (Simulated)">
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                        {/* <Button variant="outline" size="icon" className="h-8 w-8" disabled title="Edit Record (NYI)">
+                            <Edit className="h-4 w-4" />
+                        </Button> */}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -300,7 +417,7 @@ export default function FeeManagementPage() {
               </Table>
             ) : (
               <p className="text-center text-muted-foreground py-4">
-                {students.length === 0 ? "No students found for this school." : "Fee details being processed or no students with fee configurations."}
+                {allStudents.length === 0 ? "No students found for this school." : "No fee details to display. Ensure students are assigned to classes with fee configurations."}
               </p>
             )}
           </CardContent>
@@ -309,5 +426,3 @@ export default function FeeManagementPage() {
     </div>
   );
 }
-
-    
