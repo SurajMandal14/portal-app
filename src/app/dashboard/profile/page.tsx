@@ -4,50 +4,95 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserCircle, Edit3, Save } from "lucide-react";
+import { UserCircle, Save, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock user data - replace with actual auth context later
-const mockUser = {
-  name: "Alex Johnson", // This would be dynamic
-  email: "alex.johnson@example.com", // This would be dynamic
-  role: "Admin", // This would be dynamic
-  avatarUrl: "https://placehold.co/128x128.png",
-  phone: "123-456-7890",
-  department: "Administration" // Role specific detail
-};
+import { useEffect, useState } from "react";
+import type { AuthUser } from "@/types/attendance"; // Using AuthUser for loggedInUser type
 
 const profileFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
-  email: z.string().email("Invalid email address.").optional(), // Email might be non-editable
+  email: z.string().email("Invalid email address.").optional(), // Email is non-editable for now
   phone: z.string().optional(),
-  // Add other fields as necessary, e.g., password change
+  // Password fields would be added here if password change is implemented
 });
+
+type ProfileFormData = z.infer<typeof profileFormSchema>;
 
 export default function ProfilePage() {
   const { toast } = useToast();
-  const form = useForm<z.infer<typeof profileFormSchema>>({
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
-      name: mockUser.name,
-      email: mockUser.email,
-      phone: mockUser.phone,
+      name: "",
+      email: "",
+      phone: "",
     },
   });
 
-  function onSubmit(values: z.infer<typeof profileFormSchema>) {
-    // TODO: Implement actual profile update logic
-    console.log("Updating profile:", values);
+  useEffect(() => {
+    setIsLoading(true);
+    const storedUser = localStorage.getItem('loggedInUser');
+    if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
+      try {
+        const parsedUser: AuthUser = JSON.parse(storedUser);
+        if (parsedUser && parsedUser.role) {
+          setAuthUser(parsedUser);
+          form.reset({
+            name: parsedUser.name || "",
+            email: parsedUser.email || "",
+            phone: (parsedUser as any).phone || "", // Assuming phone might exist on user object
+          });
+        } else {
+          setAuthUser(null);
+        }
+      } catch (e) {
+        console.error("Failed to parse user from localStorage:", e);
+        setAuthUser(null);
+        toast({ variant: "destructive", title: "Session Error", description: "Failed to load user data." });
+      }
+    } else {
+      setAuthUser(null);
+    }
+    setIsLoading(false);
+  }, [form, toast]);
+
+  function onSubmit(values: ProfileFormData) {
+    // TODO: Implement actual profile update logic with a server action
+    console.log("Updating profile with:", values);
     toast({
-      title: "Profile Updated",
-      description: "Your profile information has been successfully updated.",
+      title: "Profile Update (Simulated)",
+      description: "Your profile information has been logged. Backend update not yet implemented.",
     });
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-10">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <Card className="max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle>Access Denied</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>Please log in to view your profile.</p>
+           <Button asChild className="mt-4" onClick={() => window.location.href = '/'}>Go to Login</Button>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -65,13 +110,17 @@ export default function ProfilePage() {
         <CardHeader>
           <div className="flex items-center space-x-4">
             <Avatar className="h-20 w-20">
-              <AvatarImage src={mockUser.avatarUrl} alt={mockUser.name} data-ai-hint="profile avatar" />
-              <AvatarFallback>{mockUser.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+              <AvatarImage src={"https://placehold.co/128x128.png"} alt={authUser.name} data-ai-hint="profile avatar" />
+              <AvatarFallback>{authUser.name ? authUser.name.substring(0, 2).toUpperCase() : "U"}</AvatarFallback>
             </Avatar>
             <div>
-              <CardTitle className="text-xl">{mockUser.name}</CardTitle>
-              <p className="text-muted-foreground">{mockUser.email}</p>
-              <p className="text-sm text-muted-foreground capitalize">{mockUser.role} {mockUser.department && `- ${mockUser.department}`}</p>
+              <CardTitle className="text-xl">{authUser.name}</CardTitle>
+              <p className="text-muted-foreground">{authUser.email}</p>
+              <p className="text-sm text-muted-foreground capitalize">
+                Role: {authUser.role}
+                {authUser.schoolId && ` (School ID: ${authUser.schoolId.toString().substring(0,8)}...)`}
+                {authUser.classId && ` (Class: ${authUser.classId})`}
+              </p>
             </div>
           </div>
         </CardHeader>
@@ -100,7 +149,7 @@ export default function ProfilePage() {
                     <FormControl>
                       <Input placeholder="your.email@example.com" {...field} disabled />
                     </FormControl>
-                    <FormDescription>Email address cannot be changed.</FormDescription>
+                    <FormDescription>Email address cannot be changed through this form.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -110,7 +159,7 @@ export default function ProfilePage() {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone Number</FormLabel>
+                    <FormLabel>Phone Number (Optional)</FormLabel>
                     <FormControl>
                       <Input placeholder="Your phone number" {...field} />
                     </FormControl>
@@ -118,15 +167,15 @@ export default function ProfilePage() {
                   </FormItem>
                 )}
               />
-              {/* Add fields for password change if needed */}
-              {/* Example:
+              {/* 
+              Placeholder for password change fields:
               <FormField name="currentPassword" ... />
               <FormField name="newPassword" ... />
               <FormField name="confirmNewPassword" ... />
               */}
               <div className="flex justify-end">
                 <Button type="submit">
-                  <Save className="mr-2 h-4 w-4" /> Save Changes
+                  <Save className="mr-2 h-4 w-4" /> Save Changes (Simulated)
                 </Button>
               </div>
             </form>
