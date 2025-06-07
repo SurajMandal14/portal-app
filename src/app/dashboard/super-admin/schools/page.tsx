@@ -4,8 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-// Label import kept as FormLabel uses it internally or as a base
-import { PlusCircle, School, Upload, DollarSign, Bus, Utensils, Loader2 } from "lucide-react";
+import { PlusCircle, School, Upload, DollarSign, Bus, Utensils, Loader2, Edit, XCircle } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
@@ -18,25 +17,21 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { createSchool, getSchools } from "@/app/actions/schools";
-import { schoolFormSchema, type SchoolFormData } from "@/types/school"; // Import from shared location
+import { createSchool, getSchools, updateSchool } from "@/app/actions/schools";
+import { schoolFormSchema, type SchoolFormData } from "@/types/school"; 
 import type { School as SchoolType } from "@/types/school";
-import { useEffect, useState } from "react";
-import Image from "next/image"; // For displaying logos
-
-// Client-side Zod schemas are now imported from '@/types/school'
-// const classFeeClientSchema = ...
-// const schoolClientFormSchema = ...
-
+import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 
 export default function SchoolManagementPage() {
   const { toast } = useToast();
   const [schools, setSchools] = useState<SchoolType[]>([]);
   const [isLoadingSchools, setIsLoadingSchools] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingSchool, setEditingSchool] = useState<SchoolType | null>(null);
 
-  const form = useForm<SchoolFormData>({ // Use SchoolFormData directly
-    resolver: zodResolver(schoolFormSchema), // Use imported schoolFormSchema
+  const form = useForm<SchoolFormData>({
+    resolver: zodResolver(schoolFormSchema),
     defaultValues: {
       schoolName: "",
       classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
@@ -49,7 +44,7 @@ export default function SchoolManagementPage() {
     name: "classFees",
   });
 
-  const fetchSchools = async () => {
+  const fetchSchools = useCallback(async () => {
     setIsLoadingSchools(true);
     const result = await getSchools();
     if (result.success && result.schools) {
@@ -62,28 +57,63 @@ export default function SchoolManagementPage() {
       });
     }
     setIsLoadingSchools(false);
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchSchools();
-  }, [toast]); // Added toast to dependencies as it's used in fetchSchools
+  }, [fetchSchools]);
 
-  async function onSubmit(values: SchoolFormData) { // Values are already SchoolFormData
+  const mapSchoolToFormData = (school: SchoolType): SchoolFormData => ({
+    schoolName: school.schoolName,
+    // For logo, we don't prefill the file input for editing. User must re-upload if changing.
+    // The existing schoolLogoUrl is not part of SchoolFormData.
+    schoolLogo: undefined, 
+    classFees: school.classFees.map(cf => ({ 
+      className: cf.className,
+      tuitionFee: cf.tuitionFee,
+      busFee: cf.busFee || 0,
+      canteenFee: cf.canteenFee || 0,
+    })),
+  });
+
+  const handleEdit = (school: SchoolType) => {
+    setEditingSchool(school);
+    form.reset(mapSchoolToFormData(school));
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to form
+  };
+
+  const cancelEdit = () => {
+    setEditingSchool(null);
+    form.reset({
+      schoolName: "",
+      classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
+      schoolLogo: undefined,
+    });
+  };
+
+  async function onSubmit(values: SchoolFormData) {
     setIsSubmitting(true);
-    const result = await createSchool(values); 
+    let result;
+
+    if (editingSchool) {
+      result = await updateSchool(editingSchool._id, values);
+    } else {
+      result = await createSchool(values);
+    }
+    
     setIsSubmitting(false);
 
     if (result.success) {
       toast({
-        title: "School Created",
+        title: editingSchool ? "School Updated" : "School Created",
         description: result.message,
       });
-      form.reset(); 
-      fetchSchools(); 
+      fetchSchools();
+      cancelEdit(); // Reset form and editing state
     } else {
       toast({
         variant: "destructive",
-        title: "Error Creating School",
+        title: `Error ${editingSchool ? "Updating" : "Creating"} School`,
         description: result.error || result.message,
       });
     }
@@ -93,14 +123,18 @@ export default function SchoolManagementPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-headline flex items-center"><School className="mr-2 h-6 w-6" /> School Management</CardTitle>
-          <CardDescription>Create new schools, configure class-wise fees, and upload school logos.</CardDescription>
+          <CardTitle className="text-2xl font-headline flex items-center">
+            <School className="mr-2 h-6 w-6" /> School Management
+          </CardTitle>
+          <CardDescription>
+            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create new schools, configure class-wise fees, and upload school logos."}
+          </CardDescription>
         </CardHeader>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Create New School</CardTitle>
+          <CardTitle>{editingSchool ? "Edit School Profile" : "Create New School"}</CardTitle>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -122,23 +156,27 @@ export default function SchoolManagementPage() {
               <FormField
                 control={form.control}
                 name="schoolLogo"
-                render={({ field }) => ( 
+                render={({ field: { onChange, value, ...restField }}) => ( 
                   <FormItem>
-                    <FormLabel>School Logo (Optional)</FormLabel>
+                    <FormLabel>School Logo (Optional {editingSchool ? "- Re-upload to change" : ""})</FormLabel>
                     <FormControl>
                       <div className="flex items-center gap-2">
                         <Input 
                           type="file" 
                           accept="image/*" 
-                          onChange={(e) => field.onChange(e.target.files ? e.target.files[0] : null)} 
+                          onChange={(e) => onChange(e.target.files ? e.target.files[0] : null)}
                           className="max-w-xs"
                           disabled={isSubmitting}
+                          {...restField}
                         />
                         <Upload className="h-5 w-5 text-muted-foreground"/>
                       </div>
                     </FormControl>
                     <FormMessage />
-                     <p className="text-xs text-muted-foreground pt-1">Upload a PNG, JPG, or GIF file (max 2MB). Actual upload not yet implemented.</p>
+                     <p className="text-xs text-muted-foreground pt-1">
+                       Upload a PNG, JPG, or GIF file (max 2MB). Actual upload/storage not yet fully implemented.
+                       {editingSchool && editingSchool.schoolLogoUrl && " Current logo will be retained if no new file is uploaded."}
+                     </p>
                   </FormItem>
                 )}
               />
@@ -168,7 +206,7 @@ export default function SchoolManagementPage() {
                           <FormItem>
                             <FormLabel className="flex items-center"><DollarSign className="h-4 w-4 mr-1 text-muted-foreground"/>Tuition Fee</FormLabel>
                             <FormControl>
-                              <Input type="number" placeholder="e.g., 5000" {...field} disabled={isSubmitting} />
+                              <Input type="number" placeholder="e.g., 5000" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -181,7 +219,7 @@ export default function SchoolManagementPage() {
                           <FormItem>
                             <FormLabel className="flex items-center"><Bus className="h-4 w-4 mr-1 text-muted-foreground"/>Bus Fee (Optional)</FormLabel>
                             <FormControl>
-                              <Input type="number" placeholder="e.g., 500" {...field} disabled={isSubmitting}/>
+                              <Input type="number" placeholder="e.g., 500" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting}/>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -194,7 +232,7 @@ export default function SchoolManagementPage() {
                           <FormItem>
                             <FormLabel className="flex items-center"><Utensils className="h-4 w-4 mr-1 text-muted-foreground"/>Canteen Fee (Optional)</FormLabel>
                             <FormControl>
-                              <Input type="number" placeholder="e.g., 300" {...field} disabled={isSubmitting}/>
+                              <Input type="number" placeholder="e.g., 300" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting}/>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -219,10 +257,17 @@ export default function SchoolManagementPage() {
                 </Button>
               </div>
               
-              <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSubmitting ? "Creating..." : "Create School Profile"}
-              </Button>
+              <div className="flex gap-2">
+                <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isSubmitting ? (editingSchool ? "Updating..." : "Creating...") : (editingSchool ? "Update School Profile" : "Create School Profile")}
+                </Button>
+                {editingSchool && (
+                  <Button type="button" variant="outline" onClick={cancelEdit} disabled={isSubmitting}>
+                    <XCircle className="mr-2 h-4 w-4" /> Cancel Edit
+                  </Button>
+                )}
+              </div>
             </form>
           </Form>
         </CardContent>
@@ -240,7 +285,7 @@ export default function SchoolManagementPage() {
             </div>
           ) : schools.length > 0 ? (
             schools.map(school => (
-            <Card key={school._id} className="flex items-center justify-between p-4">
+            <Card key={school._id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-4">
               <div className="flex items-center gap-4">
                 <Image 
                     src={school.schoolLogoUrl || "https://placehold.co/100x100.png"} 
@@ -248,14 +293,18 @@ export default function SchoolManagementPage() {
                     data-ai-hint="school logo"
                     width={48} 
                     height={48} 
-                    className="h-12 w-12 rounded-md object-cover" 
+                    className="h-12 w-12 rounded-md object-cover flex-shrink-0" 
                 />
                 <div>
                   <h3 className="font-semibold">{school.schoolName}</h3>
-                  <p className="text-sm text-muted-foreground">{school.classFees.length} classes configured</p>
+                  <p className="text-sm text-muted-foreground">{school.classFees.length} class configuration(s)</p>
+                  <p className="text-xs text-muted-foreground">Created: {new Date(school.createdAt).toLocaleDateString()}</p>
+                   <p className="text-xs text-muted-foreground">Last Updated: {new Date(school.updatedAt).toLocaleDateString()}</p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" disabled>Edit</Button> 
+              <Button variant="outline" size="sm" onClick={() => handleEdit(school)} className="w-full sm:w-auto">
+                <Edit className="mr-2 h-4 w-4" /> Edit
+              </Button> 
             </Card>
           ))
           ) : (
