@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label"; // Added import for Label
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { getDailyAttendanceForSchool } from "@/app/actions/attendance";
-import type { AttendanceRecord, AuthUser } from "@/types/attendance"; // Assuming AuthUser is also in attendance types or a central one
+import type { AttendanceRecord, AuthUser } from "@/types/attendance";
 
 export default function AdminAttendancePage() {
   const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(new Date());
@@ -26,39 +27,55 @@ export default function AdminAttendancePage() {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
-            const parsedUser = JSON.parse(storedUser);
-            if (parsedUser && parsedUser.role && parsedUser.schoolId) {
+            const parsedUser: AuthUser = JSON.parse(storedUser);
+            if (parsedUser && parsedUser.role === 'admin' && parsedUser.schoolId) {
                  setAuthUser(parsedUser);
             } else {
                 setAuthUser(null);
-                 toast({ variant: "destructive", title: "Error", description: "School admin information not found. Please log in again." });
+                 toast({ variant: "destructive", title: "Access Denied", description: "You must be a school admin to view attendance." });
             }
         } catch(e) {
             console.error("Failed to parse user from localStorage in AdminAttendancePage:", e);
             setAuthUser(null);
+            toast({ variant: "destructive", title: "Session Error", description: "Failed to load user data. Please log in again." });
         }
     } else {
       setAuthUser(null);
+      // Don't toast here if user is simply not logged in on page load
     }
   }, [toast]);
 
   const fetchAttendance = useCallback(async () => {
-    if (!authUser || !authUser.schoolId || !attendanceDate) {
-      if (authUser && !attendanceDate) toast({ variant: "destructive", title: "Error", description: "Please select a date to view attendance." });
-      setAttendanceRecords([]); // Clear records if no authUser or date
+    if (!authUser || !authUser.schoolId) {
+      // This case should be handled by UI preventing action, but as a safeguard:
+      if (authUser && !authUser.schoolId) {
+          toast({ variant: "destructive", title: "Error", description: "School information missing for admin." });
+      }
+      setAttendanceRecords([]);
       return;
     }
+    if (!attendanceDate) {
+      toast({ variant: "info", title: "Select Date", description: "Please select a date to view attendance." });
+      setAttendanceRecords([]);
+      return;
+    }
+
     setIsLoading(true);
     const result = await getDailyAttendanceForSchool(authUser.schoolId.toString(), attendanceDate);
     setIsLoading(false);
+
     if (result.success && result.records) {
       setAttendanceRecords(result.records);
+      if (result.records.length === 0) {
+        toast({ title: "No Records", description: "No attendance records found for the selected date." });
+      }
     } else {
       toast({ variant: "destructive", title: "Failed to load attendance", description: result.error || "Could not fetch attendance data." });
       setAttendanceRecords([]);
     }
   }, [authUser, attendanceDate, toast]);
 
+  // Automatically fetch attendance when authUser and attendanceDate are set
   useEffect(() => {
     if (authUser && authUser.schoolId && attendanceDate) {
       fetchAttendance();
@@ -84,9 +101,9 @@ export default function AdminAttendancePage() {
 
       <Card>
         <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                 <CardTitle>Daily Attendance Records</CardTitle>
-                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2 w-full sm:w-auto">
                     <div className="w-full sm:w-auto">
                         <Label htmlFor="date-picker" className="mb-1 block text-sm font-medium">Select Date</Label>
                         <Popover>
@@ -94,7 +111,7 @@ export default function AdminAttendancePage() {
                             <Button
                                 id="date-picker"
                                 variant={"outline"}
-                                className="w-full sm:w-[280px] justify-start text-left font-normal"
+                                className="w-full sm:w-[240px] justify-start text-left font-normal"
                                 disabled={isLoading || !authUser}
                             >
                                 <CalendarDays className="mr-2 h-4 w-4" />
@@ -117,13 +134,21 @@ export default function AdminAttendancePage() {
                         <Input 
                             id="filter-class"
                             placeholder="Filter class..." 
-                            className="w-full sm:w-auto" 
+                            className="w-full sm:w-[180px]" 
                             value={filterClass}
                             onChange={(e) => setFilterClass(e.target.value)}
-                            disabled={isLoading || !authUser}
+                            disabled={isLoading || !authUser || attendanceRecords.length === 0}
                         />
                     </div>
-                    <Button variant="outline" size="icon" onClick={fetchAttendance} disabled={isLoading || !authUser}><Filter className="h-4 w-4"/></Button>
+                    <Button 
+                        variant="outline" 
+                        onClick={fetchAttendance} 
+                        disabled={isLoading || !authUser || !attendanceDate}
+                        className="w-full sm:w-auto"
+                    >
+                        <Filter className="mr-0 sm:mr-2 h-4 w-4"/> <span className="sm:inline hidden">Apply Filters</span>
+                        <span className="sm:hidden inline">Apply</span>
+                    </Button>
                 </div>
             </div>
         </CardHeader>
@@ -145,7 +170,7 @@ export default function AdminAttendancePage() {
                   <TableHead>Class</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Marked By (Teacher ID)</TableHead>
+                  <TableHead>Marked By (Teacher)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -155,10 +180,10 @@ export default function AdminAttendancePage() {
                     <TableCell>{record.className}</TableCell>
                     <TableCell>{format(new Date(record.date), "PPP")}</TableCell>
                     <TableCell>
-                        <span className={`px-2 py-1 text-xs rounded-full capitalize ${
-                            record.status === 'present' ? 'bg-green-100 text-green-700' :
-                            record.status === 'absent' ? 'bg-red-100 text-red-700' :
-                            record.status === 'late' ? 'bg-yellow-100 text-yellow-700' : ''
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${
+                            record.status === 'present' ? 'bg-green-100 text-green-800 border border-green-300' :
+                            record.status === 'absent' ? 'bg-red-100 text-red-800 border border-red-300' :
+                            record.status === 'late' ? 'bg-yellow-100 text-yellow-800 border border-yellow-300' : 'bg-gray-100 text-gray-800 border border-gray-300'
                         }`}>
                             {record.status}
                         </span>
@@ -169,7 +194,7 @@ export default function AdminAttendancePage() {
               </TableBody>
             </Table>
           ) : (
-            <p className="text-center text-muted-foreground py-4">No attendance data available for the selected date and filter.</p>
+            <p className="text-center text-muted-foreground py-4">No attendance data available for the selected date and filter combination.</p>
           )}
         </CardContent>
       </Card>
