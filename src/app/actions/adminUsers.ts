@@ -5,16 +5,10 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/lib/mongodb';
 import type { User, SchoolAdminFormData } from '@/types/user';
+import { schoolAdminFormSchema } from '@/types/user'; // Import shared schema
 import type { School } from '@/types/school';
 import { revalidatePath } from 'next/cache';
 import { ObjectId } from 'mongodb';
-
-const schoolAdminFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  schoolId: z.string().min(1, { message: "School selection is required." }),
-});
 
 export interface CreateSchoolAdminResult {
   success: boolean;
@@ -25,6 +19,10 @@ export interface CreateSchoolAdminResult {
 
 export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<CreateSchoolAdminResult> {
   try {
+    // For creation, password is required
+    if (!values.password || values.password.length < 6) {
+      return { success: false, message: 'Validation failed', error: 'Password is required and must be at least 6 characters for new admins.' };
+    }
     const validatedFields = schoolAdminFormSchema.safeParse(values);
     if (!validatedFields.success) {
       const errors = validatedFields.error.errors.map(e => e.message).join(' ');
@@ -37,13 +35,11 @@ export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<Cr
     const usersCollection = db.collection<Omit<User, '_id'>>('users');
     const schoolsCollection = db.collection<School>('schools');
 
-    // Check if user already exists
     const existingUser = await usersCollection.findOne({ email });
     if (existingUser) {
       return { success: false, message: 'User with this email already exists.', error: 'Email already in use.' };
     }
 
-    // Check if school exists
     if (!ObjectId.isValid(schoolId)) {
         return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.'};
     }
@@ -52,7 +48,8 @@ export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<Cr
       return { success: false, message: 'Selected school not found.', error: 'School not found.' };
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Password must exist for creation due to check above
+    const hashedPassword = await bcrypt.hash(password!, 10); 
 
     const newUserObjectIdForSchool = new ObjectId(schoolId);
 
@@ -73,8 +70,7 @@ export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<Cr
     }
 
     revalidatePath('/dashboard/super-admin/users');
-
-    // Return user without password and with ObjectIds converted to strings for client consumption
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _p, ...userWithoutPassword } = newUser;
     return {
       success: true,
@@ -82,7 +78,7 @@ export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<Cr
       user: { 
         ...userWithoutPassword, 
         _id: result.insertedId.toString(),
-        schoolId: newUserObjectIdForSchool.toString() // Ensure schoolId is a string
+        schoolId: newUserObjectIdForSchool.toString() 
       },
     };
 
@@ -93,9 +89,100 @@ export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<Cr
   }
 }
 
+
+export interface UpdateSchoolAdminResult {
+  success: boolean;
+  message: string;
+  error?: string;
+  user?: Partial<User>;
+}
+
+export async function updateSchoolAdmin(userId: string, values: SchoolAdminFormData): Promise<UpdateSchoolAdminResult> {
+  try {
+    if (!ObjectId.isValid(userId)) {
+      return { success: false, message: 'Invalid User ID format.', error: 'Invalid User ID.' };
+    }
+
+    const validatedFields = schoolAdminFormSchema.safeParse(values);
+    if (!validatedFields.success) {
+      const errors = validatedFields.error.errors.map(e => e.message).join(' ');
+      return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
+    }
+
+    const { name, email, password, schoolId } = validatedFields.data;
+
+    const { db } = await connectToDatabase();
+    const usersCollection = db.collection<User>('users');
+    const schoolsCollection = db.collection<School>('schools');
+
+    // Check if email is being changed to one that already exists (and isn't the current user's)
+    const existingUserByEmail = await usersCollection.findOne({ email });
+    if (existingUserByEmail && existingUserByEmail._id.toString() !== userId) {
+      return { success: false, message: 'This email is already in use by another account.', error: 'Email already in use.' };
+    }
+
+    // Validate schoolId if provided
+    if (!ObjectId.isValid(schoolId)) {
+        return { success: false, message: 'Invalid School ID format for update.', error: 'Invalid School ID.'};
+    }
+    const school = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
+    if (!school) {
+      return { success: false, message: 'Selected school not found for update.', error: 'School not found.' };
+    }
+    
+    const updateData: Partial<Omit<User, '_id'>> = {
+      name,
+      email,
+      schoolId: new ObjectId(schoolId),
+      updatedAt: new Date(),
+    };
+
+    if (password && password.trim() !== "") {
+      if (password.length < 6) {
+         return { success: false, message: 'Validation failed', error: 'New password must be at least 6 characters.' };
+      }
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    const result = await usersCollection.updateOne(
+      { _id: new ObjectId(userId) as any },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return { success: false, message: 'Admin user not found for update.', error: 'User not found.' };
+    }
+    
+    revalidatePath('/dashboard/super-admin/users');
+    
+    const updatedUser = await usersCollection.findOne({ _id: new ObjectId(userId) as any });
+    if (!updatedUser) {
+      return { success: false, message: 'Failed to retrieve admin after update.', error: 'Could not fetch updated user.' };
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _p, ...userWithoutPassword } = updatedUser;
+
+    return {
+      success: true,
+      message: 'School Admin updated successfully!',
+      user: {
+        ...userWithoutPassword,
+        _id: updatedUser._id.toString(),
+        schoolId: updatedUser.schoolId?.toString(),
+      }
+    };
+
+  } catch (error) {
+    console.error('Update school admin server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, message: 'An unexpected error occurred during admin update.', error: errorMessage };
+  }
+}
+
+
 export interface GetSchoolAdminsResult {
   success: boolean;
-  admins?: (Partial<User> & { schoolName?: string })[]; // Admins with school name
+  admins?: (Partial<User> & { schoolName?: string })[]; 
   error?: string;
   message?: string;
 }
@@ -103,32 +190,29 @@ export interface GetSchoolAdminsResult {
 export async function getSchoolAdmins(): Promise<GetSchoolAdminsResult> {
   try {
     const { db } = await connectToDatabase();
-    // Using an aggregation pipeline to join users with schools
     const adminsWithSchool = await db.collection<User>('users').aggregate([
       {
-        $match: { role: 'admin' } // Filter for admin users
+        $match: { role: 'admin' } 
       },
       {
         $lookup: {
-          from: 'schools', // The collection to join with
-          // Assuming schoolId in 'users' collection is stored as ObjectId
+          from: 'schools', 
           let: { schoolIdObj: '$schoolId' }, 
           pipeline: [
-            // Ensure we match ObjectId from users.schoolId with _id in schools (which is also ObjectId)
             { $match: { $expr: { $eq: ['$_id', '$$schoolIdObj'] } } },
-            { $project: { schoolName: 1 } } // Only get the schoolName
+            { $project: { schoolName: 1 } } 
           ],
-          as: 'schoolInfo' // The array field to add the joined documents to
+          as: 'schoolInfo' 
         }
       },
       {
-        $unwind: { // Deconstructs the schoolInfo array
+        $unwind: { 
           path: '$schoolInfo',
-          preserveNullAndEmptyArrays: true // Keep admins even if their school is not found
+          preserveNullAndEmptyArrays: true 
         }
       },
       {
-        $project: { // Select and shape the output fields
+        $project: { 
           _id: 1,
           name: 1,
           email: 1,
@@ -142,11 +226,10 @@ export async function getSchoolAdmins(): Promise<GetSchoolAdminsResult> {
       { $sort: { createdAt: -1 } }
     ]).toArray();
     
-    // Ensure all ObjectIds are converted to strings for client consumption
     const admins = adminsWithSchool.map(admin => ({
       ...admin,
       _id: admin._id.toString(),
-      schoolId: admin.schoolId?.toString(), // admin.schoolId from DB is ObjectId
+      schoolId: admin.schoolId?.toString(), 
     }));
 
     return { success: true, admins: admins as (Partial<User> & { schoolName?: string })[] };

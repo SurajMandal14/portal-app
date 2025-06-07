@@ -7,10 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, Building } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, Building, XCircle } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import * as z from "zod";
 import {
   Form,
   FormControl,
@@ -18,22 +17,16 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { createSchoolAdmin, getSchoolAdmins } from "@/app/actions/adminUsers";
+import { createSchoolAdmin, getSchoolAdmins, updateSchoolAdmin } from "@/app/actions/adminUsers";
 import { getSchools } from "@/app/actions/schools";
 import type { SchoolAdminFormData, User } from "@/types/user";
+import { schoolAdminFormSchema } from "@/types/user"; // Import from types
 import type { School } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
-
-// Zod schema for the form
-const schoolAdminFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  schoolId: z.string().min(1, { message: "School selection is required." }),
-});
 
 type SchoolAdmin = Partial<User> & { schoolName?: string };
 
@@ -44,8 +37,9 @@ export default function SuperAdminUserManagementPage() {
   const [isLoadingAdmins, setIsLoadingAdmins] = useState(true);
   const [isLoadingSchools, setIsLoadingSchools] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<SchoolAdmin | null>(null);
 
-  const form = useForm<z.infer<typeof schoolAdminFormSchema>>({
+  const form = useForm<SchoolAdminFormData>({
     resolver: zodResolver(schoolAdminFormSchema),
     defaultValues: {
       name: "",
@@ -91,26 +85,61 @@ export default function SuperAdminUserManagementPage() {
     fetchAdminsAndSchools();
   }, [fetchAdminsAndSchools]);
 
-  async function onSubmit(values: z.infer<typeof schoolAdminFormSchema>) {
+  useEffect(() => {
+    if (editingAdmin) {
+      form.reset({
+        name: editingAdmin.name || "",
+        email: editingAdmin.email || "",
+        password: "", // Password field is always cleared for edit
+        schoolId: editingAdmin.schoolId?.toString() || "",
+      });
+    } else {
+      form.reset({ // Reset to default when not editing
+        name: "",
+        email: "",
+        password: "",
+        schoolId: "",
+      });
+    }
+  }, [editingAdmin, form]);
+
+  async function onSubmit(values: SchoolAdminFormData) {
     setIsSubmitting(true);
-    const result = await createSchoolAdmin(values);
+    let result;
+
+    if (editingAdmin && editingAdmin._id) {
+      result = await updateSchoolAdmin(editingAdmin._id.toString(), values);
+    } else {
+      result = await createSchoolAdmin(values);
+    }
+    
     setIsSubmitting(false);
 
     if (result.success) {
       toast({
-        title: "School Admin Created",
+        title: editingAdmin ? "Admin Updated" : "Admin Created",
         description: result.message,
       });
-      form.reset(); // Reset form fields
+      handleCancelEdit(); // Clear editing state and reset form
       fetchAdminsAndSchools(); // Refresh admin list
     } else {
       toast({
         variant: "destructive",
-        title: "Error Creating Admin",
+        title: `Error ${editingAdmin ? "Updating" : "Creating"} Admin`,
         description: result.error || result.message,
       });
     }
   }
+
+  const handleEditClick = (admin: SchoolAdmin) => {
+    setEditingAdmin(admin);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingAdmin(null);
+    // Default values are set by useEffect when editingAdmin becomes null
+  };
 
   return (
     <div className="space-y-6">
@@ -119,13 +148,15 @@ export default function SuperAdminUserManagementPage() {
           <CardTitle className="text-2xl font-headline flex items-center">
             <Users className="mr-2 h-6 w-6" /> School Administrator Management
           </CardTitle>
-          <CardDescription>Create and manage administrator accounts for each school.</CardDescription>
+          <CardDescription>
+            {editingAdmin ? `Editing: ${editingAdmin.name}` : "Create and manage administrator accounts for each school."}
+          </CardDescription>
         </CardHeader>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Add New School Administrator</CardTitle>
+          <CardTitle>{editingAdmin ? `Edit Admin: ${editingAdmin.name}` : "Add New School Administrator"}</CardTitle>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -166,6 +197,7 @@ export default function SuperAdminUserManagementPage() {
                       <FormControl>
                         <Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} />
                       </FormControl>
+                      {editingAdmin && <FormDescription className="text-xs">Leave blank to keep current password.</FormDescription>}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -176,7 +208,7 @@ export default function SuperAdminUserManagementPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center"><Building className="mr-2 h-4 w-4 text-muted-foreground" />Assign to School</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting || isLoadingSchools}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || isLoadingSchools}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder={isLoadingSchools ? "Loading schools..." : "Select a school"} />
@@ -196,10 +228,17 @@ export default function SuperAdminUserManagementPage() {
                   )}
                 />
               </div>
-              <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || isLoadingSchools}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSubmitting ? "Creating Admin..." : "Create School Admin"}
-              </Button>
+              <div className="flex gap-2 items-center">
+                <Button type="submit" className="md:w-auto" disabled={isSubmitting || isLoadingSchools}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isSubmitting ? (editingAdmin ? "Updating..." : "Creating...") : (editingAdmin ? "Update Admin" : "Create School Admin")}
+                </Button>
+                {editingAdmin && (
+                  <Button type="button" variant="outline" onClick={handleCancelEdit} disabled={isSubmitting}>
+                    <XCircle className="mr-2 h-4 w-4" /> Cancel Edit
+                  </Button>
+                )}
+              </div>
             </form>
           </Form>
         </CardContent>
@@ -240,9 +279,9 @@ export default function SuperAdminUserManagementPage() {
                   <TableCell>
                     {admin.schoolName || (admin.schoolId ? "School ID: "+admin.schoolId.toString().substring(0,8)+"..." : 'N/A')}
                   </TableCell>
-                  <TableCell>{admin.createdAt ? format(new Date(admin.createdAt), "PPpp") : 'N/A'}</TableCell>
+                  <TableCell>{admin.createdAt ? format(new Date(admin.createdAt), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-2">
-                    <Button variant="outline" size="icon" className="h-8 w-8" disabled> {/* TODO: Implement Edit */}
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(admin)} disabled={isSubmitting}> 
                       <Edit3 className="h-4 w-4" />
                     </Button>
                     <Button variant="destructive" size="icon" className="h-8 w-8" disabled> {/* TODO: Implement Delete */}
