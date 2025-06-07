@@ -19,11 +19,22 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { createSchoolAdmin, getSchoolAdmins, updateSchoolAdmin } from "@/app/actions/adminUsers";
+import { createSchoolAdmin, getSchoolAdmins, updateSchoolAdmin, deleteSchoolAdmin } from "@/app/actions/adminUsers";
 import { getSchools } from "@/app/actions/schools";
 import type { SchoolAdminFormData, User } from "@/types/user";
-import { schoolAdminFormSchema } from "@/types/user"; // Import from types
+import { schoolAdminFormSchema } from "@/types/user"; 
 import type { School } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
@@ -38,6 +49,8 @@ export default function SuperAdminUserManagementPage() {
   const [isLoadingSchools, setIsLoadingSchools] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<SchoolAdmin | null>(null);
+  const [adminToDelete, setAdminToDelete] = useState<SchoolAdmin | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const form = useForm<SchoolAdminFormData>({
     resolver: zodResolver(schoolAdminFormSchema),
@@ -120,8 +133,8 @@ export default function SuperAdminUserManagementPage() {
         title: editingAdmin ? "Admin Updated" : "Admin Created",
         description: result.message,
       });
-      handleCancelEdit(); // Clear editing state and reset form
-      fetchAdminsAndSchools(); // Refresh admin list
+      handleCancelEdit(); 
+      fetchAdminsAndSchools(); 
     } else {
       toast({
         variant: "destructive",
@@ -138,7 +151,33 @@ export default function SuperAdminUserManagementPage() {
 
   const handleCancelEdit = () => {
     setEditingAdmin(null);
-    // Default values are set by useEffect when editingAdmin becomes null
+  };
+
+  const handleDeleteClick = (admin: SchoolAdmin) => {
+    setAdminToDelete(admin);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!adminToDelete || !adminToDelete._id) return;
+
+    setIsDeleting(true);
+    const result = await deleteSchoolAdmin(adminToDelete._id.toString());
+    setIsDeleting(false);
+
+    if (result.success) {
+      toast({
+        title: "Admin Deleted",
+        description: result.message,
+      });
+      fetchAdminsAndSchools(); // Refresh list
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: result.error || result.message,
+      });
+    }
+    setAdminToDelete(null); // Close dialog
   };
 
   return (
@@ -280,13 +319,35 @@ export default function SuperAdminUserManagementPage() {
                     {admin.schoolName || (admin.schoolId ? "School ID: "+admin.schoolId.toString().substring(0,8)+"..." : 'N/A')}
                   </TableCell>
                   <TableCell>{admin.createdAt ? format(new Date(admin.createdAt), "PP") : 'N/A'}</TableCell>
-                  <TableCell className="space-x-2">
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(admin)} disabled={isSubmitting}> 
+                  <TableCell className="space-x-1">
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(admin)} disabled={isSubmitting || isDeleting}> 
                       <Edit3 className="h-4 w-4" />
                     </Button>
-                    <Button variant="destructive" size="icon" className="h-8 w-8" disabled> {/* TODO: Implement Delete */}
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteClick(admin)} disabled={isSubmitting || isDeleting}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      {adminToDelete && adminToDelete._id === admin._id && (
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete the admin account 
+                              for <span className="font-semibold">{adminToDelete.name} ({adminToDelete.email})</span>.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setAdminToDelete(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              {isDeleting ? "Deleting..." : "Yes, delete admin"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      )}
+                    </AlertDialog>
                   </TableCell>
                 </TableRow>
               ))}

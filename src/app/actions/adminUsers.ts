@@ -239,3 +239,34 @@ export async function getSchoolAdmins(): Promise<GetSchoolAdminsResult> {
     return { success: false, error: errorMessage, message: 'Failed to fetch school admins.' };
   }
 }
+
+export interface DeleteSchoolAdminResult {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export async function deleteSchoolAdmin(userId: string): Promise<DeleteSchoolAdminResult> {
+  try {
+    if (!ObjectId.isValid(userId)) {
+      return { success: false, message: 'Invalid User ID format.', error: 'Invalid User ID.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const usersCollection = db.collection<User>('users');
+
+    const result = await usersCollection.deleteOne({ _id: new ObjectId(userId) as any, role: 'admin' });
+
+    if (result.deletedCount === 0) {
+      return { success: false, message: 'Admin user not found or already deleted.', error: 'User not found.' };
+    }
+
+    revalidatePath('/dashboard/super-admin/users');
+    return { success: true, message: 'School Admin deleted successfully!' };
+
+  } catch (error) {
+    console.error('Delete school admin server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, message: 'An unexpected error occurred during admin deletion.', error: errorMessage };
+  }
+}
