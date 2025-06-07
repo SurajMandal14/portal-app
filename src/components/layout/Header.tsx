@@ -57,22 +57,31 @@ export function Header() {
 
 
   useEffect(() => {
+    setIsLoadingUser(true); // Set loading true at the start of effect
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) {
       try {
         setAuthUser(JSON.parse(storedUser));
       } catch (e) {
-        console.error("Failed to parse user from localStorage", e);
+        console.error("Failed to parse user from localStorage in Header:", e);
         localStorage.removeItem('loggedInUser'); 
-        router.push('/'); 
+        setAuthUser(null); // Clear authUser state
+        // Do not redirect here to prevent loops, show toast instead
+        toast({
+          variant: "destructive",
+          title: "Session Error",
+          description: "Your session data might be corrupted. Please try logging in again.",
+        });
       }
-    } else if (!pathname.startsWith('/')) { 
-      // No user and not on a public page (like login, assuming it's at root or similar)
-      // This condition might need adjustment based on your public routes.
-      // router.push('/');
+    } else {
+      // No stored user, ensure authUser state is null if not already
+      // This handles cases where user logs out on another tab, etc.
+      if (authUser !== null) {
+        setAuthUser(null);
+      }
     }
     setIsLoadingUser(false);
-  }, [pathname, router]);
+  }, [pathname]); // Removed router from deps for this specific effect logic to avoid re-runs on router object change
 
 
   const handleLogout = () => {
@@ -199,3 +208,4 @@ export function Header() {
     </header>
   );
 }
+
