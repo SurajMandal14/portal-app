@@ -28,14 +28,10 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<Omit<School, '_id'>>('schools');
 
-    // For now, schoolLogoUrl will be undefined. File upload to be handled later.
-    // If schoolLogo was a string (URL), you could assign it here.
-    // If it's a File object, we're not handling its storage yet.
     let schoolLogoUrl: string | undefined = undefined;
     if (typeof schoolLogo === 'string' && schoolLogo.startsWith('http')) {
       schoolLogoUrl = schoolLogo;
     }
-    // Note: Actual file object handling for 'schoolLogo' requires a different approach (e.g., upload to storage service)
 
     const newSchoolData: Omit<School, '_id'> = {
       schoolName,
@@ -45,7 +41,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
         busFee: cf.busFee || 0,
         canteenFee: cf.canteenFee || 0,
       })),
-      schoolLogoUrl: schoolLogoUrl, // Placeholder, actual upload not implemented
+      schoolLogoUrl: schoolLogoUrl,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -90,16 +86,10 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, classFees, schoolLogo } = validatedFields.data;
+    const { schoolName, classFees } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<School>('schools');
-
-    // Similar to createSchool, logo handling is simplified.
-    // In a real app, if schoolLogo is a File, you'd upload it and get a new URL.
-    // If schoolLogo is undefined/null, you might want to keep the existing one or clear it.
-    // For this update, we'll only update schoolName and classFees and updatedAt.
-    // schoolLogoUrl is not updated here to keep it simple without file upload logic.
 
     const updateData = {
       schoolName,
@@ -113,7 +103,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
     };
 
     const result = await schoolsCollection.updateOne(
-      { _id: new ObjectId(schoolId) as any }, // Casting to any to match MongoDB driver type for _id
+      { _id: new ObjectId(schoolId) as any },
       { $set: updateData }
     );
 
@@ -121,13 +111,9 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
       return { success: false, message: 'School not found.', error: 'No school matched the provided ID.' };
     }
     if (result.modifiedCount === 0) {
-      // This could mean the data submitted was identical to existing data
-      // Or an issue occurred. For simplicity, we'll treat it as potentially "no change made".
       revalidatePath('/dashboard/super-admin/schools');
-      // Fetch the potentially unchanged school to return it
       const updatedSchool = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
       if (!updatedSchool) return { success: false, message: 'Failed to retrieve school after update attempt.'};
-
       return { success: true, message: 'No changes detected or school data already up-to-date.', school: { ...updatedSchool, _id: updatedSchool._id.toString() }};
     }
     
@@ -135,7 +121,6 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
     
     const updatedSchool = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
      if (!updatedSchool) return { success: false, message: 'Failed to retrieve school after update.'};
-
 
     return {
       success: true,
@@ -175,5 +160,35 @@ export async function getSchools(): Promise<GetSchoolsResult> {
     console.error('Get schools server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch schools.' };
+  }
+}
+
+export interface GetSchoolByIdResult {
+  success: boolean;
+  school?: School;
+  error?: string;
+  message?: string;
+}
+
+export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResult> {
+  try {
+    if (!ObjectId.isValid(schoolId)) {
+      return { success: false, message: 'Invalid school ID format.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const schoolsCollection = db.collection<School>('schools');
+    
+    const school = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
+
+    if (!school) {
+      return { success: false, message: 'School not found.' };
+    }
+    
+    return { success: true, school: { ...school, _id: school._id.toString() } };
+  } catch (error) {
+    console.error('Get school by ID server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch school details.' };
   }
 }
