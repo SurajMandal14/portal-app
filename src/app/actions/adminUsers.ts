@@ -54,12 +54,14 @@ export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<Cr
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const newUserObjectIdForSchool = new ObjectId(schoolId);
+
     const newUser: Omit<User, '_id'> = {
       name,
       email,
       password: hashedPassword,
       role: 'admin',
-      schoolId: new ObjectId(schoolId),
+      schoolId: newUserObjectIdForSchool,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -72,12 +74,16 @@ export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<Cr
 
     revalidatePath('/dashboard/super-admin/users');
 
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = newUser;
+    // Return user without password and with ObjectIds converted to strings for client consumption
+    const { password: _p, ...userWithoutPassword } = newUser;
     return {
       success: true,
       message: 'School Admin created successfully!',
-      user: { ...userWithoutPassword, _id: result.insertedId.toString() },
+      user: { 
+        ...userWithoutPassword, 
+        _id: result.insertedId.toString(),
+        schoolId: newUserObjectIdForSchool.toString() // Ensure schoolId is a string
+      },
     };
 
   } catch (error) {
@@ -105,8 +111,10 @@ export async function getSchoolAdmins(): Promise<GetSchoolAdminsResult> {
       {
         $lookup: {
           from: 'schools', // The collection to join with
-          let: { schoolIdObj: { $toObjectId: '$schoolId' } }, // Convert schoolId string to ObjectId if necessary
+          // Assuming schoolId in 'users' collection is stored as ObjectId
+          let: { schoolIdObj: '$schoolId' }, 
           pipeline: [
+            // Ensure we match ObjectId from users.schoolId with _id in schools (which is also ObjectId)
             { $match: { $expr: { $eq: ['$_id', '$$schoolIdObj'] } } },
             { $project: { schoolName: 1 } } // Only get the schoolName
           ],
@@ -116,7 +124,7 @@ export async function getSchoolAdmins(): Promise<GetSchoolAdminsResult> {
       {
         $unwind: { // Deconstructs the schoolInfo array
           path: '$schoolInfo',
-          preserveNullAndEmptyArrays: true // Keep admins even if their school is not found (shouldn't happen with good data)
+          preserveNullAndEmptyArrays: true // Keep admins even if their school is not found
         }
       },
       {
@@ -125,8 +133,8 @@ export async function getSchoolAdmins(): Promise<GetSchoolAdminsResult> {
           name: 1,
           email: 1,
           role: 1,
-          schoolId: 1,
-          schoolName: '$schoolInfo.schoolName', // Get the schoolName from the joined schoolInfo
+          schoolId: 1, 
+          schoolName: '$schoolInfo.schoolName', 
           createdAt: 1,
           updatedAt: 1,
         }
@@ -134,10 +142,11 @@ export async function getSchoolAdmins(): Promise<GetSchoolAdminsResult> {
       { $sort: { createdAt: -1 } }
     ]).toArray();
     
+    // Ensure all ObjectIds are converted to strings for client consumption
     const admins = adminsWithSchool.map(admin => ({
       ...admin,
       _id: admin._id.toString(),
-      schoolId: admin.schoolId?.toString(),
+      schoolId: admin.schoolId?.toString(), // admin.schoolId from DB is ObjectId
     }));
 
     return { success: true, admins: admins as (Partial<User> & { schoolName?: string })[] };
