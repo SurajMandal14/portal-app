@@ -4,7 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label"; // Keep Label for future use if needed, but not for class select
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckSquare, CalendarDays, Save, Loader2, Info } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
@@ -15,11 +15,11 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { submitAttendance } from "@/app/actions/attendance";
 import { getStudentsByClass } from "@/app/actions/schoolUsers";
 import type { AttendanceEntry, AttendanceStatus, AttendanceSubmissionPayload } from "@/types/attendance";
-import type { User as AppUser } from "@/types/user"; // For student user type
+// import type { User as AppUser } from "@/types/user"; // For student user type - not directly used here
 import type { AuthUser } from "@/types/user"; // Using central AuthUser
 
 export default function TeacherAttendancePage() {
-  const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(new Date());
+  const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(undefined);
   const [studentAttendance, setStudentAttendance] = useState<AttendanceEntry[]>([]);
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -28,6 +28,9 @@ export default function TeacherAttendancePage() {
   const [assignedClassName, setAssignedClassName] = useState<string | null>(null);
 
   useEffect(() => {
+    // Initialize date on client-side to prevent hydration mismatch
+    setAttendanceDate(new Date());
+
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
@@ -110,7 +113,7 @@ export default function TeacherAttendancePage() {
     setIsSubmitting(true);
 
     const payload: AttendanceSubmissionPayload = {
-      classId: authUser.classId, // Using class name as classId for now
+      classId: authUser.classId, 
       className: authUser.classId,
       schoolId: authUser.schoolId.toString(),
       date: attendanceDate,
@@ -123,7 +126,6 @@ export default function TeacherAttendancePage() {
 
     if (result.success) {
       toast({ title: "Attendance Submitted", description: result.message });
-      // Optionally reset or fetch new data if needed for the same day
     } else {
       toast({ variant: "destructive", title: "Submission Failed", description: result.error || result.message });
     }
@@ -156,7 +158,7 @@ export default function TeacherAttendancePage() {
                             id="date-picker"
                             variant={"outline"}
                             className="w-full sm:w-[280px] justify-start text-left font-normal"
-                            disabled={isSubmitting || !authUser || !assignedClassName}
+                            disabled={isSubmitting || !authUser || !assignedClassName || !attendanceDate}
                         >
                             <CalendarDays className="mr-2 h-4 w-4" />
                             {attendanceDate ? format(attendanceDate, "PPP") : <span>Pick a date</span>}
@@ -246,7 +248,7 @@ export default function TeacherAttendancePage() {
           )}
            {authUser && assignedClassName && studentAttendance.length > 0 && (
             <div className="mt-6 flex justify-end">
-                <Button onClick={handleSubmitAttendance} disabled={isSubmitting || isLoadingStudents}>
+                <Button onClick={handleSubmitAttendance} disabled={isSubmitting || isLoadingStudents || !attendanceDate}>
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {isSubmitting ? "Submitting..." : <><Save className="mr-2 h-4 w-4" /> Submit Attendance</>}
                 </Button>

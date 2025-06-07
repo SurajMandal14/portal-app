@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Label } from "@/components/ui/label"; // Added import for Label
+import { Label } from "@/components/ui/label";
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -16,7 +16,7 @@ import { getDailyAttendanceForSchool } from "@/app/actions/attendance";
 import type { AttendanceRecord, AuthUser } from "@/types/attendance";
 
 export default function AdminAttendancePage() {
-  const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(new Date());
+  const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(undefined);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -24,6 +24,9 @@ export default function AdminAttendancePage() {
   const [filterClass, setFilterClass] = useState("");
 
   useEffect(() => {
+    // Initialize date on client-side
+    setAttendanceDate(new Date());
+
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
@@ -41,13 +44,11 @@ export default function AdminAttendancePage() {
         }
     } else {
       setAuthUser(null);
-      // Don't toast here if user is simply not logged in on page load
     }
   }, [toast]);
 
   const fetchAttendance = useCallback(async () => {
     if (!authUser || !authUser.schoolId) {
-      // This case should be handled by UI preventing action, but as a safeguard:
       if (authUser && !authUser.schoolId) {
           toast({ variant: "destructive", title: "Error", description: "School information missing for admin." });
       }
@@ -75,12 +76,11 @@ export default function AdminAttendancePage() {
     }
   }, [authUser, attendanceDate, toast]);
 
-  // Automatically fetch attendance when authUser and attendanceDate are set
   useEffect(() => {
     if (authUser && authUser.schoolId && attendanceDate) {
       fetchAttendance();
     } else {
-        setAttendanceRecords([]); // Clear if no authUser or date
+        setAttendanceRecords([]); 
     }
   }, [authUser, attendanceDate, fetchAttendance]);
 
@@ -112,7 +112,7 @@ export default function AdminAttendancePage() {
                                 id="date-picker"
                                 variant={"outline"}
                                 className="w-full sm:w-[240px] justify-start text-left font-normal"
-                                disabled={isLoading || !authUser}
+                                disabled={isLoading || !authUser || !attendanceDate}
                             >
                                 <CalendarDays className="mr-2 h-4 w-4" />
                                 {attendanceDate ? format(attendanceDate, "PPP") : <span>Pick a date</span>}

@@ -32,14 +32,14 @@ interface StudentFeeDetailsProcessed extends AppUser {
 export default function FeeManagementPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
-  const [allStudents, setAllStudents] = useState<AppUser[]>([]); // Raw student list
-  const [allSchoolPayments, setAllSchoolPayments] = useState<FeePayment[]>([]); // All payments for the school
+  const [allStudents, setAllStudents] = useState<AppUser[]>([]);
+  const [allSchoolPayments, setAllSchoolPayments] = useState<FeePayment[]>([]);
   
-  const [studentFeeList, setStudentFeeList] = useState<StudentFeeDetailsProcessed[]>([]); // Processed list for display
+  const [studentFeeList, setStudentFeeList] = useState<StudentFeeDetailsProcessed[]>([]);
   
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number | string>("");
-  const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
+  const [paymentDate, setPaymentDate] = useState<Date | undefined>(undefined);
   const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [paymentNotes, setPaymentNotes] = useState<string>("");
 
@@ -164,13 +164,15 @@ export default function FeeManagementPage() {
   useEffect(() => {
     if (selectedStudentFullData) {
       setPaymentAmount(selectedStudentFullData.dueAmount > 0 ? selectedStudentFullData.dueAmount : "");
-      setPaymentDate(new Date());
+      setPaymentDate(new Date()); // Set on client after student is selected
       setPaymentMethod("");
       setPaymentNotes("");
     } else {
       setPaymentAmount("");
+      setPaymentDate(undefined); // Clear date if no student
     }
-  }, [selectedStudentId, selectedStudentFullData]);
+  }, [selectedStudentId, selectedStudentFullData]); // Re-run when selected student changes
+
 
   const handleRecordPayment = async () => {
     if (!selectedStudentFullData || !paymentAmount || +paymentAmount <= 0 || !paymentDate || !authUser?._id || !authUser?.schoolId) {
@@ -196,18 +198,17 @@ export default function FeeManagementPage() {
 
     if (result.success) {
       toast({ title: "Payment Recorded", description: result.message });
-      // Refetch payments to update UI
       if (authUser?.schoolId) {
         const paymentsResult = await getFeePaymentsBySchool(authUser.schoolId.toString());
         if (paymentsResult.success && paymentsResult.payments) {
           setAllSchoolPayments(paymentsResult.payments);
         }
       }
-      // Optionally reset form, or keep student selected to record another payment
-      setSelectedStudentId(null); // Deselect student after payment
+      setSelectedStudentId(null); 
       setPaymentAmount("");
       setPaymentMethod("");
       setPaymentNotes("");
+      setPaymentDate(undefined); // Reset date field
     } else {
       toast({ variant: "destructive", title: "Payment Failed", description: result.error || result.message });
     }
@@ -318,7 +319,7 @@ export default function FeeManagementPage() {
                                 id="payment-date"
                                 variant={"outline"}
                                 className="w-full justify-start text-left font-normal"
-                                disabled={!selectedStudentFullData || isSubmittingPayment}
+                                disabled={!selectedStudentFullData || isSubmittingPayment || !paymentDate}
                             >
                                 <CalendarDays className="mr-2 h-4 w-4" />
                                 {paymentDate ? format(paymentDate, "PPP") : <span>Pick a date</span>}
@@ -407,9 +408,6 @@ export default function FeeManagementPage() {
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleGenerateReceipt(student._id.toString())} title="Generate Receipt (Simulated)">
                           <Printer className="h-4 w-4" />
                         </Button>
-                        {/* <Button variant="outline" size="icon" className="h-8 w-8" disabled title="Edit Record (NYI)">
-                            <Edit className="h-4 w-4" />
-                        </Button> */}
                       </TableCell>
                     </TableRow>
                   ))}
