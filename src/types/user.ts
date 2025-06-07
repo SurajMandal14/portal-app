@@ -8,18 +8,22 @@ import { z } from 'zod';
 export type UserRole = 'superadmin' | 'admin' | 'teacher' | 'student';
 
 export interface User {
-  _id: ObjectId | string; 
+  _id: ObjectId | string;
   email: string;
-  password?: string; 
+  password?: string;
   name: string;
   role: UserRole;
-  schoolId?: ObjectId | string; 
+  schoolId?: ObjectId | string;
   classId?: string; // Storing className as string for now
   avatarUrl?: string;
   phone?: string;
   createdAt: Date;
   updatedAt: Date;
 }
+
+// Centralized AuthUser type
+export type AuthUser = Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId' | 'classId'>;
+
 
 // Zod schema for Super Admin creating/updating School Admins
 export const schoolAdminFormSchema = z.object({
@@ -37,7 +41,7 @@ export const createSchoolUserFormSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
   role: z.enum(['teacher', 'student'], { required_error: "Role is required." }),
-  classId: z.string().optional(), 
+  classId: z.string().optional(),
 });
 export type CreateSchoolUserFormData = z.infer<typeof createSchoolUserFormSchema>;
 
@@ -58,7 +62,6 @@ export interface CreateSchoolUserServerFormData {
   email: string;
   password?: string; // Required for create
   role: 'teacher' | 'student';
-  schoolId: string; 
-  classId?: string; 
+  schoolId: string;
+  classId?: string;
 }
-

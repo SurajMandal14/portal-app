@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User } from "lucide-react";
+import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon } from "lucide-react"; // Renamed User to UserIcon
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,9 +16,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import type { User as AppUser } from "@/types/user";
-
-type AuthUser = Pick<AppUser, 'email' | 'name' | 'role' | '_id' | 'schoolId'>;
+import type { AuthUser } from "@/types/user"; // Import central AuthUser
 
 const navLinksBase = {
   superadmin: [
@@ -35,7 +33,7 @@ const navLinksBase = {
   teacher: [
     { href: "/dashboard/teacher", label: "Teacher Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/teacher/attendance", label: "Mark Attendance", icon: CheckSquare },
-    { href: "/dashboard/teacher/profile", label: "My Profile", icon: User },
+    { href: "/dashboard/teacher/profile", label: "My Profile", icon: UserIcon },
   ],
   student: [
     { href: "/dashboard/student", label: "Student Dashboard", icon: LayoutDashboard },
@@ -62,11 +60,10 @@ export function Header() {
     
     if (storedUser && storedUser !== 'undefined' && storedUser !== 'null') {
       try {
-        const parsedUser = JSON.parse(storedUser);
-        if (parsedUser && parsedUser.role) { // Check if parsedUser is a valid user object
+        const parsedUser: AuthUser = JSON.parse(storedUser); // Use updated AuthUser
+        if (parsedUser && parsedUser.role) { 
           setAuthUser(parsedUser);
         } else {
-          // Parsed object is not a valid user, treat as session error
           localStorage.removeItem('loggedInUser');
           setAuthUser(null);
           toast({
@@ -88,16 +85,16 @@ export function Header() {
         setIsLoadingUser(false);
       }
     } else {
-      // No valid user string in localStorage
-      if (storedUser) { // If it was an invalid string like "undefined" or "null"
+      if (storedUser) { 
         localStorage.removeItem('loggedInUser');
       }
-      if (authUser !== null) { // Only update state if it's changing
+      if (authUser !== null) { 
         setAuthUser(null);
       }
       setIsLoadingUser(false);
     }
-  }, [pathname, toast]); // Correct dependencies: authUser removed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, toast]); // authUser removed from deps to prevent re-renders, pathname covers route changes
 
 
   const handleLogout = () => {
@@ -108,6 +105,7 @@ export function Header() {
       description: "You have been successfully logged out.",
     });
     router.push("/");
+    setIsSheetOpen(false); // Close sheet on logout
   };
 
   const currentRole = authUser?.role as Role | undefined;
@@ -121,7 +119,7 @@ export function Header() {
             <School className="h-7 w-7 text-primary" />
             <span className="font-headline">CampusFlow</span>
           </Link>
-          <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div> {/* Skeleton for user icon */}
+          <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
         </div>
       </header>
     );
@@ -130,7 +128,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
       <div className="container flex h-16 items-center justify-between px-4 md:px-6">
-        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
+        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl" onClick={() => setIsSheetOpen(false)}>
           <School className="h-7 w-7 text-primary" />
           <span className="font-headline">CampusFlow</span>
         </Link>
@@ -151,7 +149,7 @@ export function Header() {
               ))}
             </nav>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4"> {/* Adjusted gap for mobile */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-full">
@@ -165,14 +163,16 @@ export function Header() {
                       <p className="text-sm font-medium leading-none">{authUser.name}</p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {authUser.email} ({authUser.role && authUser.role.charAt(0).toUpperCase() + authUser.role.slice(1)})
+                         {authUser.classId && authUser.role === 'student' && ` - ${authUser.classId}`}
+                         {authUser.classId && authUser.role === 'teacher' && ` - Class: ${authUser.classId}`}
                       </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
-                    <User className="mr-2 h-4 w-4" /> Profile
+                  <DropdownMenuItem onClick={() => {router.push('/dashboard/profile'); setIsSheetOpen(false);}}>
+                    <UserIcon className="mr-2 h-4 w-4" /> Profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
+                  <DropdownMenuItem onClick={() => {router.push('/dashboard/settings'); setIsSheetOpen(false);}}>
                     <Settings className="mr-2 h-4 w-4" /> Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -216,7 +216,7 @@ export function Header() {
           </>
         )}
         {!authUser && !isLoadingUser && (
-            <Button asChild>
+            <Button asChild onClick={() => setIsSheetOpen(false)}>
                 <Link href="/">Login</Link>
             </Button>
         )}

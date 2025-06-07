@@ -4,74 +4,88 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label"; // Keep Label for future use if needed, but not for class select
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CheckSquare, CalendarDays, Save, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { CheckSquare, CalendarDays, Save, Loader2, Info } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { submitAttendance } from "@/app/actions/attendance";
-import type { AttendanceEntry, AttendanceStatus, AuthUser, AttendanceSubmissionPayload } from "@/types/attendance";
-
-
-// Mock data
-const mockClasses = [
-  { id: "C001", name: "Grade 10A" },
-  { id: "C002", name: "Grade 10B" },
-  { id: "C003", name: "Grade 9A" },
-];
-
-const mockStudentsByClass: { [key: string]: { id: string, name: string, status?: AttendanceStatus }[] } = {
-  "C001": [
-    { id: "S001", name: "Alice Smith" }, { id: "S002", name: "Bob Johnson" }, { id: "S003", name: "Charlie Brown" },
-    { id: "S004", name: "Diana Prince" }, { id: "S005", name: "Edward Nygma" },
-  ],
-  "C002": [
-    { id: "S006", name: "Fiona Gallagher" }, { id: "S007", name: "George Jetson" },
-  ],
-  "C003": [
-    { id: "S008", name: "Harry Potter" }, { id: "S009", name: "Hermione Granger" }, { id: "S010", name: "Ron Weasley" },
-  ],
-};
-
+import { getStudentsByClass } from "@/app/actions/schoolUsers";
+import type { AttendanceEntry, AttendanceStatus, AttendanceSubmissionPayload } from "@/types/attendance";
+import type { User as AppUser } from "@/types/user"; // For student user type
+import type { AuthUser } from "@/types/user"; // Using central AuthUser
 
 export default function TeacherAttendancePage() {
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(new Date());
   const [studentAttendance, setStudentAttendance] = useState<AttendanceEntry[]>([]);
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [assignedClassName, setAssignedClassName] = useState<string | null>(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
-            const parsedUser = JSON.parse(storedUser);
-            if (parsedUser && parsedUser.role) {
+            const parsedUser: AuthUser = JSON.parse(storedUser);
+            if (parsedUser && parsedUser.role === 'teacher') {
                  setAuthUser(parsedUser);
+                 if (parsedUser.classId) {
+                    setAssignedClassName(parsedUser.classId);
+                 }
             } else {
-                setAuthUser(null); // Invalid user object
+                setAuthUser(null);
+                setAssignedClassName(null);
+                 toast({ variant: "destructive", title: "Access Denied", description: "You must be a teacher to mark attendance." });
             }
         } catch(e) {
             console.error("Failed to parse user from localStorage in TeacherAttendancePage:", e);
             setAuthUser(null);
+            setAssignedClassName(null);
         }
     } else {
       setAuthUser(null);
+      setAssignedClassName(null);
     }
-  }, []);
+  }, [toast]);
 
-  useEffect(() => {
-    if (selectedClassId) {
-      setStudentAttendance(mockStudentsByClass[selectedClassId]?.map(s => ({studentId: s.id, studentName: s.name, status: 'present'} as AttendanceEntry)) || []); 
+  const fetchStudents = useCallback(async () => {
+    if (!authUser || !authUser.schoolId || !authUser.classId) {
+      setStudentAttendance([]);
+      setIsLoadingStudents(false);
+      return;
+    }
+    setIsLoadingStudents(true);
+    const result = await getStudentsByClass(authUser.schoolId.toString(), authUser.classId);
+    if (result.success && result.users) {
+      const studentsForAttendance: AttendanceEntry[] = result.users.map(student => ({
+        studentId: student._id!.toString(),
+        studentName: student.name || 'Unknown Student',
+        status: 'present' as AttendanceStatus, // Default to present
+      }));
+      setStudentAttendance(studentsForAttendance);
+      if (studentsForAttendance.length === 0) {
+        toast({ title: "No Students", description: `No students found in class: ${authUser.classId}. Please assign students via Admin panel.` });
+      }
     } else {
+      toast({ variant: "destructive", title: "Error Loading Students", description: result.message || "Could not fetch students for the class." });
       setStudentAttendance([]);
     }
-  }, [selectedClassId]);
+    setIsLoadingStudents(false);
+  }, [authUser, toast]);
+
+  useEffect(() => {
+    if (authUser && authUser.schoolId && authUser.classId) {
+      fetchStudents();
+    } else {
+      setStudentAttendance([]); // Clear if no authUser or classId
+    }
+  }, [authUser, fetchStudents]);
+
 
   const handleAttendanceChange = (studentId: string, status: AttendanceStatus) => {
     setStudentAttendance(prev =>
@@ -84,26 +98,20 @@ export default function TeacherAttendancePage() {
   }
 
   const handleSubmitAttendance = async () => {
-    if (!selectedClassId || !attendanceDate || studentAttendance.length === 0) {
-      toast({ variant: "destructive", title: "Error", description: "Please select a class, date, and ensure students are listed."});
+    if (!authUser || !authUser.schoolId || !authUser._id || !authUser.classId) {
+      toast({ variant: "destructive", title: "Error", description: "User or class information not found. Please log in again."});
       return;
     }
-    if (!authUser || !authUser.schoolId || !authUser._id) {
-      toast({ variant: "destructive", title: "Error", description: "User information not found. Please log in again."});
-      return;
-    }
-    
-    const selectedClassName = mockClasses.find(c => c.id === selectedClassId)?.name;
-    if (!selectedClassName) {
-      toast({ variant: "destructive", title: "Error", description: "Selected class name not found."});
+    if (!attendanceDate || studentAttendance.length === 0) {
+      toast({ variant: "destructive", title: "Error", description: "Please select a date and ensure students are listed."});
       return;
     }
 
     setIsSubmitting(true);
 
     const payload: AttendanceSubmissionPayload = {
-      classId: selectedClassId,
-      className: selectedClassName,
+      classId: authUser.classId, // Using class name as classId for now
+      className: authUser.classId,
       schoolId: authUser.schoolId.toString(),
       date: attendanceDate,
       entries: studentAttendance,
@@ -115,6 +123,7 @@ export default function TeacherAttendancePage() {
 
     if (result.success) {
       toast({ title: "Attendance Submitted", description: result.message });
+      // Optionally reset or fetch new data if needed for the same day
     } else {
       toast({ variant: "destructive", title: "Submission Failed", description: result.error || result.message });
     }
@@ -127,63 +136,66 @@ export default function TeacherAttendancePage() {
           <CardTitle className="text-2xl font-headline flex items-center">
             <CheckSquare className="mr-2 h-6 w-6" /> Mark Student Attendance
           </CardTitle>
-          <CardDescription>Select a class and date to mark attendance. Ensure you are logged in.</CardDescription>
+          <CardDescription>
+            {assignedClassName 
+              ? `Marking attendance for class: ${assignedClassName}.`
+              : "Please ensure you are assigned to a class to mark attendance."}
+          </CardDescription>
         </CardHeader>
       </Card>
 
       <Card>
         <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex flex-col sm:flex-row gap-4 items-center w-full md:w-auto">
-            <div>
-              <Label htmlFor="class-select" className="mb-1 block">Select Class</Label>
-              <Select onValueChange={setSelectedClassId} value={selectedClassId || ""} disabled={isSubmitting || !authUser}>
-                <SelectTrigger id="class-select" className="w-full sm:w-[200px]">
-                  <SelectValue placeholder="Select a class" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mockClasses.map(cls => (
-                    <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full md:w-auto">
+                {assignedClassName && <p className="font-semibold text-lg">Class: {assignedClassName}</p>}
+                 <div>
+                    <Label htmlFor="date-picker" className="mb-1 block text-sm font-medium">Select Date</Label>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <Button
+                            id="date-picker"
+                            variant={"outline"}
+                            className="w-full sm:w-[280px] justify-start text-left font-normal"
+                            disabled={isSubmitting || !authUser || !assignedClassName}
+                        >
+                            <CalendarDays className="mr-2 h-4 w-4" />
+                            {attendanceDate ? format(attendanceDate, "PPP") : <span>Pick a date</span>}
+                        </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                        <Calendar
+                            mode="single"
+                            selected={attendanceDate}
+                            onSelect={setAttendanceDate}
+                            initialFocus
+                            disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
+                        />
+                        </PopoverContent>
+                    </Popover>
+                </div>
             </div>
-            <div>
-              <Label htmlFor="date-picker" className="mb-1 block">Select Date</Label>
-               <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="date-picker"
-                    variant={"outline"}
-                    className="w-full sm:w-[280px] justify-start text-left font-normal"
-                    disabled={isSubmitting || !authUser}
-                  >
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    {attendanceDate ? format(attendanceDate, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={attendanceDate}
-                    onSelect={setAttendanceDate}
-                    initialFocus
-                    disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-           {selectedClassId && studentAttendance.length > 0 && authUser && (
-            <div className="flex gap-2 mt-4 md:mt-0">
-                <Button variant="outline" size="sm" onClick={() => handleMarkAll('present')} disabled={isSubmitting}>Mark All Present</Button>
-                <Button variant="outline" size="sm" onClick={() => handleMarkAll('absent')} disabled={isSubmitting}>Mark All Absent</Button>
+           {authUser && assignedClassName && studentAttendance.length > 0 && (
+            <div className="flex gap-2 mt-4 md:mt-0 self-start md:self-center">
+                <Button variant="outline" size="sm" onClick={() => handleMarkAll('present')} disabled={isSubmitting || isLoadingStudents}>Mark All Present</Button>
+                <Button variant="outline" size="sm" onClick={() => handleMarkAll('absent')} disabled={isSubmitting || isLoadingStudents}>Mark All Absent</Button>
             </div>
            )}
         </CardHeader>
         <CardContent>
           {!authUser ? (
             <p className="text-center text-destructive py-4">User information not loaded. Please try refreshing or logging in again.</p>
-          ) : selectedClassId && studentAttendance.length > 0 ? (
+          ) : !assignedClassName ? (
+             <div className="text-center py-6">
+                <Info className="mx-auto h-12 w-12 text-muted-foreground" />
+                <p className="mt-4 text-lg font-semibold">Not Assigned to a Class</p>
+                <p className="text-muted-foreground">You are not currently assigned to a class. Please contact your school administrator.</p>
+            </div>
+          ) : isLoadingStudents ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2">Loading students for {assignedClassName}...</p>
+            </div>
+          ) : studentAttendance.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -197,7 +209,7 @@ export default function TeacherAttendancePage() {
               <TableBody>
                 {studentAttendance.map((student) => (
                   <TableRow key={student.studentId}>
-                    <TableCell>{student.studentId}</TableCell>
+                    <TableCell>{student.studentId.substring(0,8)}...</TableCell>
                     <TableCell>{student.studentName}</TableCell>
                     <TableCell className="text-center">
                       <Checkbox
@@ -229,12 +241,12 @@ export default function TeacherAttendancePage() {
             </Table>
           ) : (
             <p className="text-center text-muted-foreground py-4">
-              {selectedClassId ? "No students found for this class." : "Please select a class to view students."}
+              No students found for class: {assignedClassName}. Please ensure students are assigned by the admin.
             </p>
           )}
-           {selectedClassId && studentAttendance.length > 0 && authUser && (
+           {authUser && assignedClassName && studentAttendance.length > 0 && (
             <div className="mt-6 flex justify-end">
-                <Button onClick={handleSubmitAttendance} disabled={isSubmitting}>
+                <Button onClick={handleSubmitAttendance} disabled={isSubmitting || isLoadingStudents}>
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {isSubmitting ? "Submitting..." : <><Save className="mr-2 h-4 w-4" /> Submit Attendance</>}
                 </Button>

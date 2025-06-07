@@ -4,12 +4,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, UserCog, ShieldAlert, BookUser, User, DollarSign, CheckSquare, Users, LayoutDashboard, Home, Loader2 } from "lucide-react";
+import { ArrowRight, UserCog, ShieldAlert, BookUser, User as UserIcon, DollarSign, CheckSquare, Users, LayoutDashboard, Home, Loader2 } from "lucide-react"; // Renamed User
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import type { User as AppUser } from "@/types/user";
+import type { AuthUser } from "@/types/user"; // Import central AuthUser
 
-type AuthUser = Pick<AppUser, 'email' | 'name' | 'role' | '_id' | 'schoolId'>;
 
 const roleSpecificLinks = {
   superadmin: [
@@ -26,7 +25,7 @@ const roleSpecificLinks = {
   teacher: [
     { href: "/dashboard/teacher", title: "Teacher Dashboard", description: "Access your teaching tools.", icon: LayoutDashboard },
     { href: "/dashboard/teacher/attendance", title: "Mark Attendance", description: "Record daily student attendance.", icon: CheckSquare },
-    { href: "/dashboard/teacher/profile", title: "My Profile", description: "View and update your details.", icon: User },
+    { href: "/dashboard/teacher/profile", title: "My Profile", description: "View and update your details.", icon: UserIcon },
   ],
   student: [
     { href: "/dashboard/student", title: "Student Dashboard", description: "Access your academic information.", icon: LayoutDashboard },
@@ -43,23 +42,21 @@ export default function DashboardPage() {
   const pathname = usePathname();
 
   useEffect(() => {
-    setIsLoading(true); // Ensure loading is true at the start of the effect
+    setIsLoading(true); 
     const storedUser = localStorage.getItem('loggedInUser');
 
     if (storedUser && storedUser !== 'undefined' && storedUser !== 'null') {
       try {
-        const parsedUser = JSON.parse(storedUser) as AuthUser;
-        if (parsedUser && parsedUser.role) { // Check for a valid user object
+        const parsedUser: AuthUser = JSON.parse(storedUser);
+        if (parsedUser && parsedUser.role) { 
           setAuthUser(parsedUser);
           if (pathname === '/dashboard') {
             if (parsedUser.role === 'superadmin') router.replace("/dashboard/super-admin");
             else if (parsedUser.role === 'admin') router.replace("/dashboard/admin");
             else if (parsedUser.role === 'teacher') router.replace("/dashboard/teacher");
             else if (parsedUser.role === 'student') router.replace("/dashboard/student");
-            // If role is unknown but user is on /dashboard, they will see the generic dashboard content below
           }
         } else {
-          // Parsed object is not a valid user
           localStorage.removeItem('loggedInUser');
           setAuthUser(null);
           router.replace('/');
@@ -73,17 +70,16 @@ export default function DashboardPage() {
         setIsLoading(false);
       }
     } else {
-      // No valid user string in localStorage
-      if (storedUser) { // If it was an invalid string like "undefined" or "null"
+      if (storedUser) { 
          localStorage.removeItem('loggedInUser');
       }
-      setAuthUser(null); // Ensure authUser state is null
+      setAuthUser(null); 
       router.replace('/'); 
       setIsLoading(false);
     }
   }, [router, pathname]);
 
-  if (isLoading || (!authUser && pathname === '/dashboard')) { // Show loader if loading, or if on /dashboard and authUser isn't set yet (before redirect)
+  if (isLoading || (!authUser && pathname === '/dashboard')) { 
     return (
       <div className="flex flex-1 items-center justify-center h-screen">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -91,15 +87,10 @@ export default function DashboardPage() {
     );
   }
   
-  // This part will render if on /dashboard and user is authenticated but role redirect hasn't happened or is not applicable
-  // Or if a user somehow lands here with a role not in the redirect list.
   if (!authUser) { 
-    // This case should ideally be covered by the loader and redirect,
-    // but as a fallback if navigation directly to /dashboard happens and authUser is still null post-loading.
-    // It should be rare if redirects work correctly.
     return (
          <div className="flex flex-1 items-center justify-center h-screen">
-            <p>Redirecting...</p> {/* Or a more specific message */}
+            <p>Redirecting...</p> 
             <Loader2 className="h-16 w-16 animate-spin text-primary ml-4" />
         </div>
     );
@@ -115,7 +106,9 @@ export default function DashboardPage() {
           <CardTitle className="text-3xl font-headline flex items-center">
             <Home className="mr-3 h-8 w-8 text-primary" /> Welcome to CampusFlow, {authUser.name}!
           </CardTitle>
-          <CardDescription className="text-lg">Your central hub for campus management. You are logged in as a <span className="font-semibold capitalize">{authUser.role}</span>.</CardDescription>
+          <CardDescription className="text-lg">Your central hub for campus management. You are logged in as a <span className="font-semibold capitalize">{authUser.role}</span>.
+          {authUser.classId && (authUser.role === 'teacher' || authUser.role === 'student') && ` Assigned to: ${authUser.classId}`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
            <p className="text-muted-foreground">Select an option below to navigate to your dashboard or manage specific areas. If you're not automatically redirected to your specific dashboard, please use the navigation menu.</p>

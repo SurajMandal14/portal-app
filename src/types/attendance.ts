@@ -1,18 +1,18 @@
 
 import type { ObjectId } from 'mongodb';
-import type { User as AppUser } from './user'; // For AuthUser type reference
+import type { AuthUser as CentralAuthUser } from './user'; // Import central AuthUser
 
 export type AttendanceStatus = 'present' | 'absent' | 'late';
 
 export interface AttendanceEntry {
   studentId: string;
-  studentName: string; 
+  studentName: string;
   status: AttendanceStatus;
 }
 
 export interface AttendanceSubmissionPayload {
-  classId: string;
-  className: string; 
+  classId: string; // This should ideally be a unique ID, but currently using class name
+  className: string;
   schoolId: string;
   date: Date;
   entries: AttendanceEntry[];
@@ -23,15 +23,15 @@ export interface AttendanceRecord {
   _id: ObjectId | string;
   studentId: string;
   studentName: string;
-  classId: string;
+  classId: string; // Stores class name
   className: string;
-  schoolId: ObjectId | string; 
+  schoolId: ObjectId | string;
   date: Date;
   status: AttendanceStatus;
-  markedByTeacherId: ObjectId | string; 
+  markedByTeacherId: ObjectId | string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Define AuthUser type if not globally available or imported from a central types file
-export type AuthUser = Pick<AppUser, 'email' | 'name' | 'role' | '_id' | 'schoolId'>;
+// Use the centrally defined AuthUser
+export type AuthUser = CentralAuthUser;
