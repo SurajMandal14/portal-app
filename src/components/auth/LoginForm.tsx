@@ -15,15 +15,15 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { School, Loader2 } from "lucide-react"; // Added Loader2
+import { School, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { loginUser, type LoginResult } from "@/app/actions/auth"; // Import the server action
+import { loginUser, type LoginResult } from "@/app/actions/auth";
 import { useState } from "react";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  password: z.string().min(1, { message: "Password is required." }), // Updated min for password to allow 'password'
 });
 
 export function LoginForm() {
@@ -44,14 +44,26 @@ export function LoginForm() {
     try {
       const result: LoginResult = await loginUser(values);
 
-      if (result.success) {
+      if (result.success && result.user) {
         toast({
           title: "Login Successful",
           description: result.message || "Redirecting to dashboard...",
         });
-        // TODO: Store user session (e.g., using context, next-auth, or cookies)
-        // For now, we directly redirect.
-        router.push("/dashboard");
+        // Store user session
+        localStorage.setItem('loggedInUser', JSON.stringify(result.user));
+        
+        // Redirect based on role
+        if (result.user.role === 'superadmin') {
+          router.push("/dashboard/super-admin");
+        } else if (result.user.role === 'admin') {
+          router.push("/dashboard/admin");
+        } else if (result.user.role === 'teacher') {
+          router.push("/dashboard/teacher");
+        } else if (result.user.role === 'student') {
+          router.push("/dashboard/student");
+        } else {
+          router.push("/dashboard"); // Default dashboard
+        }
       } else {
         toast({
           variant: "destructive",
@@ -78,7 +90,7 @@ export function LoginForm() {
           <School size={32} />
         </div>
         <CardTitle className="text-3xl font-bold">CampusFlow</CardTitle>
-        <CardDescription>Superadmin Login</CardDescription>
+        <CardDescription>Login to your account</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -90,7 +102,7 @@ export function LoginForm() {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="superadmin@example.com" {...field} disabled={isLoading} />
+                    <Input placeholder="user@example.com" {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
