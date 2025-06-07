@@ -4,7 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label"; // Kept as it might be used by FormLabel
+// Label import kept as FormLabel uses it internally or as a base
 import { PlusCircle, School, Upload, DollarSign, Bus, Utensils, Loader2 } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -18,25 +18,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { createSchool, getSchools, schoolFormSchema, type SchoolFormData } from "@/app/actions/schools";
+import { createSchool, getSchools } from "@/app/actions/schools";
+import { schoolFormSchema, type SchoolFormData } from "@/types/school"; // Import from shared location
 import type { School as SchoolType } from "@/types/school";
 import { useEffect, useState } from "react";
 import Image from "next/image"; // For displaying logos
 
-// Zod schema for class fees within the form (matches server action)
-const classFeeClientSchema = z.object({
-  className: z.string().min(1, "Class name is required"),
-  tuitionFee: z.coerce.number().min(0, "Tuition fee must be positive"),
-  busFee: z.coerce.number().min(0, "Bus fee must be positive").optional().default(0),
-  canteenFee: z.coerce.number().min(0, "Canteen fee must be positive").optional().default(0),
-});
-
-// Zod schema for the main school form (matches server action)
-const schoolClientFormSchema = z.object({
-  schoolName: z.string().min(3, "School name must be at least 3 characters."),
-  schoolLogo: z.any().optional(), // File upload handled on client, server action ignores for now
-  classFees: z.array(classFeeClientSchema).min(1, "At least one class configuration is required."),
-});
+// Client-side Zod schemas are now imported from '@/types/school'
+// const classFeeClientSchema = ...
+// const schoolClientFormSchema = ...
 
 
 export default function SchoolManagementPage() {
@@ -45,11 +35,12 @@ export default function SchoolManagementPage() {
   const [isLoadingSchools, setIsLoadingSchools] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm<z.infer<typeof schoolClientFormSchema>>({
-    resolver: zodResolver(schoolClientFormSchema),
+  const form = useForm<SchoolFormData>({ // Use SchoolFormData directly
+    resolver: zodResolver(schoolFormSchema), // Use imported schoolFormSchema
     defaultValues: {
       schoolName: "",
       classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
+      schoolLogo: undefined,
     },
   });
 
@@ -75,14 +66,11 @@ export default function SchoolManagementPage() {
 
   useEffect(() => {
     fetchSchools();
-  }, []);
+  }, [toast]); // Added toast to dependencies as it's used in fetchSchools
 
-  async function onSubmit(values: z.infer<typeof schoolClientFormSchema>) {
+  async function onSubmit(values: SchoolFormData) { // Values are already SchoolFormData
     setIsSubmitting(true);
-    // The 'schoolLogo' field might contain a File object if the user selected one.
-    // The server action 'createSchool' currently ignores it, but can be enhanced later.
-    // For now, we just pass `values` as is.
-    const result = await createSchool(values as SchoolFormData); // Cast as server expects SchoolFormData
+    const result = await createSchool(values); 
     setIsSubmitting(false);
 
     if (result.success) {
@@ -90,8 +78,8 @@ export default function SchoolManagementPage() {
         title: "School Created",
         description: result.message,
       });
-      form.reset(); // Reset form on success
-      fetchSchools(); // Refresh the list of schools
+      form.reset(); 
+      fetchSchools(); 
     } else {
       toast({
         variant: "destructive",
@@ -134,7 +122,7 @@ export default function SchoolManagementPage() {
               <FormField
                 control={form.control}
                 name="schoolLogo"
-                render={({ field }) => ( // field.onChange will handle the file object
+                render={({ field }) => ( 
                   <FormItem>
                     <FormLabel>School Logo (Optional)</FormLabel>
                     <FormControl>
@@ -268,7 +256,6 @@ export default function SchoolManagementPage() {
                 </div>
               </div>
               <Button variant="outline" size="sm" disabled>Edit</Button> 
-              {/* Edit functionality not yet implemented */}
             </Card>
           ))
           ) : (

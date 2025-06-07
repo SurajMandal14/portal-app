@@ -3,23 +3,12 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { School, ClassFeeConfig } from '@/types/school';
+import type { School, ClassFeeConfig, SchoolFormData } from '@/types/school'; // Import SchoolFormData
+import { schoolFormSchema } from '@/types/school'; // Import schoolFormSchema
 import { revalidatePath } from 'next/cache';
 
-const classFeeSchema = z.object({
-  className: z.string().min(1, "Class name is required"),
-  tuitionFee: z.coerce.number().min(0, "Tuition fee must be positive"),
-  busFee: z.coerce.number().min(0, "Bus fee must be positive").optional().default(0),
-  canteenFee: z.coerce.number().min(0, "Canteen fee must be positive").optional().default(0),
-});
-
-export const schoolFormSchema = z.object({
-  schoolName: z.string().min(3, "School name must be at least 3 characters."),
-  schoolLogo: z.any().optional(), // We'll ignore file upload for now, can be a URL if provided as string
-  classFees: z.array(classFeeSchema).min(1, "At least one class configuration is required."),
-});
-
-export type SchoolFormData = z.infer<typeof schoolFormSchema>;
+// classFeeSchema and schoolFormSchema are now imported from '@/types/school'
+// export type SchoolFormData = z.infer<typeof schoolFormSchema>; // This is now imported
 
 export interface CreateSchoolResult {
   success: boolean;
