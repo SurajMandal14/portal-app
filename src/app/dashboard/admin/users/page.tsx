@@ -217,7 +217,9 @@ export default function AdminUserManagementPage() {
     );
   }
   
-  const availableClasses = schoolDetails?.classFees.map(cf => cf.className) || [];
+  const availableClasses = schoolDetails?.classFees
+    ?.map(cf => cf.className)
+    .filter(name => typeof name === 'string' && name.trim() !== '') || [];
 
   return (
     <div className="space-y-6">
