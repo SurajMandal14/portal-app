@@ -3,155 +3,50 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, CheckSquare, Percent, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks } from "lucide-react";
+import { DollarSign, CheckSquare, Percent, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { useState, useEffect, useCallback } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { getStudentAttendanceRecords } from "@/app/actions/attendance";
-import { getFeePaymentsByStudent } from "@/app/actions/fees";
-import { getSchoolById } from "@/app/actions/schools";
-import type { AttendanceRecord, AuthUser } from "@/types/attendance";
-import type { FeePayment } from "@/types/fees";
-import type { School } from "@/types/school";
+import { StudentDataProvider, useStudentData } from '@/contexts/StudentDataContext';
 
-
-interface AttendanceSummary {
-  present: number;
-  absent: number;
-  late: number;
-  percentage: number;
-  total: number;
-}
-
-interface FeeSummary {
-  totalFee: number;
-  totalPaid: number;
-  totalDue: number;
-  percentagePaid: number;
-}
-
-
-export default function StudentDashboardPage() {
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({
-    present: 0, absent: 0, late: 0, percentage: 0, total: 0
-  });
-  const [feeSummary, setFeeSummary] = useState<FeeSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const { toast } = useToast();
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem('loggedInUser');
-    if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
-      try {
-        const parsedUser: AuthUser = JSON.parse(storedUser);
-        if (parsedUser && parsedUser.role === 'student' && parsedUser._id && parsedUser.schoolId) {
-          setAuthUser(parsedUser);
-        } else {
-          setAuthUser(null);
-          toast({ variant: "destructive", title: "Access Denied", description: "You must be a student to view this page." });
-        }
-      } catch (e) {
-        console.error("Failed to parse user from localStorage:", e);
-        setAuthUser(null);
-        toast({ variant: "destructive", title: "Session Error", description: "Failed to load user data." });
-      }
-    } else {
-      setAuthUser(null);
-    }
-  }, [toast]);
-
-  const calculateTotalFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
-    if (!className || !schoolConfig) return 0;
-    const classFeeConfig = schoolConfig.classFees.find(cf => cf.className === className);
-    if (!classFeeConfig) return 0;
-    return (classFeeConfig.tuitionFee || 0) + (classFeeConfig.busFee || 0) + (classFeeConfig.canteenFee || 0);
-  }, []);
-
-  const fetchAllStudentData = useCallback(async () => {
-    if (!authUser || !authUser._id || !authUser.schoolId) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const [attendanceResult, feePaymentsResult, schoolResult] = await Promise.all([
-        getStudentAttendanceRecords(authUser._id.toString(), authUser.schoolId.toString()),
-        getFeePaymentsByStudent(authUser._id.toString(), authUser.schoolId.toString()),
-        getSchoolById(authUser.schoolId.toString())
-      ]);
-
-      // Process Attendance
-      if (attendanceResult.success && attendanceResult.records) {
-        const records = attendanceResult.records;
-        const totalDays = records.length;
-        if (totalDays > 0) {
-          const present = records.filter(r => r.status === 'present').length;
-          const absent = records.filter(r => r.status === 'absent').length;
-          const late = records.filter(r => r.status === 'late').length;
-          const attendedDays = present + late;
-          const percentage = Math.round((attendedDays / totalDays) * 100);
-          setAttendanceSummary({ present, absent, late, percentage, total: totalDays });
-        } else {
-          setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
-        }
-      } else {
-        toast({ variant: "warning", title: "Attendance Info", description: attendanceResult.message || "Could not fetch attendance data." });
-        setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
-      }
-
-      // Process Fees
-      if (schoolResult.success && schoolResult.school) {
-        const schoolConfig = schoolResult.school;
-        const studentPayments = feePaymentsResult.success && feePaymentsResult.payments ? feePaymentsResult.payments : [];
-        
-        if (authUser.classId) {
-            const totalFee = calculateTotalFee(authUser.classId as string, schoolConfig);
-            const totalPaid = studentPayments.reduce((sum, payment) => sum + payment.amountPaid, 0);
-            const totalDue = totalFee - totalPaid;
-            const percentagePaid = totalFee > 0 ? Math.round((totalPaid / totalFee) * 100) : 0;
-            setFeeSummary({ totalFee, totalPaid, totalDue, percentagePaid });
-        } else {
-            // Student not assigned to a class, can't calculate fees.
-            setFeeSummary({ totalFee: 0, totalPaid: 0, totalDue: 0, percentagePaid: 0 });
-             toast({ variant: "info", title: "Fee Info", description: "You are not assigned to a class, so fee details cannot be calculated." });
-        }
-      } else {
-        toast({ variant: "destructive", title: "School Info Error", description: schoolResult.message || "Could not load school details for fee calculation." });
-        setFeeSummary(null);
-      }
-
-    } catch (error) {
-      toast({ variant: "destructive", title: "Dashboard Error", description: "An unexpected error occurred fetching dashboard data." });
-      setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
-      setFeeSummary(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [authUser, toast, calculateTotalFee]);
-  
-  useEffect(() => {
-    if (authUser?._id && authUser?.schoolId) {
-      fetchAllStudentData();
-    } else if (!authUser && !localStorage.getItem('loggedInUser')){ 
-      setIsLoading(false);
-    }
-  }, [authUser, fetchAllStudentData]);
-
+function StudentDashboardContent() {
+  const { 
+    authUser, 
+    attendanceSummary, 
+    feeSummary, 
+    isLoading, 
+    error, 
+    refreshData 
+  } = useStudentData();
 
   if (isLoading) {
     return (
-      <div className="flex flex-1 items-center justify-center py-10">
+      <div className="flex flex-1 items-center justify-center py-10 min-h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
 
+  if (error) {
+     return (
+      <Card className="mt-6">
+        <CardHeader className="flex-row items-center gap-2">
+            <AlertTriangle className="h-6 w-6 text-destructive"/>
+            <CardTitle>Error Loading Dashboard</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-destructive">{error}</p>
+          <p className="text-muted-foreground mt-2">Please try refreshing, or contact support if the issue persists.</p>
+          <Button onClick={refreshData} variant="outline" className="mt-4">
+            <RefreshCw className="mr-2 h-4 w-4" /> Try Again
+          </Button>
+        </CardContent>
+      </Card>
+     );
+  }
+
   if (!authUser) {
     return (
-      <Card>
+      <Card className="mt-6">
         <CardHeader>
           <CardTitle>Access Denied</CardTitle>
         </CardHeader>
@@ -166,12 +61,18 @@ export default function StudentDashboardPage() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl font-headline">Student Dashboard</CardTitle>
-          <CardDescription>
-            Welcome, {authUser.name}! 
-            {authUser.classId && ` (Class: ${authUser.classId})`}
-          </CardDescription>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="text-2xl font-headline">Student Dashboard</CardTitle>
+            <CardDescription>
+              Welcome, {authUser.name}! 
+              {authUser.classId && ` (Class: ${authUser.classId})`}
+            </CardDescription>
+          </div>
+          <Button onClick={refreshData} variant="outline" size="sm" className="mt-2 sm:mt-0">
+            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh Data
+          </Button>
         </CardHeader>
         <CardContent>
           <p>Here's an overview of your academic information.</p>
@@ -198,7 +99,7 @@ export default function StudentDashboardPage() {
                 </div>
               </>
             ) : (
-              <p className="text-muted-foreground text-sm">Fee details are loading or unavailable.</p>
+              <p className="text-muted-foreground text-sm">Fee details are loading or unavailable. {authUser.classId ? "" : "Class assignment missing."}</p>
             )}
              <Button asChild variant="link" className="px-0 mt-2">
                 <Link href="/dashboard/student/fees">View Full Fee Details <ListChecks className="ml-1 h-4 w-4"/> </Link>
@@ -252,5 +153,14 @@ export default function StudentDashboardPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+
+export default function StudentDashboardPage() {
+  return (
+    <StudentDataProvider>
+      <StudentDashboardContent />
+    </StudentDataProvider>
   );
 }
