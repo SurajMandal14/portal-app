@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Added Avatar components
 import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -60,7 +61,7 @@ export function Header() {
     
     if (storedUser && storedUser !== 'undefined' && storedUser !== 'null') {
       try {
-        const parsedUser: AuthUser = JSON.parse(storedUser); // Use updated AuthUser
+        const parsedUser: AuthUser = JSON.parse(storedUser); 
         if (parsedUser && parsedUser.role) { 
           setAuthUser(parsedUser);
         } else {
@@ -94,7 +95,7 @@ export function Header() {
       setIsLoadingUser(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, toast]); // authUser removed from deps to prevent re-renders, pathname covers route changes
+  }, [pathname, toast]); 
 
 
   const handleLogout = () => {
@@ -105,7 +106,7 @@ export function Header() {
       description: "You have been successfully logged out.",
     });
     router.push("/");
-    setIsSheetOpen(false); // Close sheet on logout
+    setIsSheetOpen(false); 
   };
 
   const currentRole = authUser?.role as Role | undefined;
@@ -149,11 +150,18 @@ export function Header() {
               ))}
             </nav>
 
-            <div className="flex items-center gap-2 md:gap-4"> {/* Adjusted gap for mobile */}
+            <div className="flex items-center gap-2 md:gap-4"> 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-full">
-                    <UserCircle className="h-6 w-6" />
+                    {authUser.avatarUrl ? (
+                      <Avatar className="h-7 w-7">
+                        <AvatarImage src={authUser.avatarUrl} alt={authUser.name} data-ai-hint="user avatar"/>
+                        <AvatarFallback>{authUser.name ? authUser.name.substring(0,1).toUpperCase() : "U"}</AvatarFallback>
+                      </Avatar>
+                    ) : (
+                      <UserCircle className="h-6 w-6" />
+                    )}
                     <span className="sr-only">Toggle user menu</span>
                   </Button>
                 </DropdownMenuTrigger>
