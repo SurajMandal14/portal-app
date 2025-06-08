@@ -62,24 +62,24 @@ interface CBSEStateFrontProps {
 
 // Grade scales
 const overallSubjectGradeScale = [ // For total out of 200M
-  { min: 180, grade: 'A+' }, { min: 160, grade: 'A' }, // Adjusted based on typical 200M scales, previously A1
-  { min: 140, grade: 'B+' }, { min: 120, grade: 'B' }, // Previously A2, B1
-  { min: 100, grade: 'C+' }, { min: 80, grade: 'C' },  // Previously B2, C1
-  { min: 60, grade: 'D' }, { min: 40, grade: 'E' },   // Previously C2, D1. D2 might be fail.
-  { min: 0, grade: 'F' } // Fail or Needs Improvement. Previously D2
+  { min: 180, grade: 'A+' }, { min: 160, grade: 'A' }, 
+  { min: 140, grade: 'B+' }, { min: 120, grade: 'B' }, 
+  { min: 100, grade: 'C+' }, { min: 80, grade: 'C' },  
+  { min: 60, grade: 'D' }, { min: 40, grade: 'E' },   
+  { min: 0, grade: 'F' } 
 ];
 
 const faPeriodGradeScale = [ // For 50M - Main Subjects
   { min: 46, grade: 'A1' }, { min: 41, grade: 'A2' },
   { min: 36, grade: 'B1' }, { min: 31, grade: 'B2' },
   { min: 26, grade: 'C1' }, { min: 21, grade: 'C2' },
-  { min: 18, grade: 'D1' }, { min: 0, grade: 'D2' } // D2 for 0-17
+  { min: 18, grade: 'D1' }, { min: 0, grade: 'D2' } 
 ];
 const faPeriodGradeScale2ndLang = [ // For 50M - Second Language
   { min: 45, grade: 'A1' }, { min: 40, grade: 'A2' },
   { min: 34, grade: 'B1' }, { min: 29, grade: 'B2' },
   { min: 23, grade: 'C1' }, { min: 18, grade: 'C2' },
-  { min: 10, grade: 'D1' }, { min: 0, grade: 'D2' } // D2 for 0-9
+  { min: 10, grade: 'D1' }, { min: 0, grade: 'D2' } 
 ];
 const coCurricularGradeScale = [ // Percentage based
   { min: 85, grade: 'A+' }, { min: 71, grade: 'A' },
@@ -91,7 +91,7 @@ const getGrade = (totalMarks: number, scale: { min: number; grade: string }[]): 
   for (let i = 0; i < scale.length; i++) {
     if (totalMarks >= scale[i].min) return scale[i].grade;
   }
-  return scale[scale.length - 1]?.grade || 'N/A'; // Default to last grade or N/A
+  return scale[scale.length - 1]?.grade || 'N/A'; 
 };
 
 const mainSubjects = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"];
@@ -113,9 +113,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 
   const calculateFaResults = React.useCallback((subjectIndex: number) => {
     const subjectData = faMarks[subjectIndex];
-    // Ensure subjectData and its FA periods are defined, providing defaults if not
     if (!subjectData) {
-        // This case should ideally not happen if faMarks is initialized correctly
         const defaultFaPeriod = { tool1: null, tool2: null, tool3: null, tool4: null };
         const defaultSubjectData = { fa1: defaultFaPeriod, fa2: defaultFaPeriod, fa3: defaultFaPeriod, fa4: defaultFaPeriod };
         return { 
@@ -132,12 +130,11 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
     let currentOverallTotal = 0;
 
     const subjectName = mainSubjects[subjectIndex];
-    // Determine if current subject is the selected second language
     const isSecondLang = subjectName === secondLanguage;
     const currentFaPeriodGradeScale = isSecondLang ? faPeriodGradeScale2ndLang : faPeriodGradeScale;
 
     (['fa1', 'fa2', 'fa3', 'fa4'] as const).forEach(faPeriodKey => {
-      const periodMarks = subjectData[faPeriodKey] || { tool1: null, tool2: null, tool3: null, tool4: null}; // Default if undefined
+      const periodMarks = subjectData[faPeriodKey] || { tool1: null, tool2: null, tool3: null, tool4: null}; 
       const periodTotal = (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
       currentOverallTotal += periodTotal;
       results[faPeriodKey] = {
@@ -146,21 +143,21 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
       };
     });
     results.overallTotal = currentOverallTotal;
-    results.overallGrade = getGrade(currentOverallTotal, overallSubjectGradeScale); // Using 200M scale
+    results.overallGrade = getGrade(currentOverallTotal, overallSubjectGradeScale); 
     return results;
   }, [faMarks, secondLanguage]);
 
 
   const calculateCoResults = React.useCallback((subjectIndex: number) => {
     const subjectData = coMarks[subjectIndex];
-    if (!subjectData) return { grade: 'N/A'}; // Default if undefined
+    if (!subjectData) return { grade: 'N/A'}; 
 
     let totalMarksObtained = 0;
     let totalMaxMarksPossible = 0;
 
     (['sa1', 'sa2', 'sa3'] as const).forEach(saPeriodKey => {
       totalMarksObtained += subjectData[`${saPeriodKey}Marks`] || 0;
-      totalMaxMarksPossible += subjectData[`${saPeriodKey}Max`] || 50; // Default max if null
+      totalMaxMarksPossible += subjectData[`${saPeriodKey}Max`] || 50; 
     });
     
     const percentage = totalMaxMarksPossible > 0 ? (totalMarksObtained / totalMaxMarksPossible) * 100 : 0;
@@ -173,62 +170,62 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   return (
     <>
       <style jsx global>{`
-        .report-card-container body, .report-card-container { /* Apply to container too */
+        .report-card-container body, .report-card-container { 
           font-family: Arial, sans-serif;
-          font-size: 11px; /* Adjusted for potentially more content */
-          margin: 0; /* Remove margin for better print control by parent */
-          padding: 5px; /* Minimal padding, parent can control more */
+          font-size: 11px; 
+          margin: 0; 
+          padding: 5px; 
           color: #000;
           background-color: #fff;
         }
         .report-card-container table {
           border-collapse: collapse;
           width: 100%;
-          margin-bottom: 10px; /* Reduced margin */
+          margin-bottom: 10px; 
         }
         .report-card-container th, .report-card-container td {
           border: 1px solid #000;
-          padding: 3px; /* Reduced padding */
+          padding: 3px; 
           text-align: center;
-          vertical-align: middle; /* Ensure vertical alignment */
+          vertical-align: middle; 
         }
         .report-card-container .header-table td {
           border: none;
           text-align: left;
-          padding: 1px 3px; /* Consistent padding */
+          padding: 1px 3px; 
         }
         .report-card-container .title {
           text-align: center;
           font-weight: bold;
-          font-size: 14px; /* Adjusted */
-          margin-bottom: 3px; /* Spacing */
+          font-size: 14px; 
+          margin-bottom: 3px; 
         }
         .report-card-container .subtitle {
           text-align: center;
           font-weight: bold;
-          font-size: 12px; /* Adjusted */
-          margin-bottom: 8px; /* Spacing */
+          font-size: 12px; 
+          margin-bottom: 8px; 
         }
         .report-card-container .small-note {
-          font-size: 9px; /* Adjusted */
-          margin-top: 8px; /* Spacing for note */
+          font-size: 9px; 
+          margin-top: 8px; 
           text-align: left;
         }
         .report-card-container input[type="text"], 
         .report-card-container input[type="number"], 
         .report-card-container select {
-          padding: 2px; /* Reduced padding */
+          padding: 2px; 
           border: 1px solid #ccc;
-          border-radius: 2px; /* Smaller radius */
-          font-size: 11px; /* Match body font size */
+          border-radius: 2px; 
+          font-size: 11px; 
           box-sizing: border-box; 
-          background-color: #fff; /* Ensure background for inputs */
-          color: #000; /* Ensure text color for inputs */
+          background-color: #fff; 
+          color: #000; 
         }
         .report-card-container input[type="number"] {
-          width: 45px; /* Default width for number inputs */
+          width: 45px; 
           text-align: center;
-          -moz-appearance: textfield; /* Firefox */
+          -moz-appearance: textfield; 
         }
         .report-card-container input::-webkit-outer-spin-button,
         .report-card-container input::-webkit-inner-spin-button {
@@ -236,7 +233,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
           margin: 0;
         }
         .report-card-container .header-table input[type="text"] { 
-            width: 95%; /* Make them fill the cell by default */
+            width: 95%; 
             max-width: 180px; 
         }
          .report-card-container .header-table td:first-child input[type="text"] { 
@@ -251,11 +248,11 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
         }
         .report-card-container .academic-year-input {
             font-weight: bold;
-            font-size: 14px; /* Match title */
+            font-size: 14px; 
             border: none;
             text-align: center;
-            width: 100px; /* Adjust as needed */
-            display: inline-block; /* For better alignment */
+            width: 100px; 
+            display: inline-block; 
             vertical-align: baseline;
         }
       `}</style>
@@ -271,8 +268,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
         </div>
         <div className="subtitle">CBSE STATE</div>
 
-        <table className="header-table">
-          <tbody>
+        <table className="header-table"><tbody>
             <tr>
               <td colSpan={4}>U-DISE Code & School Name : <input type="text" value={studentData.udiseCodeSchoolName || ""} onChange={e => onStudentDataChange('udiseCodeSchoolName', e.target.value)} /></td>
             </tr>
@@ -303,8 +299,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                 </select>
               </td>
             </tr>
-          </tbody>
-        </table>
+          </tbody></table>
 
         <div className="subtitle">Formative Assessment</div>
         <table id="fa-table">
@@ -425,10 +420,9 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               </tbody>
             </table>
           </div>
-          <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', gap: '10px' }}> {/* Adjusted flex */}
+          <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div>
-              <table style={{fontSize: '9px'}}> {/* Adjusted font size */}
-                <caption><strong>Grades: Curricular (FA - 50M)</strong></caption>
+              <table style={{fontSize: '9px'}}><caption><strong>Grades: Curricular (FA - 50M)</strong></caption>
                 <thead>
                   <tr>
                     <th>Grade</th>
@@ -444,8 +438,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               </table>
             </div>
             <div>
-              <table style={{fontSize: '9px'}}>
-                <caption><strong>Grades: Co-Curricular (% Based)</strong></caption>
+              <table style={{fontSize: '9px'}}><caption><strong>Grades: Co-Curricular (% Based)</strong></caption>
                 <thead>
                   <tr><th>Grade</th><th>% Marks</th></tr>
                 </thead>
@@ -457,8 +450,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               </table>
             </div>
              <div>
-              <table style={{fontSize: '9px'}}>
-                <caption><strong>Overall Subject Grade (200M)</strong></caption>
+              <table style={{fontSize: '9px'}}><caption><strong>Overall Subject Grade (200M)</strong></caption>
                 <thead>
                   <tr><th>Grade</th><th>Marks</th></tr>
                 </thead>
@@ -481,3 +473,4 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 };
 
 export default CBSEStateFront;
+
