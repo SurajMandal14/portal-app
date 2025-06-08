@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChartBig, CalendarDays, Loader2, Info, Download, DollarSign } from "lucide-react";
+import { BarChartBig, CalendarDays, Loader2, Info, Download, DollarSign, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,6 +20,7 @@ import type { FeePayment } from "@/types/fees";
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
 import { getFeePaymentsBySchool } from "@/app/actions/fees";
+import Link from "next/link";
 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -473,8 +474,28 @@ export default function AdminReportsPage() {
           <CardTitle className="text-2xl font-headline flex items-center">
             <BarChartBig className="mr-2 h-6 w-6" /> School Reports
           </CardTitle>
-          <CardDescription>View summaries and reports for school operations.</CardDescription>
+          <CardDescription>View summaries and reports for school operations. Access report card generation tools.</CardDescription>
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader>
+            <CardTitle className="text-lg">Report Card Generation</CardTitle>
+            <CardDescription>Select a template to start generating student report cards.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <Link href="/dashboard/admin/reports/generate-cbse-state" passHref>
+                 <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center">
+                    <FileText className="h-6 w-6 mb-1"/>
+                    <span>CBSE State Template</span>
+                 </Button>
+            </Link>
+             {/* Placeholder for more templates */}
+            <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center" disabled>
+                <FileText className="h-6 w-6 mb-1 text-muted-foreground"/>
+                <span className="text-muted-foreground">More Templates (Soon)</span>
+            </Button>
+        </CardContent>
       </Card>
 
       {/* Attendance Summary Report */}

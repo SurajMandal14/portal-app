@@ -1,9 +1,10 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 
-interface StudentData {
+// Define interfaces for props and state
+export interface StudentData {
   udiseCodeSchoolName?: string;
   studentName?: string;
   fatherName?: string;
@@ -17,64 +18,70 @@ interface StudentData {
   admissionNo?: string;
   examNo?: string;
   aadharNo?: string;
-  secondLanguageDefault?: 'Hindi' | 'Telugu';
 }
 
-interface MarksEntry {
+export interface MarksEntry {
   tool1: number | null;
   tool2: number | null;
   tool3: number | null;
   tool4: number | null; // This is the 20M tool
 }
 
-interface SubjectFAData {
+export interface SubjectFAData {
   fa1: MarksEntry;
   fa2: MarksEntry;
   fa3: MarksEntry;
   fa4: MarksEntry;
 }
 
-interface CoCurricularSAData {
-  sa1Max: number;
+export interface CoCurricularSAData {
+  sa1Max: number | null;
   sa1Marks: number | null;
-  sa2Max: number;
+  sa2Max: number | null;
   sa2Marks: number | null;
-  sa3Max: number;
+  sa3Max: number | null;
   sa3Marks: number | null;
 }
 
 interface CBSEStateFrontProps {
-  studentData?: StudentData;
-  initialFaMarks?: SubjectFAData[];
-  initialCoMarks?: CoCurricularSAData[];
-  academicYear?: string;
+  studentData: StudentData;
+  onStudentDataChange: (field: keyof StudentData, value: string) => void;
+  
+  faMarks: SubjectFAData[];
+  onFaMarksChange: (subjectIndex: number, faPeriod: keyof SubjectFAData, toolKey: keyof MarksEntry, value: string) => void;
+  
+  coMarks: CoCurricularSAData[];
+  onCoMarksChange: (subjectIndex: number, saPeriod: 'sa1' | 'sa2' | 'sa3', type: 'Marks' | 'Max', value: string) => void;
+  
+  secondLanguage: 'Hindi' | 'Telugu';
+  onSecondLanguageChange: (value: 'Hindi' | 'Telugu') => void;
+  
+  academicYear: string;
+  onAcademicYearChange: (value: string) => void;
 }
 
-// Grade scales (defined outside component for clarity or can be inside)
-const overallSubjectGradeScale = [ // For 200M total for a main subject
-  { min: 180, grade: 'A+' }, { min: 160, grade: 'A1' }, // Note: A1 original script was 142 for 'A'
-  { min: 140, grade: 'A2' }, // Made up A2 for finer grading, original script was less granular for 200M
-  { min: 120, grade: 'B1' },
-  { min: 100, grade: 'B2' },
-  { min: 80, grade: 'C1' },
-  { min: 60, grade: 'C2' },
-  { min: 40, grade: 'D1' }, // Adjusted D1/D2 for 200M
+// Grade scales
+const overallSubjectGradeScale = [
+  { min: 180, grade: 'A+' }, { min: 160, grade: 'A1' },
+  { min: 140, grade: 'A2' }, { min: 120, grade: 'B1' },
+  { min: 100, grade: 'B2' }, { min: 80, grade: 'C1' },
+  { min: 60, grade: 'C2' }, { min: 40, grade: 'D1' },
   { min: 0, grade: 'D2' }
 ];
 
-const faPeriodGradeScale = [ // For 50M FA Period (non-2nd language)
+const faPeriodGradeScale = [
   { min: 46, grade: 'A1' }, { min: 41, grade: 'A2' },
   { min: 36, grade: 'B1' }, { min: 31, grade: 'B2' },
   { min: 26, grade: 'C1' }, { min: 21, grade: 'C2' },
   { min: 18, grade: 'D1' }, { min: 0, grade: 'D2' }
 ];
-const faPeriodGradeScale2ndLang = [ // For 50M FA Period (2nd language)
+const faPeriodGradeScale2ndLang = [
   { min: 45, grade: 'A1' }, { min: 40, grade: 'A2' },
   { min: 34, grade: 'B1' }, { min: 29, grade: 'B2' },
   { min: 23, grade: 'C1' }, { min: 18, grade: 'C2' },
   { min: 10, grade: 'D1' }, { min: 0, grade: 'D2' }
 ];
-const coCurricularGradeScale = [ // For co-curricular (percentage based on sum of SAs)
+const coCurricularGradeScale = [
   { min: 85, grade: 'A+' }, { min: 71, grade: 'A' },
   { min: 56, grade: 'B' }, { min: 41, grade: 'C' },
   { min: 0, grade: 'D' }
@@ -84,90 +91,30 @@ const getGrade = (totalMarks: number, scale: { min: number; grade: string }[]): 
   for (let i = 0; i < scale.length; i++) {
     if (totalMarks >= scale[i].min) return scale[i].grade;
   }
-  return scale[scale.length - 1]?.grade || 'N/A'; // Fallback
+  return scale[scale.length - 1]?.grade || 'N/A';
 };
+
+const mainSubjects = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"];
+const coCurricularSubjects = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."];
 
 
 const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
-  studentData: initialStudentData = {},
-  initialFaMarks,
-  initialCoMarks,
-  academicYear = "20__ - 20__"
+  studentData,
+  onStudentDataChange,
+  faMarks,
+  onFaMarksChange,
+  coMarks,
+  onCoMarksChange,
+  secondLanguage,
+  onSecondLanguageChange,
+  academicYear,
+  onAcademicYearChange
 }) => {
 
-  const [studentInfo, setStudentInfo] = useState<StudentData>(initialStudentData);
-  const [secondLanguage, setSecondLanguage] = useState<'Hindi' | 'Telugu'>(initialStudentData.secondLanguageDefault || 'Hindi');
-
-  const mainSubjects = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"];
-  const coCurricularSubjects = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."];
-
-  const defaultFaMarksEntry = (): MarksEntry => ({ tool1: null, tool2: null, tool3: null, tool4: null });
-  const defaultSubjectFaData = (): SubjectFAData => ({
-    fa1: defaultFaMarksEntry(), fa2: defaultFaMarksEntry(), fa3: defaultFaMarksEntry(), fa4: defaultFaMarksEntry(),
-  });
-
-  const [faMarks, setFaMarks] = useState<SubjectFAData[]>(() =>
-    initialFaMarks || mainSubjects.map(() => defaultSubjectFaData())
-  );
-
-  const defaultCoCurricularSaData = (): CoCurricularSAData => ({
-    sa1Max: 50, sa1Marks: null, sa2Max: 50, sa2Marks: null, sa3Max: 50, sa3Marks: null, // Defaulting Max to 50 as per CCE pattern usually
-  });
-
-  const [coMarks, setCoMarks] = useState<CoCurricularSAData[]>(() =>
-    initialCoMarks || coCurricularSubjects.map(() => defaultCoCurricularSaData())
-  );
-
-  const handleStudentInfoChange = (field: keyof StudentData, value: string) => {
-    setStudentInfo(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleFaInputChange = (subjectIndex: number, faPeriod: keyof SubjectFAData, toolKey: keyof MarksEntry, value: string) => {
-    const numValue = parseInt(value, 10);
-    const maxMark = toolKey === 'tool4' ? 20 : 10;
-    const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), maxMark);
-
-    setFaMarks(prev => {
-      const newFaMarks = [...prev];
-      newFaMarks[subjectIndex] = {
-        ...newFaMarks[subjectIndex],
-        [faPeriod]: {
-          ...newFaMarks[subjectIndex][faPeriod],
-          [toolKey]: validatedValue,
-        }
-      };
-      return newFaMarks;
-    });
-  };
-  
-  const handleCoInputChange = (subjectIndex: number, saPeriod: 'sa1' | 'sa2' | 'sa3', type: 'Marks' | 'Max', value: string) => {
-    const numValue = parseInt(value, 10);
-    const validatedValue = isNaN(numValue) ? null : Math.max(numValue, type === 'Max' ? 1 : 0); // Max marks should be at least 1
-
-    setCoMarks(prev => {
-      const newCoMarks = [...prev];
-      const keyToUpdate = `${saPeriod}${type}` as keyof CoCurricularSAData;
-      
-      let finalValue = validatedValue;
-      if (type === 'Marks' && validatedValue !== null) {
-        const maxKey = `${saPeriod}Max` as keyof CoCurricularSAData;
-        const currentMax = newCoMarks[subjectIndex][maxKey] as number | null;
-        if (currentMax !== null && validatedValue > currentMax) {
-          finalValue = currentMax; // Cap marks at max marks
-        }
-      }
-      
-      newCoMarks[subjectIndex] = {
-        ...newCoMarks[subjectIndex],
-        [keyToUpdate]: finalValue,
-      };
-      return newCoMarks;
-    });
-  };
-
-
-  const calculateFaResults = useCallback((subjectIndex: number) => {
+  const calculateFaResults = React.useCallback((subjectIndex: number) => {
     const subjectData = faMarks[subjectIndex];
+    if (!subjectData) return { overallTotal: 0, overallGrade: 'N/A' }; // Should not happen if faMarks is initialized
+
     const results: Record<string, { total: number; grade: string }> & { overallTotal: number; overallGrade: string } = {
       overallTotal: 0,
       overallGrade: 'N/A',
@@ -190,17 +137,19 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
     results.overallTotal = currentOverallTotal;
     results.overallGrade = getGrade(currentOverallTotal, overallSubjectGradeScale);
     return results;
-  }, [faMarks, secondLanguage, mainSubjects]);
+  }, [faMarks, secondLanguage]);
 
 
-  const calculateCoResults = useCallback((subjectIndex: number) => {
+  const calculateCoResults = React.useCallback((subjectIndex: number) => {
     const subjectData = coMarks[subjectIndex];
+    if (!subjectData) return { grade: 'N/A'};
+
     let totalMarksObtained = 0;
     let totalMaxMarksPossible = 0;
 
     (['sa1', 'sa2', 'sa3'] as const).forEach(saPeriodKey => {
       totalMarksObtained += subjectData[`${saPeriodKey}Marks`] || 0;
-      totalMaxMarksPossible += subjectData[`${saPeriodKey}Max`] || 0; // Default SA Max to 50 if not set
+      totalMaxMarksPossible += subjectData[`${saPeriodKey}Max`] || 0; 
     });
     
     const percentage = totalMaxMarksPossible > 0 ? (totalMarksObtained / totalMaxMarksPossible) * 100 : 0;
@@ -213,12 +162,12 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   return (
     <>
       <style jsx global>{`
-        body.report-card-body { /*Scoped to a potential parent class if this is embedded */
+        body.report-card-body {
           font-family: Arial, sans-serif;
           font-size: 12px;
           margin: 20px;
           color: #000;
-          background-color: #fff; /* Ensure white background for printing */
+          background-color: #fff;
         }
         .report-card-container table {
           border-collapse: collapse;
@@ -229,83 +178,102 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
           border: 1px solid #000;
           padding: 4px;
           text-align: center;
-          vertical-align: middle;
+          vertical-align: middle; /* Ensure vertical alignment */
         }
         .report-card-container .header-table td {
           border: none;
           text-align: left;
-          padding: 2px 4px;
+          padding: 2px 4px; /* Consistent padding */
         }
         .report-card-container .title {
           text-align: center;
           font-weight: bold;
           font-size: 16px;
-          margin-bottom: 5px;
+          margin-bottom: 5px; /* Spacing */
         }
         .report-card-container .subtitle {
           text-align: center;
           font-weight: bold;
           font-size: 14px;
-          margin-bottom: 10px;
+          margin-bottom: 10px; /* Spacing */
         }
         .report-card-container .small-note {
           font-size: 10px;
-          margin-top: 10px;
+          margin-top: 10px; /* Spacing for note */
         }
-        .report-card-container input[type="text"], .report-card-container input[type="number"], .report-card-container select {
+        .report-card-container input[type="text"], 
+        .report-card-container input[type="number"], 
+        .report-card-container select {
           padding: 3px;
           border: 1px solid #ccc;
           border-radius: 3px;
-          font-size: 12px;
+          font-size: 12px; /* Match body font size */
+          box-sizing: border-box; /* Include padding and border in element's total width and height */
         }
         .report-card-container input[type="number"] {
-          width: 55px;
+          width: 55px; /* Default width for number inputs */
           text-align: center;
         }
-        .report-card-container .header-table input[type="text"] {
-            width: 150px; /* Adjust as needed */
+        .report-card-container .header-table input[type="text"] { /* Inputs in the header table */
+            width: 100%; /* Make them fill the cell by default */
+            max-width: 200px; /* But cap width to avoid excessive stretching */
         }
-        .report-card-container .header-table td:first-child input[type="text"] { /* For UDISE code */
-            width: 300px;
+         .report-card-container .header-table td:first-child input[type="text"] { /* UDISE specific */
+            max-width: 350px; /* Wider for UDISE code & school name */
         }
-        .report-card-container #fa-table input[type="number"]{
-            width: 45px;
+        .report-card-container #fa-table input[type="number"]{ /* Marks inputs in FA table */
+            width: 45px; /* Slightly smaller for compact FA table */
         }
          .report-card-container .header-table select {
             min-width: 100px;
         }
+        .report-card-container .academic-year-input {
+            font-weight: bold;
+            font-size: 16px;
+            border: none;
+            text-align: center;
+            width: 120px; /* Adjust as needed */
+        }
       `}</style>
       <div className="report-card-container">
-        <div className="title">STUDENT ACADEMIC PERFORMANCE REPORT - {academicYear}</div>
+        <div className="title">STUDENT ACADEMIC PERFORMANCE REPORT - 
+            <input 
+              type="text" 
+              className="academic-year-input"
+              value={academicYear} 
+              onChange={e => onAcademicYearChange(e.target.value)}
+              placeholder="20XX-20YY"
+            />
+        </div>
         <div className="subtitle">CBSE STATE</div>
 
         <table className="header-table">
           <tbody>
             <tr>
-              <td colSpan={4}>U-DISE Code & School Name : <input type="text" value={studentInfo.udiseCodeSchoolName || ""} onChange={e => handleStudentInfoChange('udiseCodeSchoolName', e.target.value)} style={{width: "calc(100% - 200px)"}}/></td>
+              <td colSpan={4}>U-DISE Code & School Name : <input type="text" value={studentData.udiseCodeSchoolName || ""} onChange={e => onStudentDataChange('udiseCodeSchoolName', e.target.value)} /></td>
             </tr>
             <tr>
-              <td>Student Name: <input type="text" value={studentInfo.studentName || ""} onChange={e => handleStudentInfoChange('studentName', e.target.value)} /></td>
-              <td>Father Name: <input type="text" value={studentInfo.fatherName || ""} onChange={e => handleStudentInfoChange('fatherName', e.target.value)} /></td>
-              <td>Mother Name: <input type="text" value={studentInfo.motherName || ""} onChange={e => handleStudentInfoChange('motherName', e.target.value)} /></td>
+              <td>Student Name: <input type="text" value={studentData.studentName || ""} onChange={e => onStudentDataChange('studentName', e.target.value)} /></td>
+              <td>Father Name: <input type="text" value={studentData.fatherName || ""} onChange={e => onStudentDataChange('fatherName', e.target.value)} /></td>
+              <td>Mother Name: <input type="text" value={studentData.motherName || ""} onChange={e => onStudentDataChange('motherName', e.target.value)} /></td>
+               <td>Roll No: <input type="text" value={studentData.rollNo || ""} onChange={e => onStudentDataChange('rollNo', e.target.value)} /></td>
             </tr>
             <tr>
-              <td>Class: <input type="text" value={studentInfo.class || ""} onChange={e => handleStudentInfoChange('class', e.target.value)} style={{width: "80px"}}/></td>
-              <td>Section: <input type="text" value={studentInfo.section || ""} onChange={e => handleStudentInfoChange('section', e.target.value)} style={{width: "80px"}}/></td>
-              <td>Student ID No: <input type="text" value={studentInfo.studentIdNo || ""} onChange={e => handleStudentInfoChange('studentIdNo', e.target.value)} /></td>
-              <td>Roll No: <input type="text" value={studentInfo.rollNo || ""} onChange={e => handleStudentInfoChange('rollNo', e.target.value)} style={{width: "80px"}}/></td>
+              <td>Class: <input type="text" value={studentData.class || ""} onChange={e => onStudentDataChange('class', e.target.value)}/></td>
+              <td>Section: <input type="text" value={studentData.section || ""} onChange={e => onStudentDataChange('section', e.target.value)} /></td>
+              <td>Student ID No: <input type="text" value={studentData.studentIdNo || ""} onChange={e => onStudentDataChange('studentIdNo', e.target.value)} /></td>
+              <td>Admn. No: <input type="text" value={studentData.admissionNo || ""} onChange={e => onStudentDataChange('admissionNo', e.target.value)} /></td>
             </tr>
             <tr>
-              <td>Medium: <input type="text" value={studentInfo.medium || ""} onChange={e => handleStudentInfoChange('medium', e.target.value)} style={{width: "80px"}}/></td>
-              <td>Date of Birth: <input type="text" value={studentInfo.dob || ""} onChange={e => handleStudentInfoChange('dob', e.target.value)} /></td>
-              <td>Admn. No: <input type="text" value={studentInfo.admissionNo || ""} onChange={e => handleStudentInfoChange('admissionNo', e.target.value)} /></td>
-              <td>Exam No: <input type="text" value={studentInfo.examNo || ""} onChange={e => handleStudentInfoChange('examNo', e.target.value)} style={{width: "80px"}}/></td>
+              <td>Medium: <input type="text" value={studentData.medium || ""} onChange={e => onStudentDataChange('medium', e.target.value)} /></td>
+              <td>Date of Birth: <input type="text" value={studentData.dob || ""} onChange={e => onStudentDataChange('dob', e.target.value)} /></td>
+              <td>Exam No: <input type="text" value={studentData.examNo || ""} onChange={e => onStudentDataChange('examNo', e.target.value)} /></td>
+               <td>Aadhar No: <input type="text" value={studentData.aadharNo || ""} onChange={e => onStudentDataChange('aadharNo', e.target.value)} /></td>
             </tr>
             <tr>
-             <td colSpan={2}>Aadhar No: <input type="text" value={studentInfo.aadharNo || ""} onChange={e => handleStudentInfoChange('aadharNo', e.target.value)} style={{width: "200px"}} /></td>
-              <td colSpan={2}>
+              <td colSpan={4}>
                 Second Language:
-                <select value={secondLanguage} onChange={(e) => setSecondLanguage(e.target.value as 'Hindi' | 'Telugu')}>
+                <select value={secondLanguage} onChange={(e) => onSecondLanguageChange(e.target.value as 'Hindi' | 'Telugu')}>
                   <option value="Hindi">Hindi</option>
                   <option value="Telugu">Telugu</option>
                 </select>
@@ -336,26 +304,32 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
           </thead>
           <tbody>
             {mainSubjects.map((subject, SIndex) => {
+              const subjectFaData = faMarks[SIndex] || { fa1: {}, fa2: {}, fa3: {}, fa4: {} }; // Ensure data exists
               const results = calculateFaResults(SIndex);
               return (
                 <tr key={subject}>
                   <td>{SIndex + 1}</td>
                   <td>{subject}</td>
-                  {(['fa1', 'fa2', 'fa3', 'fa4'] as const).map(faPeriodKey => (
-                    <React.Fragment key={faPeriodKey}>
-                      {(['tool1', 'tool2', 'tool3', 'tool4'] as const).map(toolKey => (
-                        <td key={toolKey}>
-                          <input
-                            type="number"
-                            value={faMarks[SIndex]?.[faPeriodKey]?.[toolKey] ?? ''}
-                            onChange={(e) => handleFaInputChange(SIndex, faPeriodKey, toolKey, e.target.value)}
-                          />
-                        </td>
-                      ))}
-                      <td>{results[faPeriodKey]?.total ?? ''}</td>
-                      <td>{results[faPeriodKey]?.grade ?? ''}</td>
-                    </React.Fragment>
-                  ))}
+                  {(['fa1', 'fa2', 'fa3', 'fa4'] as const).map(faPeriodKey => {
+                     const periodData = subjectFaData[faPeriodKey] || { tool1: null, tool2: null, tool3: null, tool4: null};
+                     return (
+                        <React.Fragment key={faPeriodKey}>
+                        {(['tool1', 'tool2', 'tool3', 'tool4'] as const).map(toolKey => (
+                            <td key={toolKey}>
+                            <input
+                                type="number"
+                                value={periodData[toolKey] ?? ''}
+                                onChange={(e) => onFaMarksChange(SIndex, faPeriodKey, toolKey, e.target.value)}
+                                max={toolKey === 'tool4' ? 20 : 10}
+                                min="0"
+                            />
+                            </td>
+                        ))}
+                        <td>{results[faPeriodKey]?.total ?? ''}</td>
+                        <td>{results[faPeriodKey]?.grade ?? ''}</td>
+                        </React.Fragment>
+                     );
+                  })}
                   <td>{results.overallTotal}</td>
                   <td>{results.overallGrade}</td>
                 </tr>
@@ -364,7 +338,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
           </tbody>
         </table>
         <p className="small-note">
-          Formative Assessment Tools: (1) Children Participation and Reflections, (2) Project work, (3) Written work, (4) Slip Test
+          Formative Assessment Tools: (1) Children Participation and Reflections, (2) Project work, (3) Written work, (4) Slip Test (20M)
         </p>
 
         <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginTop: '20px' }}>
@@ -388,6 +362,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               </thead>
               <tbody>
                 {coCurricularSubjects.map((subject, SIndex) => {
+                  const subjectCoData = coMarks[SIndex] || { sa1Max: 50, sa1Marks: null, sa2Max: 50, sa2Marks: null, sa3Max: 50, sa3Marks: null };
                   const coResults = calculateCoResults(SIndex);
                   return (
                   <tr key={subject}>
@@ -398,16 +373,18 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                         <td>
                           <input
                             type="number"
-                            value={coMarks[SIndex]?.[`${saPeriodKey}Max`] ?? ''}
-                            onChange={e => handleCoInputChange(SIndex, saPeriodKey, 'Max', e.target.value)}
+                            value={subjectCoData[`${saPeriodKey}Max`] ?? ''}
+                            onChange={e => onCoMarksChange(SIndex, saPeriodKey, 'Max', e.target.value)}
+                            min="1"
                           />
                         </td>
                         <td>
                           <input
                             type="number"
-                            value={coMarks[SIndex]?.[`${saPeriodKey}Marks`] ?? ''}
-                            onChange={e => handleCoInputChange(SIndex, saPeriodKey, 'Marks', e.target.value)}
-                            max={coMarks[SIndex]?.[`${saPeriodKey}Max`] ?? undefined}
+                            value={subjectCoData[`${saPeriodKey}Marks`] ?? ''}
+                            onChange={e => onCoMarksChange(SIndex, saPeriodKey, 'Marks', e.target.value)}
+                            max={subjectCoData[`${saPeriodKey}Max`] ?? undefined}
+                            min="0"
                           />
                         </td>
                       </React.Fragment>
@@ -432,20 +409,33 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                 </thead>
                 <tbody>
                   {faPeriodGradeScale.map((g, i) => (
-                    <tr key={`fa-grade-${g.grade}`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? faPeriodGradeScale[i-1].min -1 : 50}</td><td>{faPeriodGradeScale2ndLang[i].min}-{i > 0 ? faPeriodGradeScale2ndLang[i-1].min -1 : 50}</td></tr>
+                    <tr key={`fa-grade-${g.grade}`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (faPeriodGradeScale[i-1]?.min ?? 51) -1 : 50}</td><td>{faPeriodGradeScale2ndLang[i].min}-{i > 0 ? (faPeriodGradeScale2ndLang[i-1]?.min ?? 51) -1 : 50}</td></tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div>
               <table style={{fontSize: '10px'}}>
-                <caption><strong>Grades: Co-Curricular</strong></caption>
+                <caption><strong>Grades: Co-Curricular (% Based)</strong></caption>
                 <thead>
                   <tr><th>Grade</th><th>% Marks</th></tr>
                 </thead>
                 <tbody>
                   {coCurricularGradeScale.map((g, i) => (
-                    <tr key={`co-grade-${g.grade}`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? coCurricularGradeScale[i-1].min -1 : 100}</td></tr>
+                    <tr key={`co-grade-${g.grade}`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (coCurricularGradeScale[i-1]?.min ?? 101) -1 : 100}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+             <div>
+              <table style={{fontSize: '10px'}}>
+                <caption><strong>Overall Subject Grade (200 M)</strong></caption>
+                <thead>
+                  <tr><th>Grade</th><th>Marks</th></tr>
+                </thead>
+                <tbody>
+                  {overallSubjectGradeScale.map((g, i) => (
+                    <tr key={`overall-sub-grade-${g.grade}`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (overallSubjectGradeScale[i-1]?.min ?? 201) -1 : 200}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -462,5 +452,3 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 };
 
 export default CBSEStateFront;
-
-    
