@@ -39,7 +39,7 @@ export const classFeeSchema = z.object({
 // Zod schema for the main school form
 export const schoolFormSchema = z.object({
   schoolName: z.string().min(3, "School name must be at least 3 characters."),
-  schoolLogo: z.any().optional(), 
+  schoolLogoUrl: z.string().url({ message: "Please enter a valid URL for the school logo." }).optional().or(z.literal('')), 
   classFees: z.array(classFeeSchema).min(1, "At least one class configuration is required."),
   reportCardTemplate: z.custom<ReportCardTemplateKey>((val) => {
     return typeof val === 'string' && Object.keys(REPORT_CARD_TEMPLATES).includes(val);

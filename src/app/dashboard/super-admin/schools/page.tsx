@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, School as SchoolIconUI, Upload, DollarSign, Bus, Utensils, Loader2, Edit, XCircle, FileText } from "lucide-react"; // Renamed School to SchoolIconUI
+import { PlusCircle, School as SchoolIconUI, Upload, DollarSign, Bus, Utensils, Loader2, Edit, XCircle, FileText, Image as ImageIcon } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
@@ -22,7 +22,8 @@ import { createSchool, getSchools, updateSchool } from "@/app/actions/schools";
 import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey } from '@/types/school'; 
 import type { School as SchoolType } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
-import Image from "next/image";
+// Removed NextImage as we'll use standard <img> for broader URL compatibility for now
+// import Image from "next/image"; 
 
 export default function SchoolManagementPage() {
   const { toast } = useToast();
@@ -36,7 +37,7 @@ export default function SchoolManagementPage() {
     defaultValues: {
       schoolName: "",
       classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
-      schoolLogo: undefined,
+      schoolLogoUrl: "",
       reportCardTemplate: 'none',
     },
   });
@@ -67,7 +68,7 @@ export default function SchoolManagementPage() {
 
   const mapSchoolToFormData = (school: SchoolType): SchoolFormData => ({
     schoolName: school.schoolName,
-    schoolLogo: undefined, 
+    schoolLogoUrl: school.schoolLogoUrl || "", 
     reportCardTemplate: school.reportCardTemplate || 'none',
     classFees: school.classFees.map(cf => ({ 
       className: cf.className,
@@ -88,7 +89,7 @@ export default function SchoolManagementPage() {
     form.reset({
       schoolName: "",
       classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
-      schoolLogo: undefined,
+      schoolLogoUrl: "",
       reportCardTemplate: 'none',
     });
   };
@@ -129,7 +130,7 @@ export default function SchoolManagementPage() {
             <SchoolIconUI className="mr-2 h-6 w-6" /> School Management 
           </CardTitle>
           <CardDescription>
-            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create new schools, configure class-wise fees, logos, and report card templates."}
+            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create new schools, configure class-wise fees, logos (via URL), and report card templates."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -158,27 +159,22 @@ export default function SchoolManagementPage() {
               
               <FormField
                 control={form.control}
-                name="schoolLogo"
-                render={({ field: { onChange, value, ...restField }}) => ( 
+                name="schoolLogoUrl"
+                render={({ field }) => ( 
                   <FormItem>
-                    <FormLabel>School Logo (Optional {editingSchool ? "- Re-upload to change" : ""})</FormLabel>
+                    <FormLabel className="flex items-center"><ImageIcon className="mr-2 h-4 w-4 text-muted-foreground" /> School Logo URL (Optional)</FormLabel>
                     <FormControl>
-                      <div className="flex items-center gap-2">
                         <Input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={(e) => onChange(e.target.files ? e.target.files[0] : null)}
-                          className="max-w-xs"
+                          type="text" 
+                          placeholder="https://example.com/logo.png"
+                          {...field}
                           disabled={isSubmitting}
-                          {...restField}
                         />
-                        <Upload className="h-5 w-5 text-muted-foreground"/>
-                      </div>
                     </FormControl>
                     <FormMessage />
                      <p className="text-xs text-muted-foreground pt-1">
-                       Upload a PNG, JPG, or GIF file (max 2MB). Actual upload/storage not yet fully implemented.
-                       {editingSchool && editingSchool.schoolLogoUrl && " Current logo will be retained if no new file is uploaded."}
+                       Enter the full URL of the school's logo. Leave blank to remove logo during update.
+                       Ensure the URL is publicly accessible.
                      </p>
                   </FormItem>
                 )}
@@ -316,13 +312,13 @@ export default function SchoolManagementPage() {
             schools.map(school => (
             <Card key={school._id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-4">
               <div className="flex items-center gap-4">
-                <Image 
+                {/* Using standard img tag for broader URL compatibility for now */}
+                <img 
                     src={school.schoolLogoUrl || "https://placehold.co/100x100.png"} 
                     alt={`${school.schoolName} logo`} 
-                    data-ai-hint="school logo"
                     width={48} 
                     height={48} 
-                    className="h-12 w-12 rounded-md object-cover flex-shrink-0" 
+                    className="h-12 w-12 rounded-md object-cover flex-shrink-0 bg-muted border" 
                 />
                 <div className="flex-grow">
                   <h3 className="font-semibold">{school.schoolName}</h3>

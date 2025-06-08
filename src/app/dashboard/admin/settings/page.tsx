@@ -4,14 +4,15 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"; // AvatarImage removed as we use <img>
+import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user";
 import type { School } from "@/types/school";
 import { getSchoolById } from "@/app/actions/schools";
-import Image from "next/image";
+// Image from next/image removed, using standard <img>
+// import Image from "next/image";
 
 export default function AdminSchoolSettingsPage() {
   const { toast } = useToast();
@@ -111,7 +112,7 @@ export default function AdminSchoolSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-            <Button variant="outline" disabled> {/* onClick={() => router.push('/dashboard/super-admin/schools?edit=' + schoolDetails._id)} */}
+            <Button variant="outline" disabled>
                 <Edit className="mr-2 h-4 w-4" /> Edit School Profile (Super Admin)
             </Button>
             <p className="text-xs text-muted-foreground mt-1">School profile details like name, logo, and core fee structures are managed by Super Administrators.</p>
@@ -122,18 +123,17 @@ export default function AdminSchoolSettingsPage() {
         <CardHeader>
           <div className="flex items-center space-x-4">
             {schoolDetails.schoolLogoUrl ? (
-                <Image 
+                <img 
                     src={schoolDetails.schoolLogoUrl} 
                     alt={`${schoolDetails.schoolName} Logo`}
-                    data-ai-hint="school logo"
                     width={80} 
                     height={80} 
-                    className="rounded-md object-contain border bg-muted"
+                    className="h-20 w-20 rounded-md object-contain border bg-muted"
                 />
             ) : (
                 <Avatar className="h-20 w-20">
-                    <AvatarFallback className="text-2xl">
-                        {schoolDetails.schoolName?.substring(0, 2).toUpperCase() || <Building />}
+                    <AvatarFallback className="text-2xl bg-muted border flex items-center justify-center">
+                        <ImageIcon className="h-10 w-10 text-muted-foreground" />
                     </AvatarFallback>
                 </Avatar>
             )}
@@ -185,18 +185,6 @@ export default function AdminSchoolSettingsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Placeholder for future settings */}
-      {/* 
-      <Card>
-        <CardHeader>
-          <CardTitle>Academic Year & Terms</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">Academic term management coming soon.</p>
-        </CardContent>
-      </Card>
-      */}
     </div>
   );
 }
