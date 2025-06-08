@@ -29,19 +29,26 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
         return { success: false, message: 'Invalid School ID provided for user creation.', error: 'Invalid School ID.'};
     }
 
-    const { name, email, password, role, classId } = validatedFields.data;
+    const { name, email, password, role, classId, admissionId } = validatedFields.data;
 
-    // Server-side check: classId is required if role is student
-    if (role === 'student' && (!classId || classId.trim() === "")) {
-      return { success: false, message: 'Validation failed', error: 'A class assignment is required for students.' };
-    }
+    // Server-side check: classId is required if role is student (Can be made optional if not strictly needed at creation)
+    // if (role === 'student' && (!classId || classId.trim() === "")) {
+    //   return { success: false, message: 'Validation failed', error: 'A class assignment is required for students.' };
+    // }
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<Omit<User, '_id'>>('users');
 
-    const existingUser = await usersCollection.findOne({ email });
-    if (existingUser) {
+    const existingUserByEmail = await usersCollection.findOne({ email });
+    if (existingUserByEmail) {
       return { success: false, message: 'User with this email already exists.', error: 'Email already in use.' };
+    }
+
+    if (role === 'student' && admissionId) {
+        const existingUserByAdmissionId = await usersCollection.findOne({ admissionId, schoolId: new ObjectId(schoolId), role: 'student' });
+        if (existingUserByAdmissionId) {
+            return { success: false, message: `Admission ID '${admissionId}' is already in use for another student in this school.`, error: 'Admission ID already taken.' };
+        }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -54,6 +61,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
       role: role as UserRole,
       schoolId: userSchoolId,
       classId: classId || undefined, 
+      admissionId: role === 'student' ? admissionId || undefined : undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -76,6 +84,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
         _id: result.insertedId.toString(),
         schoolId: userSchoolId.toString(),
         classId: classId || undefined, 
+        admissionId: newUser.admissionId,
       },
     };
 
@@ -112,7 +121,8 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         ...userWithoutPassword,
         _id: user._id.toString(),
         schoolId: user.schoolId?.toString(),
-        classId: user.classId || undefined, 
+        classId: user.classId || undefined,
+        admissionId: user.admissionId || undefined, 
       };
     });
 
@@ -144,12 +154,12 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { name, email, password, role, classId } = validatedFields.data;
+    const { name, email, password, role, classId, admissionId } = validatedFields.data;
 
-    // Server-side check: classId is required if role is student
-    if (role === 'student' && (!classId || classId.trim() === "")) {
-      return { success: false, message: 'Validation failed', error: 'A class assignment is required for students.' };
-    }
+    // Server-side check: classId can be optional if not strictly needed for students at all times
+    // if (role === 'student' && (!classId || classId.trim() === "")) {
+    //   return { success: false, message: 'Validation failed', error: 'A class assignment is required for students.' };
+    // }
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
@@ -164,6 +174,18 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
     if (existingUserByEmail && existingUserByEmail._id.toString() !== userId) {
       return { success: false, message: 'This email is already in use by another account.', error: 'Email already in use.' };
     }
+
+    if (role === 'student' && admissionId && admissionId.trim() !== "") {
+        const existingUserByAdmissionId = await usersCollection.findOne({ 
+            admissionId, 
+            schoolId: new ObjectId(schoolId), 
+            role: 'student',
+            _id: { $ne: new ObjectId(userId) as any } // Exclude current user
+        });
+        if (existingUserByAdmissionId) {
+            return { success: false, message: `Admission ID '${admissionId}' is already in use for another student in this school.`, error: 'Admission ID already taken.' };
+        }
+    }
     
     const updateData: Partial<Omit<User, '_id' | 'role'>> & { role?: UserRole } = { 
       name,
@@ -173,7 +195,13 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
     };
 
     if (role && (role === 'teacher' || role === 'student')) { 
-        updateData.role = role;
+        updateData.role = role; // Role typically shouldn't change, but schema allows it
+        if (role === 'student') {
+            updateData.admissionId = admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined;
+        } else {
+            // If role changed from student to teacher, or is teacher, clear admissionId
+            updateData.admissionId = undefined; 
+        }
     }
 
 
@@ -210,6 +238,7 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         _id: updatedUserDoc._id.toString(),
         schoolId: updatedUserDoc.schoolId?.toString(),
         classId: updatedUserDoc.classId || undefined,
+        admissionId: updatedUserDoc.admissionId || undefined,
       }
     };
 
@@ -278,6 +307,7 @@ export async function getStudentsByClass(schoolId: string, className: string): P
       _id: student._id.toString(),
       schoolId: student.schoolId?.toString(),
       classId: student.classId || undefined,
+      admissionId: student.admissionId || undefined,
     }));
 
     return { success: true, users: studentsWithStrId };

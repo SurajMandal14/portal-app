@@ -15,6 +15,7 @@ export interface User {
   role: UserRole;
   schoolId?: ObjectId | string;
   classId?: string; // Storing className as string for now
+  admissionId?: string; // New field for admin-defined student ID
   avatarUrl?: string;
   phone?: string;
   createdAt: Date;
@@ -42,6 +43,15 @@ export const createSchoolUserFormSchema = z.object({
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
   role: z.enum(['teacher', 'student'], { required_error: "Role is required." }),
   classId: z.string().optional(),
+  admissionId: z.string().optional(),
+}).refine(data => {
+  if (data.role === 'student' && (!data.admissionId || data.admissionId.trim() === "")) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Admission ID is required for students and cannot be empty.",
+  path: ["admissionId"],
 });
 export type CreateSchoolUserFormData = z.infer<typeof createSchoolUserFormSchema>;
 
@@ -52,6 +62,7 @@ export const updateSchoolUserFormSchema = z.object({
   password: z.string().min(6, { message: "New password must be at least 6 characters." }).optional().or(z.literal('')), // Optional for update
   role: z.enum(['teacher', 'student'], { required_error: "Role is required." }), // Role might be non-editable in UI, but schema needs it
   classId: z.string().optional(),
+  admissionId: z.string().optional(), // Can be empty if admin wants to clear it. Uniqueness check on server.
 });
 export type UpdateSchoolUserFormData = z.infer<typeof updateSchoolUserFormSchema>;
 
@@ -64,6 +75,7 @@ export interface CreateSchoolUserServerFormData {
   role: 'teacher' | 'student';
   schoolId: string;
   classId?: string;
+  admissionId?: string; // Added field
 }
 
 // Schema for updating basic profile info (name, phone, avatar)

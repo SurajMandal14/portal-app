@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen } from "lucide-react"; // Added SquarePen for Admission ID
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
@@ -63,6 +63,7 @@ export default function AdminUserManagementPage() {
       password: "",
       role: undefined,
       classId: "", 
+      admissionId: "",
     },
   });
   const selectedRole = form.watch("role");
@@ -106,7 +107,11 @@ export default function AdminUserManagementPage() {
       }
 
       if (usersResult.success && usersResult.users) {
-        const usersWithClassNames = usersResult.users.map(user => ({ ...user, className: user.classId || 'N/A' }));
+        const usersWithClassNames = usersResult.users.map(user => ({ 
+            ...user, 
+            className: user.classId || 'N/A',
+            admissionId: user.admissionId || undefined 
+        }));
         setSchoolUsers(usersWithClassNames);
       } else {
         toast({ variant: "destructive", title: "Error", description: usersResult.message || "Failed to load school users." });
@@ -135,11 +140,12 @@ export default function AdminUserManagementPage() {
         email: editingUser.email || "",
         password: "", 
         role: editingUser.role as 'teacher' | 'student' | undefined,
-        classId: editingUser.classId || "", 
+        classId: editingUser.classId === 'N/A' ? "" : editingUser.classId || "", 
+        admissionId: editingUser.admissionId || "",
       });
     } else {
       form.reset({
-        name: "", email: "", password: "", role: undefined, classId: "",
+        name: "", email: "", password: "", role: undefined, classId: "", admissionId: "",
       });
     }
   }, [editingUser, form]); 
@@ -162,7 +168,7 @@ export default function AdminUserManagementPage() {
     if (result.success) {
       toast({ title: editingUser ? "User Updated" : "User Created", description: result.message });
       setEditingUser(null); 
-      form.reset({ name: "", email: "", password: "", role: undefined, classId: "" });
+      form.reset({ name: "", email: "", password: "", role: undefined, classId: "", admissionId: "" });
       fetchInitialData(); 
     } else {
       toast({ variant: "destructive", title: editingUser ? "Update Failed" : "Creation Failed", description: result.error || result.message });
@@ -176,7 +182,7 @@ export default function AdminUserManagementPage() {
 
   const cancelEdit = () => {
     setEditingUser(null);
-    form.reset({ name: "", email: "", password: "", role: undefined, classId: "" });
+    form.reset({ name: "", email: "", password: "", role: undefined, classId: "", admissionId: "" });
   };
 
   const handleDeleteClick = (user: SchoolUser) => {
@@ -203,7 +209,8 @@ export default function AdminUserManagementPage() {
     user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.classId && user.classId.toLowerCase().includes(searchTerm.toLowerCase()))
+    (user.classId && user.classId !== 'N/A' && user.classId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (user.admissionId && user.admissionId.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (!authUser && !isLoadingData) {
@@ -279,10 +286,19 @@ export default function AdminUserManagementPage() {
                         <FormMessage />
                     </FormItem>
                  )}/>
+                 {selectedRole === 'student' && (
+                    <FormField control={form.control} name="admissionId" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4 text-muted-foreground"/>Admission ID (Required for Students)</FormLabel>
+                            <FormControl><Input placeholder="e.g., S1001" {...field} disabled={isSubmitting} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                 )}
                  {(selectedRole === 'teacher' || selectedRole === 'student') && availableClasses.length > 0 && (
                     <FormField control={form.control} name="classId" render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Assign to Class {selectedRole === 'student' ? '(Required for Students)' : '(Optional for Teachers)'}</FormLabel>
+                            <FormLabel>Assign to Class {selectedRole === 'student' ? '' : '(Optional for Teachers)'}</FormLabel> {/* Removed (Required for Students) as it's not schema-enforced */}
                             <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting}>
                                 <FormControl><SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger></FormControl>
                                 <SelectContent>{availableClasses.map((className) => (<SelectItem key={className} value={className}>{className}</SelectItem>))}</SelectContent>
@@ -327,18 +343,19 @@ export default function AdminUserManagementPage() {
              <div className="flex items-center justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading users...</p></div>
           ) : filteredUsers.length > 0 ? (
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Class Assigned</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Admission ID</TableHead><TableHead>Role</TableHead><TableHead>Class Assigned</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredUsers.map((user) => (
                 <TableRow key={user._id?.toString()}>
                   <TableCell>{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.role === 'student' ? (user.admissionId || 'N/A') : 'N/A'}</TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 text-xs font-medium rounded-full capitalize ${user.role === 'teacher' ? 'bg-blue-100 text-blue-700' : user.role === 'student' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                       {user.role}
                     </span>
                   </TableCell>
-                  <TableCell>{user.classId || 'N/A'}</TableCell>
+                  <TableCell>{user.classId !== 'N/A' ? user.classId : 'N/A'}</TableCell>
                   <TableCell>{user.createdAt ? format(new Date(user.createdAt), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(user)} disabled={isSubmitting || isDeleting}><Edit3 className="h-4 w-4" /></Button>
