@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DollarSign, Printer, Loader2, Info, CalendarDays, Edit, Trash2 } from "lucide-react";
+import { DollarSign, Printer, Loader2, Info, CalendarDays } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/types/attendance";
@@ -74,11 +74,73 @@ export default function FeeManagementPage() {
     return (classFeeConfig.tuitionFee || 0) + (classFeeConfig.busFee || 0) + (classFeeConfig.canteenFee || 0);
   }, []);
 
+
+  const fetchSchoolDataAndPayments = useCallback(async () => {
+    if (!authUser || !authUser.schoolId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    console.log("FeeManagementPage: fetchSchoolDataAndPayments called for schoolId:", authUser.schoolId);
+    try {
+      const [schoolResult, usersResult, paymentsResult] = await Promise.all([
+        getSchoolById(authUser.schoolId.toString()),
+        getSchoolUsers(authUser.schoolId.toString()),
+        getFeePaymentsBySchool(authUser.schoolId.toString())
+      ]);
+
+      if (schoolResult.success && schoolResult.school) {
+        setSchoolDetails(schoolResult.school);
+      } else {
+        toast({ variant: "destructive", title: "Error", description: schoolResult.message || "Failed to load school details." });
+        setSchoolDetails(null);
+      }
+
+      if (usersResult.success && usersResult.users) {
+        const studentUsers = usersResult.users.filter(u => u.role === 'student');
+        setAllStudents(studentUsers);
+      } else {
+        toast({ variant: "destructive", title: "Error", description: usersResult.message || "Failed to load students." });
+        setAllStudents([]);
+      }
+
+      if (paymentsResult.success && paymentsResult.payments) {
+        console.log("FeeManagementPage: fetchSchoolDataAndPayments - Received payments:", JSON.stringify(paymentsResult.payments, null, 2));
+        setAllSchoolPayments(paymentsResult.payments);
+      } else {
+        toast({ variant: "warning", title: "Payment Info", description: paymentsResult.message || "Could not load payment history or none found." });
+        setAllSchoolPayments([]);
+        console.warn("FeeManagementPage: Initial payments fetch failed or returned no payments. paymentsResult:", paymentsResult);
+      }
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred fetching school data." });
+      setSchoolDetails(null);
+      setAllStudents([]);
+      setAllSchoolPayments([]);
+      console.error("FeeManagementPage: Error in fetchSchoolDataAndPayments:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authUser, toast]);
+  
+  useEffect(() => {
+    if (authUser && authUser.schoolId) {
+      fetchSchoolDataAndPayments();
+    } else if (!authUser) {
+      setIsLoading(false);
+      setSchoolDetails(null);
+      setAllStudents([]);
+      setAllSchoolPayments([]);
+    }
+  }, [authUser, fetchSchoolDataAndPayments]);
+
+
   const processStudentFeeDetails = useCallback(() => {
     if (!schoolDetails || allStudents.length === 0) {
       setStudentFeeList([]);
       return;
     }
+    console.log("FeeManagementPage: processStudentFeeDetails - Recalculating with allSchoolPayments:", JSON.stringify(allSchoolPayments, null, 2));
 
     const processedList = allStudents.map(student => {
       const totalFee = calculateTotalFee(student.classId as string, schoolDetails);
@@ -98,72 +160,10 @@ export default function FeeManagementPage() {
 
   }, [allStudents, schoolDetails, allSchoolPayments, calculateTotalFee]);
 
-  const fetchSchoolDataAndPayments = useCallback(async () => {
-    if (!authUser || !authUser.schoolId) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    console.log("FeeManagementPage: fetchSchoolDataAndPayments called for schoolId:", authUser.schoolId);
-    try {
-      const [schoolResult, usersResult, paymentsResult] = await Promise.all([
-        getSchoolById(authUser.schoolId.toString()),
-        getSchoolUsers(authUser.schoolId.toString()),
-        getFeePaymentsBySchool(authUser.schoolId.toString())
-      ]);
-
-      console.log("FeeManagementPage: Initial paymentsResult:", JSON.stringify(paymentsResult, null, 2));
-
-      if (schoolResult.success && schoolResult.school) {
-        setSchoolDetails(schoolResult.school);
-      } else {
-        toast({ variant: "destructive", title: "Error", description: schoolResult.message || "Failed to load school details." });
-        setSchoolDetails(null);
-      }
-
-      if (usersResult.success && usersResult.users) {
-        const studentUsers = usersResult.users.filter(u => u.role === 'student');
-        setAllStudents(studentUsers);
-      } else {
-        toast({ variant: "destructive", title: "Error", description: usersResult.message || "Failed to load students." });
-        setAllStudents([]);
-      }
-
-      if (paymentsResult.success && paymentsResult.payments) {
-        setAllSchoolPayments(paymentsResult.payments);
-         console.log("FeeManagementPage: Initial setAllSchoolPayments called with:", JSON.stringify(paymentsResult.payments, null, 2));
-      } else {
-        toast({ variant: "warning", title: "Payment Info", description: paymentsResult.message || "Could not load payment history or none found." });
-        setAllSchoolPayments([]);
-        console.warn("FeeManagementPage: Initial payments fetch failed or returned no payments. paymentsResult:", paymentsResult);
-      }
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred fetching school data." });
-      setSchoolDetails(null);
-      setAllStudents([]);
-      setAllSchoolPayments([]);
-      console.error("FeeManagementPage: Error in fetchSchoolDataAndPayments:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [authUser, toast]);
-  
   useEffect(() => {
      processStudentFeeDetails();
   }, [allStudents, schoolDetails, allSchoolPayments, processStudentFeeDetails]);
 
-
-  useEffect(() => {
-    if (authUser && authUser.schoolId) {
-      fetchSchoolDataAndPayments();
-    } else {
-      setIsLoading(false);
-      setSchoolDetails(null);
-      setAllStudents([]);
-      setAllSchoolPayments([]);
-    }
-  }, [authUser, fetchSchoolDataAndPayments]);
-  
 
   const selectedStudentFullData = selectedStudentId ? studentFeeList.find(s => s._id.toString() === selectedStudentId) : null;
 
@@ -176,6 +176,8 @@ export default function FeeManagementPage() {
     } else {
       setPaymentAmount("");
       setPaymentDate(undefined); 
+      setPaymentMethod("");
+      setPaymentNotes("");
     }
   }, [selectedStudentId, selectedStudentFullData]);
 
@@ -204,21 +206,10 @@ export default function FeeManagementPage() {
     if (result.success) {
       toast({ title: "Payment Recorded", description: result.message });
       if (authUser?.schoolId) {
-        console.log("handleRecordPayment: Re-fetching payments after successful record...");
-        const paymentsResult = await getFeePaymentsBySchool(authUser.schoolId.toString());
-        console.log("handleRecordPayment: Re-fetched paymentsResult:", JSON.stringify(paymentsResult, null, 2));
-        if (paymentsResult.success && paymentsResult.payments) {
-          setAllSchoolPayments(paymentsResult.payments); 
-          console.log("handleRecordPayment: setAllSchoolPayments called with:", JSON.stringify(paymentsResult.payments, null, 2));
-        } else {
-           console.warn("handleRecordPayment: Failed to re-fetch payments or no payments found after record. Message:", paymentsResult.message);
-        }
+        // Re-fetch all school data to ensure all derived states are updated correctly
+        await fetchSchoolDataAndPayments(); 
       }
-      setSelectedStudentId(null); 
-      setPaymentAmount("");
-      setPaymentMethod("");
-      setPaymentNotes("");
-      setPaymentDate(undefined); 
+      setSelectedStudentId(null); // This will trigger the useEffect for selectedStudentFullData to reset form fields
     } else {
       toast({ variant: "destructive", title: "Payment Failed", description: result.error || result.message });
     }
@@ -230,15 +221,15 @@ export default function FeeManagementPage() {
     
     console.log("handleGenerateReceipt: studentId to find:", studentId);
     console.log("handleGenerateReceipt: found student object from studentFeeList:", student ? JSON.stringify(student, null, 2) : "Not found");
-    console.log("handleGenerateReceipt: current allSchoolPayments state:", JSON.stringify(allSchoolPayments, null, 2));
+    console.log("handleGenerateReceipt: current allSchoolPayments state for receipt generation:", JSON.stringify(allSchoolPayments, null, 2));
 
     if (!student || !schoolDetails) {
         toast({variant: "destructive", title: "Error", description: "Student or school details not found."});
         return;
     }
 
-    const studentPayments = allSchoolPayments.filter(p => p.studentId === studentId);
-    console.log("handleGenerateReceipt: filtered studentPayments:", JSON.stringify(studentPayments, null, 2));
+    const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === studentId.toString());
+    console.log("handleGenerateReceipt: filtered studentPayments for receipt:", JSON.stringify(studentPayments, null, 2));
 
 
     if (studentPayments.length === 0) {
@@ -256,16 +247,16 @@ export default function FeeManagementPage() {
     }
   };
   
-  if (isLoading) {
+  if (isLoading && !authUser) { // Show loader only if authUser is not yet determined AND isLoading is true
     return (
       <div className="flex flex-1 items-center justify-center py-10">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-3 text-lg">Loading fee management data...</p>
+        <p className="ml-3 text-lg">Loading session...</p>
       </div>
     );
   }
-
-  if (!authUser) {
+  
+  if (!authUser && !isLoading) { // If loading is finished and still no authUser
     return (
       <Card>
         <CardHeader>
@@ -279,7 +270,18 @@ export default function FeeManagementPage() {
     );
   }
 
-   if (!schoolDetails) {
+  // Show loader while initial school data is being fetched, even if authUser is present
+  if (isLoading && authUser) {
+     return (
+      <div className="flex flex-1 items-center justify-center py-10">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-3 text-lg">Loading fee management data...</p>
+      </div>
+    );
+  }
+
+
+   if (!schoolDetails && !isLoading) { // If loading is finished and schoolDetails are still null
     return (
       <Card>
         <CardHeader>
@@ -287,7 +289,8 @@ export default function FeeManagementPage() {
         </CardHeader>
         <CardContent>
           <p className="text-destructive">School details could not be loaded. Fee management requires school fee structures to be configured.</p>
-          <p className="mt-2 text-sm text-muted-foreground">Please ensure the school profile is correctly set up by a Super Admin, including class fee configurations.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Please ensure the school profile is correctly set up by a Super Admin, including class fee configurations, or try refreshing.</p>
+          <Button onClick={fetchSchoolDataAndPayments} className="mt-4" variant="outline" disabled={isLoading}>Refresh Data</Button>
         </CardContent>
       </Card>
     );
@@ -403,9 +406,10 @@ export default function FeeManagementPage() {
                   {isSubmittingPayment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {isSubmittingPayment ? "Recording..." : "Record Payment"}
                 </Button>
-                {selectedStudentFullData.dueAmount <= 0 && <p className="text-sm text-green-600 text-center">No amount due for this student.</p>}
+                {selectedStudentFullData.dueAmount <= 0 && <p className="text-sm text-green-600 text-center pt-2">No amount due for this student.</p>}
               </>
             )}
+            {!selectedStudentId && allStudents.length > 0 && <p className="text-sm text-muted-foreground text-center pt-2">Select a student to record a payment.</p>}
           </CardContent>
         </Card>
 
@@ -421,10 +425,10 @@ export default function FeeManagementPage() {
                   <TableRow>
                     <TableHead>Student Name</TableHead>
                     <TableHead>Class</TableHead>
-                    <TableHead>Total Fee</TableHead>
-                    <TableHead>Paid</TableHead>
-                    <TableHead>Due</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="text-right">Total Fee</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
+                    <TableHead className="text-right">Due</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -432,16 +436,16 @@ export default function FeeManagementPage() {
                     <TableRow key={student._id.toString()}>
                       <TableCell>{student.name}</TableCell>
                       <TableCell>{student.className || 'N/A'}</TableCell>
-                      <TableCell>${student.totalFee.toLocaleString()}</TableCell>
-                      <TableCell>${student.paidAmount.toLocaleString()}</TableCell>
-                      <TableCell className={student.dueAmount > 0 ? "text-destructive font-semibold" : "text-green-600"}>
+                      <TableCell className="text-right">${student.totalFee.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">${student.paidAmount.toLocaleString()}</TableCell>
+                      <TableCell className={`text-right font-semibold ${student.dueAmount > 0 ? "text-destructive" : "text-green-600"}`}>
                         ${student.dueAmount.toLocaleString()}
                       </TableCell>
-                      <TableCell className="space-x-1">
+                      <TableCell className="space-x-1 text-center">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setSelectedStudentId(student._id.toString())} title="Record Payment">
                           <DollarSign className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleGenerateReceipt(student._id.toString())} title="Generate Receipt">
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleGenerateReceipt(student._id.toString())} title="Generate Receipt" disabled={student.paidAmount === 0}>
                           <Printer className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -451,7 +455,10 @@ export default function FeeManagementPage() {
               </Table>
             ) : (
               <p className="text-center text-muted-foreground py-4">
-                {allStudents.length === 0 ? "No students found for this school." : "No fee details to display. Ensure students are assigned to classes with fee configurations."}
+                {isLoading ? "Loading student fee data..." : 
+                 allStudents.length === 0 ? "No students found for this school." : 
+                 !schoolDetails ? "School fee configuration not loaded." : 
+                 "No fee details to display. Ensure students are assigned to classes with fee configurations."}
               </p>
             )}
           </CardContent>
@@ -460,5 +467,3 @@ export default function FeeManagementPage() {
     </div>
   );
 }
-
-    
