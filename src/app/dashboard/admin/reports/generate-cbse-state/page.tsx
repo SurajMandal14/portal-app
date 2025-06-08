@@ -240,7 +240,7 @@ export default function GenerateCBSEStateReportPage() {
       formativeAssessments: faMarks,
       coCurricularAssessments: coMarks,
       summativeAssessments: saData,
-      attendance,
+      attendanceData,
       finalOverallGrade: finalOverallGradeInput,
     });
     toast({ title: "Data Logged", description: "Current report card data logged to console."});
