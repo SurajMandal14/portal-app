@@ -70,7 +70,8 @@ export default function AdminReportsPage() {
   const [feeOverallSummary, setFeeOverallSummary] = useState<OverallFeeSummary | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isDownloadingAttendancePdf, setIsDownloadingAttendancePdf] = useState(false);
+  const [isDownloadingFeePdf, setIsDownloadingFeePdf] = useState(false);
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [lastFetchedSchoolId, setLastFetchedSchoolId] = useState<string | null>(null);
@@ -291,10 +292,6 @@ export default function AdminReportsPage() {
     setIsLoading(true);
     let schoolDataFetchedThisRun = false;
 
-    // Fetch school-wide data (students, details, payments) if:
-    // 1. It's a manual refresh OR
-    // 2. The schoolId has changed since last fetch OR
-    // 3. School-wide data has never been fetched (lastFetchedSchoolId is null)
     if (isManualRefresh || lastFetchedSchoolId !== authUser.schoolId.toString()) {
       try {
         const [studentsResult, schoolRes, paymentsResult] = await Promise.all([
@@ -331,7 +328,6 @@ export default function AdminReportsPage() {
       }
     }
 
-    // Fetch attendance if reportDate is set
     if (reportDate) {
         try {
             const attendanceResult = await getDailyAttendanceForSchool(authUser.schoolId.toString(), reportDate);
@@ -354,7 +350,7 @@ export default function AdminReportsPage() {
     }
     
     setIsLoading(false);
-  }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length]); // Dependencies are now more stable
+  }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length]);
 
   useEffect(() => {
     if (authUser && authUser.schoolId) {
@@ -366,20 +362,20 @@ export default function AdminReportsPage() {
   const handleDownloadAttendancePdf = async () => {
     const reportContent = document.getElementById('attendanceReportContent');
     if (!reportContent) {
-      toast({ variant: "destructive", title: "Error", description: "Report content not found for PDF generation." });
+      toast({ variant: "destructive", title: "Error", description: "Attendance report content not found for PDF generation." });
       return;
     }
     if (!reportDate) {
-        toast({ variant: "info", title: "Select Date", description: "Please select a date for the report." });
+        toast({ variant: "info", title: "Select Date", description: "Please select a date for the attendance report." });
         return;
     }
 
-    setIsDownloadingPdf(true);
+    setIsDownloadingAttendancePdf(true);
     try {
       const canvas = await html2canvas(reportContent, {
         scale: 2, 
         useCORS: true,
-        logging: false, // Turned off excessive logging
+        logging: false,
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
@@ -410,9 +406,62 @@ export default function AdminReportsPage() {
       pdf.save(`Attendance_Report_${format(reportDate, "yyyy-MM-dd")}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
-      toast({ variant: "destructive", title: "PDF Error", description: "Could not generate PDF. See console for details."});
+      toast({ variant: "destructive", title: "PDF Error", description: "Could not generate attendance PDF. See console for details."});
     } finally {
-      setIsDownloadingPdf(false);
+      setIsDownloadingAttendancePdf(false);
+    }
+  };
+
+  const handleDownloadFeePdf = async () => {
+    const reportContent = document.getElementById('feeReportContent');
+    if (!reportContent) {
+      toast({ variant: "destructive", title: "Error", description: "Fee report content not found for PDF generation." });
+      return;
+    }
+     if (!schoolDetails) {
+        toast({ variant: "info", title: "Missing Data", description: "School details not loaded, cannot generate fee report PDF." });
+        return;
+    }
+
+    setIsDownloadingFeePdf(true);
+    try {
+      const canvas = await html2canvas(reportContent, {
+        scale: 2, 
+        useCORS: true,
+        logging: false,
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ // Default portrait, A4
+        orientation: 'portrait', 
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgWidth = imgProps.width;
+      const imgHeight = imgProps.height;
+      
+      const ratio = imgWidth / imgHeight;
+      let newImgWidth = pdfWidth - 20; 
+      let newImgHeight = newImgWidth / ratio;
+
+      if (newImgHeight > pdfHeight - 20) { 
+        newImgHeight = pdfHeight - 20; 
+        newImgWidth = newImgHeight * ratio;
+      }
+      
+      const x = (pdfWidth - newImgWidth) / 2;
+      const y = (pdfHeight - newImgHeight) / 2;
+      
+      pdf.addImage(imgData, 'PNG', x, y, newImgWidth, newImgHeight);
+      pdf.save(`Fee_Collection_Report_${schoolDetails.schoolName.replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast({ variant: "destructive", title: "PDF Error", description: "Could not generate fee report PDF. See console for details."});
+    } finally {
+      setIsDownloadingFeePdf(false);
     }
   };
 
@@ -465,17 +514,17 @@ export default function AdminReportsPage() {
                         disabled={isLoading || !authUser || !reportDate}
                         className="w-full sm:w-auto"
                     >
-                        {isLoading && !isDownloadingPdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <BarChartBig className="mr-0 sm:mr-2 h-4 w-4"/>}
+                        {isLoading && !isDownloadingAttendancePdf && !isDownloadingFeePdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <BarChartBig className="mr-0 sm:mr-2 h-4 w-4"/>}
                         <span className="sm:inline hidden">Generate Report</span>
                         <span className="sm:hidden inline">Generate</span>
                     </Button>
                      <Button 
                         variant="outline" 
                         onClick={handleDownloadAttendancePdf} 
-                        disabled={isLoading || isDownloadingPdf || !authUser || !reportDate || !overallSummary}
+                        disabled={isLoading || isDownloadingAttendancePdf || !authUser || !reportDate || !overallSummary}
                         className="w-full sm:w-auto"
                     >
-                        {isDownloadingPdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-0 sm:mr-2 h-4 w-4"/>}
+                        {isDownloadingAttendancePdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-0 sm:mr-2 h-4 w-4"/>}
                         <span className="sm:inline hidden">Download PDF</span>
                         <span className="sm:hidden inline">PDF</span>
                     </Button>
@@ -483,7 +532,7 @@ export default function AdminReportsPage() {
             </div>
         </CardHeader>
         <CardContent>
-          {isLoading && !isDownloadingPdf ? (
+          {isLoading && !isDownloadingAttendancePdf && !isDownloadingFeePdf ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-2">Generating attendance report...</p>
@@ -569,7 +618,16 @@ export default function AdminReportsPage() {
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                  <CardTitle>Fee Collection Summary Report (All Time)</CardTitle>
-                 {/* Placeholder for fee report specific actions like PDF download if added later */}
+                 <Button 
+                    variant="outline" 
+                    onClick={handleDownloadFeePdf} 
+                    disabled={isLoading || isDownloadingFeePdf || !authUser || !feeOverallSummary || !schoolDetails}
+                    className="w-full sm:w-auto"
+                >
+                    {isDownloadingFeePdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-0 sm:mr-2 h-4 w-4"/>}
+                    <span className="sm:inline hidden">Download PDF</span>
+                    <span className="sm:hidden inline">PDF</span>
+                </Button>
             </div>
         </CardHeader>
         <CardContent>
@@ -581,10 +639,10 @@ export default function AdminReportsPage() {
              ) : !authUser ? (
                 <p className="text-center text-muted-foreground py-4">Please log in as a school admin to view reports.</p>
              ) : feeClassSummaries.length > 0 && feeOverallSummary ? (
-                <>
+                <div id="feeReportContent" className="p-4 bg-card rounded-md">
                 <Card className="mb-6 bg-secondary/30">
                     <CardHeader>
-                        <CardTitle className="text-lg">Overall School Fee Summary</CardTitle>
+                        <CardTitle className="text-lg">Overall School Fee Summary - {schoolDetails?.schoolName || 'School'}</CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                         <div>
@@ -636,7 +694,7 @@ export default function AdminReportsPage() {
                     ))}
                 </TableBody>
                 </Table>
-                </>
+                </div>
              ) : (
                 <div className="text-center py-10">
                     <Info className="mx-auto h-12 w-12 text-muted-foreground" />
@@ -656,3 +714,5 @@ export default function AdminReportsPage() {
   );
 }
 
+
+    
