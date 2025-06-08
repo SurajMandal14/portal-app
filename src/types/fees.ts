@@ -38,3 +38,10 @@ export interface StudentFeeStatus {
   totalDue: number;
   payments: FeePayment[]; // Optional: if you want to show payment history directly
 }
+
+export interface GetFeePaymentResult {
+  success: boolean;
+  payment?: FeePayment;
+  error?: string;
+  message?: string;
+}

@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { FeePayment, FeePaymentPayload } from '@/types/fees';
+import type { FeePayment, FeePaymentPayload, GetFeePaymentResult } from '@/types/fees';
 import { ObjectId } from 'mongodb';
 import { revalidatePath } from 'next/cache';
 
@@ -147,5 +147,36 @@ export async function getFeePaymentsByStudent(studentId: string, schoolId: strin
     console.error('Get fee payments by student server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch student fee payments.' };
+  }
+}
+
+export async function getPaymentById(paymentId: string): Promise<GetFeePaymentResult> {
+  try {
+    if (!ObjectId.isValid(paymentId)) {
+      return { success: false, message: 'Invalid Payment ID format.', error: 'Invalid Payment ID.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const feePaymentsCollection = db.collection<FeePayment>('fee_payments');
+    
+    const payment = await feePaymentsCollection.findOne({ _id: new ObjectId(paymentId) as any });
+
+    if (!payment) {
+      return { success: false, message: 'Payment not found.' };
+    }
+    
+    const paymentWithStrId = {
+      ...payment,
+      _id: payment._id.toString(),
+      studentId: payment.studentId.toString(),
+      schoolId: payment.schoolId.toString(),
+      recordedByAdminId: payment.recordedByAdminId.toString(),
+    };
+
+    return { success: true, payment: paymentWithStrId };
+  } catch (error) {
+    console.error('Get payment by ID server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch payment details.' };
   }
 }

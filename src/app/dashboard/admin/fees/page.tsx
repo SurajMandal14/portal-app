@@ -164,14 +164,14 @@ export default function FeeManagementPage() {
   useEffect(() => {
     if (selectedStudentFullData) {
       setPaymentAmount(selectedStudentFullData.dueAmount > 0 ? selectedStudentFullData.dueAmount : "");
-      setPaymentDate(new Date()); // Set on client after student is selected
+      setPaymentDate(new Date()); 
       setPaymentMethod("");
       setPaymentNotes("");
     } else {
       setPaymentAmount("");
-      setPaymentDate(undefined); // Clear date if no student
+      setPaymentDate(undefined); 
     }
-  }, [selectedStudentId, selectedStudentFullData]); // Re-run when selected student changes
+  }, [selectedStudentId, selectedStudentFullData]);
 
 
   const handleRecordPayment = async () => {
@@ -201,14 +201,14 @@ export default function FeeManagementPage() {
       if (authUser?.schoolId) {
         const paymentsResult = await getFeePaymentsBySchool(authUser.schoolId.toString());
         if (paymentsResult.success && paymentsResult.payments) {
-          setAllSchoolPayments(paymentsResult.payments);
+          setAllSchoolPayments(paymentsResult.payments); // This will trigger re-calculation
         }
       }
       setSelectedStudentId(null); 
       setPaymentAmount("");
       setPaymentMethod("");
       setPaymentNotes("");
-      setPaymentDate(undefined); // Reset date field
+      setPaymentDate(undefined); 
     } else {
       toast({ variant: "destructive", title: "Payment Failed", description: result.error || result.message });
     }
@@ -216,8 +216,26 @@ export default function FeeManagementPage() {
 
   const handleGenerateReceipt = (studentId: string) => {
     const student = studentFeeList.find(s => s._id.toString() === studentId);
-    if (!student) return;
-    toast({ title: "Generate Receipt (Simulated)", description: `Generating PDF receipt for ${student.name}. This feature is not yet implemented.` });
+    if (!student || !schoolDetails) {
+        toast({variant: "destructive", title: "Error", description: "Student or school details not found."});
+        return;
+    }
+
+    const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === studentId);
+    if (studentPayments.length === 0) {
+        toast({title: "No Payments", description: `No payments found for ${student.name} to generate a receipt.`});
+        return;
+    }
+
+    // Sort payments by date to get the latest one
+    const latestPayment = studentPayments.sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())[0];
+    
+    if (latestPayment && latestPayment._id) {
+      const receiptUrl = `/dashboard/admin/fees/receipt/${latestPayment._id.toString()}?studentName=${encodeURIComponent(student.name || '')}&className=${encodeURIComponent(student.className || '')}`;
+      window.open(receiptUrl, '_blank');
+    } else {
+       toast({variant: "destructive", title: "Error", description: "Could not identify the latest payment for receipt generation."});
+    }
   };
   
   if (isLoading) {
@@ -405,7 +423,7 @@ export default function FeeManagementPage() {
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setSelectedStudentId(student._id.toString())} title="Record Payment">
                           <DollarSign className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleGenerateReceipt(student._id.toString())} title="Generate Receipt (Simulated)">
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleGenerateReceipt(student._id.toString())} title="Generate Receipt">
                           <Printer className="h-4 w-4" />
                         </Button>
                       </TableCell>
