@@ -116,6 +116,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
     }
     
     revalidatePath('/dashboard/super-admin/schools');
+    revalidatePath(`/dashboard/admin/settings`); // Revalidate admin settings if school name/logo changes
     
     const updatedSchool = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
      if (!updatedSchool) return { success: false, message: 'Failed to retrieve school after update.'};
@@ -188,5 +189,25 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
     console.error('Get school by ID server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch school details.' };
+  }
+}
+
+export interface GetSchoolsCountResult {
+  success: boolean;
+  count?: number;
+  error?: string;
+  message?: string;
+}
+
+export async function getSchoolsCount(): Promise<GetSchoolsCountResult> {
+  try {
+    const { db } = await connectToDatabase();
+    const schoolsCollection = db.collection<School>('schools');
+    const count = await schoolsCollection.countDocuments();
+    return { success: true, count };
+  } catch (error) {
+    console.error('Get schools count server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch schools count.' };
   }
 }

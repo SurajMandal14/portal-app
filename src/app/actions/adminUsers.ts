@@ -270,3 +270,23 @@ export async function deleteSchoolAdmin(userId: string): Promise<DeleteSchoolAdm
     return { success: false, message: 'An unexpected error occurred during admin deletion.', error: errorMessage };
   }
 }
+
+export interface GetSchoolAdminsCountResult {
+  success: boolean;
+  count?: number;
+  error?: string;
+  message?: string;
+}
+
+export async function getSchoolAdminsCount(): Promise<GetSchoolAdminsCountResult> {
+  try {
+    const { db } = await connectToDatabase();
+    const usersCollection = db.collection<User>('users');
+    const count = await usersCollection.countDocuments({ role: 'admin' });
+    return { success: true, count };
+  } catch (error) {
+    console.error('Get school admins count server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch school admins count.' };
+  }
+}

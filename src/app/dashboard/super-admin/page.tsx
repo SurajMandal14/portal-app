@@ -1,9 +1,71 @@
+
+"use client";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { School, Users, Settings, BarChart3 } from "lucide-react";
+import { School, Users, Settings, BarChart3, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { getSchoolsCount } from "@/app/actions/schools";
+import { getSchoolAdminsCount } from "@/app/actions/adminUsers";
+
+interface StatCardProps {
+  title: string;
+  value: number | string;
+  icon: React.ElementType;
+  isLoading: boolean;
+  link?: string;
+  linkText?: string;
+}
+
+function StatCard({ title, value, icon: Icon, isLoading, link, linkText }: StatCardProps) {
+  return (
+    <Card className="shadow-sm hover:shadow-md transition-shadow">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className="h-5 w-5 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        ) : (
+          <div className="text-3xl font-bold">{value}</div>
+        )}
+        {link && linkText && !isLoading && (
+          <Link href={link} className="text-xs text-muted-foreground hover:text-primary transition-colors mt-1 block">
+            {linkText}
+          </Link>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SuperAdminDashboardPage() {
+  const [schoolCount, setSchoolCount] = useState(0);
+  const [adminCount, setAdminCount] = useState(0);
+  const [isLoadingSchools, setIsLoadingSchools] = useState(true);
+  const [isLoadingAdmins, setIsLoadingAdmins] = useState(true);
+
+  useEffect(() => {
+    async function fetchStats() {
+      setIsLoadingSchools(true);
+      const schoolsResult = await getSchoolsCount();
+      if (schoolsResult.success && schoolsResult.count !== undefined) {
+        setSchoolCount(schoolsResult.count);
+      }
+      setIsLoadingSchools(false);
+
+      setIsLoadingAdmins(true);
+      const adminsResult = await getSchoolAdminsCount();
+      if (adminsResult.success && adminsResult.count !== undefined) {
+        setAdminCount(adminsResult.count);
+      }
+      setIsLoadingAdmins(false);
+    }
+    fetchStats();
+  }, []);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -16,7 +78,26 @@ export default function SuperAdminDashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
+        <StatCard 
+            title="Total Registered Schools" 
+            value={schoolCount} 
+            icon={School} 
+            isLoading={isLoadingSchools}
+            link="/dashboard/super-admin/schools"
+            linkText="Manage Schools"
+        />
+        <StatCard 
+            title="Total School Administrators" 
+            value={adminCount} 
+            icon={Users} 
+            isLoading={isLoadingAdmins}
+            link="/dashboard/super-admin/users"
+            linkText="Manage Admins"
+        />
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pt-4">
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <School className="h-10 w-10 text-primary mb-2" />
