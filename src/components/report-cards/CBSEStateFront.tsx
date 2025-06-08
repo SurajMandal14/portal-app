@@ -61,27 +61,27 @@ interface CBSEStateFrontProps {
 }
 
 // Grade scales
-const overallSubjectGradeScale = [
-  { min: 180, grade: 'A+' }, { min: 160, grade: 'A1' },
-  { min: 140, grade: 'A2' }, { min: 120, grade: 'B1' },
-  { min: 100, grade: 'B2' }, { min: 80, grade: 'C1' },
-  { min: 60, grade: 'C2' }, { min: 40, grade: 'D1' },
-  { min: 0, grade: 'D2' }
+const overallSubjectGradeScale = [ // For total out of 200M
+  { min: 180, grade: 'A+' }, { min: 160, grade: 'A' }, // Adjusted based on typical 200M scales, previously A1
+  { min: 140, grade: 'B+' }, { min: 120, grade: 'B' }, // Previously A2, B1
+  { min: 100, grade: 'C+' }, { min: 80, grade: 'C' },  // Previously B2, C1
+  { min: 60, grade: 'D' }, { min: 40, grade: 'E' },   // Previously C2, D1. D2 might be fail.
+  { min: 0, grade: 'F' } // Fail or Needs Improvement. Previously D2
 ];
 
-const faPeriodGradeScale = [
+const faPeriodGradeScale = [ // For 50M - Main Subjects
   { min: 46, grade: 'A1' }, { min: 41, grade: 'A2' },
   { min: 36, grade: 'B1' }, { min: 31, grade: 'B2' },
   { min: 26, grade: 'C1' }, { min: 21, grade: 'C2' },
-  { min: 18, grade: 'D1' }, { min: 0, grade: 'D2' }
+  { min: 18, grade: 'D1' }, { min: 0, grade: 'D2' } // D2 for 0-17
 ];
-const faPeriodGradeScale2ndLang = [
+const faPeriodGradeScale2ndLang = [ // For 50M - Second Language
   { min: 45, grade: 'A1' }, { min: 40, grade: 'A2' },
   { min: 34, grade: 'B1' }, { min: 29, grade: 'B2' },
   { min: 23, grade: 'C1' }, { min: 18, grade: 'C2' },
-  { min: 10, grade: 'D1' }, { min: 0, grade: 'D2' }
+  { min: 10, grade: 'D1' }, { min: 0, grade: 'D2' } // D2 for 0-9
 ];
-const coCurricularGradeScale = [
+const coCurricularGradeScale = [ // Percentage based
   { min: 85, grade: 'A+' }, { min: 71, grade: 'A' },
   { min: 56, grade: 'B' }, { min: 41, grade: 'C' },
   { min: 0, grade: 'D' }
@@ -91,7 +91,7 @@ const getGrade = (totalMarks: number, scale: { min: number; grade: string }[]): 
   for (let i = 0; i < scale.length; i++) {
     if (totalMarks >= scale[i].min) return scale[i].grade;
   }
-  return scale[scale.length - 1]?.grade || 'N/A';
+  return scale[scale.length - 1]?.grade || 'N/A'; // Default to last grade or N/A
 };
 
 const mainSubjects = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"];
@@ -113,7 +113,17 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 
   const calculateFaResults = React.useCallback((subjectIndex: number) => {
     const subjectData = faMarks[subjectIndex];
-    if (!subjectData) return { overallTotal: 0, overallGrade: 'N/A' }; // Should not happen if faMarks is initialized
+    // Ensure subjectData and its FA periods are defined, providing defaults if not
+    if (!subjectData) {
+        // This case should ideally not happen if faMarks is initialized correctly
+        const defaultFaPeriod = { tool1: null, tool2: null, tool3: null, tool4: null };
+        const defaultSubjectData = { fa1: defaultFaPeriod, fa2: defaultFaPeriod, fa3: defaultFaPeriod, fa4: defaultFaPeriod };
+        return { 
+            ...Object.fromEntries((['fa1', 'fa2', 'fa3', 'fa4'] as const).map(key => [key, { total: 0, grade: 'N/A' }])),
+            overallTotal: 0, 
+            overallGrade: 'N/A' 
+        };
+    }
 
     const results: Record<string, { total: number; grade: string }> & { overallTotal: number; overallGrade: string } = {
       overallTotal: 0,
@@ -122,11 +132,12 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
     let currentOverallTotal = 0;
 
     const subjectName = mainSubjects[subjectIndex];
+    // Determine if current subject is the selected second language
     const isSecondLang = subjectName === secondLanguage;
     const currentFaPeriodGradeScale = isSecondLang ? faPeriodGradeScale2ndLang : faPeriodGradeScale;
 
     (['fa1', 'fa2', 'fa3', 'fa4'] as const).forEach(faPeriodKey => {
-      const periodMarks = subjectData[faPeriodKey];
+      const periodMarks = subjectData[faPeriodKey] || { tool1: null, tool2: null, tool3: null, tool4: null}; // Default if undefined
       const periodTotal = (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
       currentOverallTotal += periodTotal;
       results[faPeriodKey] = {
@@ -135,21 +146,21 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
       };
     });
     results.overallTotal = currentOverallTotal;
-    results.overallGrade = getGrade(currentOverallTotal, overallSubjectGradeScale);
+    results.overallGrade = getGrade(currentOverallTotal, overallSubjectGradeScale); // Using 200M scale
     return results;
   }, [faMarks, secondLanguage]);
 
 
   const calculateCoResults = React.useCallback((subjectIndex: number) => {
     const subjectData = coMarks[subjectIndex];
-    if (!subjectData) return { grade: 'N/A'};
+    if (!subjectData) return { grade: 'N/A'}; // Default if undefined
 
     let totalMarksObtained = 0;
     let totalMaxMarksPossible = 0;
 
     (['sa1', 'sa2', 'sa3'] as const).forEach(saPeriodKey => {
       totalMarksObtained += subjectData[`${saPeriodKey}Marks`] || 0;
-      totalMaxMarksPossible += subjectData[`${saPeriodKey}Max`] || 0; 
+      totalMaxMarksPossible += subjectData[`${saPeriodKey}Max`] || 50; // Default max if null
     });
     
     const percentage = totalMaxMarksPossible > 0 ? (totalMarksObtained / totalMaxMarksPossible) * 100 : 0;
@@ -162,77 +173,90 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   return (
     <>
       <style jsx global>{`
-        body.report-card-body {
+        .report-card-container body, .report-card-container { /* Apply to container too */
           font-family: Arial, sans-serif;
-          font-size: 12px;
-          margin: 20px;
+          font-size: 11px; /* Adjusted for potentially more content */
+          margin: 0; /* Remove margin for better print control by parent */
+          padding: 5px; /* Minimal padding, parent can control more */
           color: #000;
           background-color: #fff;
         }
         .report-card-container table {
           border-collapse: collapse;
           width: 100%;
-          margin-bottom: 15px;
+          margin-bottom: 10px; /* Reduced margin */
         }
         .report-card-container th, .report-card-container td {
           border: 1px solid #000;
-          padding: 4px;
+          padding: 3px; /* Reduced padding */
           text-align: center;
           vertical-align: middle; /* Ensure vertical alignment */
         }
         .report-card-container .header-table td {
           border: none;
           text-align: left;
-          padding: 2px 4px; /* Consistent padding */
+          padding: 1px 3px; /* Consistent padding */
         }
         .report-card-container .title {
           text-align: center;
           font-weight: bold;
-          font-size: 16px;
-          margin-bottom: 5px; /* Spacing */
+          font-size: 14px; /* Adjusted */
+          margin-bottom: 3px; /* Spacing */
         }
         .report-card-container .subtitle {
           text-align: center;
           font-weight: bold;
-          font-size: 14px;
-          margin-bottom: 10px; /* Spacing */
+          font-size: 12px; /* Adjusted */
+          margin-bottom: 8px; /* Spacing */
         }
         .report-card-container .small-note {
-          font-size: 10px;
-          margin-top: 10px; /* Spacing for note */
+          font-size: 9px; /* Adjusted */
+          margin-top: 8px; /* Spacing for note */
+          text-align: left;
         }
         .report-card-container input[type="text"], 
         .report-card-container input[type="number"], 
         .report-card-container select {
-          padding: 3px;
+          padding: 2px; /* Reduced padding */
           border: 1px solid #ccc;
-          border-radius: 3px;
-          font-size: 12px; /* Match body font size */
-          box-sizing: border-box; /* Include padding and border in element's total width and height */
+          border-radius: 2px; /* Smaller radius */
+          font-size: 11px; /* Match body font size */
+          box-sizing: border-box; 
+          background-color: #fff; /* Ensure background for inputs */
+          color: #000; /* Ensure text color for inputs */
         }
         .report-card-container input[type="number"] {
-          width: 55px; /* Default width for number inputs */
+          width: 45px; /* Default width for number inputs */
           text-align: center;
+          -moz-appearance: textfield; /* Firefox */
         }
-        .report-card-container .header-table input[type="text"] { /* Inputs in the header table */
-            width: 100%; /* Make them fill the cell by default */
-            max-width: 200px; /* But cap width to avoid excessive stretching */
+        .report-card-container input::-webkit-outer-spin-button,
+        .report-card-container input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
         }
-         .report-card-container .header-table td:first-child input[type="text"] { /* UDISE specific */
-            max-width: 350px; /* Wider for UDISE code & school name */
+        .report-card-container .header-table input[type="text"] { 
+            width: 95%; /* Make them fill the cell by default */
+            max-width: 180px; 
         }
-        .report-card-container #fa-table input[type="number"]{ /* Marks inputs in FA table */
-            width: 45px; /* Slightly smaller for compact FA table */
+         .report-card-container .header-table td:first-child input[type="text"] { 
+            max-width: 300px; 
+        }
+        .report-card-container #fa-table input[type="number"]{ 
+            width: 40px; 
         }
          .report-card-container .header-table select {
-            min-width: 100px;
+            min-width: 90px;
+            padding: 2px;
         }
         .report-card-container .academic-year-input {
             font-weight: bold;
-            font-size: 16px;
+            font-size: 14px; /* Match title */
             border: none;
             text-align: center;
-            width: 120px; /* Adjust as needed */
+            width: 100px; /* Adjust as needed */
+            display: inline-block; /* For better alignment */
+            vertical-align: baseline;
         }
       `}</style>
       <div className="report-card-container">
@@ -292,24 +316,29 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               <th colSpan={6}>FA-2 (50M)</th>
               <th colSpan={6}>FA-3 (50M)</th>
               <th colSpan={6}>FA-4 (50M)</th>
-              <th rowSpan={2}>TOTAL (200)</th>
+              <th rowSpan={2}>TOTAL (200M)</th>
               <th rowSpan={2}>GRADE</th>
             </tr>
             <tr>
-              <th>1</th><th>2</th><th>3</th><th>4 (20M)</th><th>Total</th><th>Grade</th>
-              <th>1</th><th>2</th><th>3</th><th>4 (20M)</th><th>Total</th><th>Grade</th>
-              <th>1</th><th>2</th><th>3</th><th>4 (20M)</th><th>Total</th><th>Grade</th>
-              <th>1</th><th>2</th><th>3</th><th>4 (20M)</th><th>Total</th><th>Grade</th>
+              <th>1</th><th>2</th><th>3</th><th>4(20M)</th><th>Total</th><th>Grade</th>
+              <th>1</th><th>2</th><th>3</th><th>4(20M)</th><th>Total</th><th>Grade</th>
+              <th>1</th><th>2</th><th>3</th><th>4(20M)</th><th>Total</th><th>Grade</th>
+              <th>1</th><th>2</th><th>3</th><th>4(20M)</th><th>Total</th><th>Grade</th>
             </tr>
           </thead>
           <tbody>
             {mainSubjects.map((subject, SIndex) => {
-              const subjectFaData = faMarks[SIndex] || { fa1: {}, fa2: {}, fa3: {}, fa4: {} }; // Ensure data exists
+              const subjectFaData = faMarks[SIndex] || { 
+                fa1: { tool1: null, tool2: null, tool3: null, tool4: null }, 
+                fa2: { tool1: null, tool2: null, tool3: null, tool4: null }, 
+                fa3: { tool1: null, tool2: null, tool3: null, tool4: null }, 
+                fa4: { tool1: null, tool2: null, tool3: null, tool4: null }
+              };
               const results = calculateFaResults(SIndex);
               return (
                 <tr key={subject}>
                   <td>{SIndex + 1}</td>
-                  <td>{subject}</td>
+                  <td style={{textAlign: 'left', paddingLeft: '5px'}}>{subject}</td>
                   {(['fa1', 'fa2', 'fa3', 'fa4'] as const).map(faPeriodKey => {
                      const periodData = subjectFaData[faPeriodKey] || { tool1: null, tool2: null, tool3: null, tool4: null};
                      return (
@@ -341,14 +370,14 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
           Formative Assessment Tools: (1) Children Participation and Reflections, (2) Project work, (3) Written work, (4) Slip Test (20M)
         </p>
 
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginTop: '20px' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginTop: '15px' }}>
           <div style={{ flex: 3 }}>
             <div className="subtitle">Co-Curricular Subjects</div>
             <table id="co-table">
               <thead>
                 <tr>
                   <th rowSpan={2}>Sl. No</th>
-                  <th rowSpan={2}>Subject</th>
+                  <th rowSpan={2} style={{minWidth: '100px'}}>Subject</th>
                   <th colSpan={2}>SA-1</th>
                   <th colSpan={2}>SA-2</th>
                   <th colSpan={2}>SA-3</th>
@@ -367,7 +396,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                   return (
                   <tr key={subject}>
                     <td>{SIndex + 1}</td>
-                    <td>{subject}</td>
+                    <td style={{textAlign: 'left', paddingLeft: '5px'}}>{subject}</td>
                     {(['sa1', 'sa2', 'sa3'] as const).map(saPeriodKey => (
                       <React.Fragment key={saPeriodKey}>
                         <td>
@@ -396,9 +425,9 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               </tbody>
             </table>
           </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', gap: '10px' }}> {/* Adjusted flex */}
             <div>
-              <table style={{fontSize: '10px'}}>
+              <table style={{fontSize: '9px'}}> {/* Adjusted font size */}
                 <caption><strong>Grades: Curricular (FA - 50M)</strong></caption>
                 <thead>
                   <tr>
@@ -415,7 +444,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               </table>
             </div>
             <div>
-              <table style={{fontSize: '10px'}}>
+              <table style={{fontSize: '9px'}}>
                 <caption><strong>Grades: Co-Curricular (% Based)</strong></caption>
                 <thead>
                   <tr><th>Grade</th><th>% Marks</th></tr>
@@ -428,8 +457,8 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               </table>
             </div>
              <div>
-              <table style={{fontSize: '10px'}}>
-                <caption><strong>Overall Subject Grade (200 M)</strong></caption>
+              <table style={{fontSize: '9px'}}>
+                <caption><strong>Overall Subject Grade (200M)</strong></caption>
                 <thead>
                   <tr><th>Grade</th><th>Marks</th></tr>
                 </thead>
@@ -444,7 +473,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
         </div>
 
         <p className="small-note" style={{marginTop: '15px'}}>
-            NOTE: In case of Science, Physical Science & Biological Science Teachers conduct & Record Formative Assessment Separately for 50 Marks each. Finally add both P.S & B.S Marks and Reduce to 50 under Science Subject. (This reduction logic is not implemented in this interactive template and assumes combined science if applicable elsewhere).
+            NOTE: In case of Science, Physical Science & Biological Science Teachers conduct & Record Formative Assessment Separately for 50 Marks each. Sum of FA1 to FA4 for Phy.Sci (200M) and Bio.Sci (200M) to be considered for respective rows on backside.
         </p>
       </div>
     </>
