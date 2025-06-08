@@ -4,15 +4,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"; // AvatarImage removed as we use <img>
-import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info, Image as ImageIcon } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"; 
+import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info, Image as ImageIcon, Settings as SettingsIcon, CalendarCog } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user";
 import type { School } from "@/types/school";
 import { getSchoolById } from "@/app/actions/schools";
-// Image from next/image removed, using standard <img>
-// import Image from "next/image";
 
 export default function AdminSchoolSettingsPage() {
   const { toast } = useToast();
@@ -60,7 +58,7 @@ export default function AdminSchoolSettingsPage() {
     if (authUser && authUser.schoolId) {
       fetchSchoolDetails();
     } else {
-      setIsLoading(false); // Not enough info to fetch
+      setIsLoading(false); 
     }
   }, [authUser, fetchSchoolDetails]);
 
@@ -105,18 +103,12 @@ export default function AdminSchoolSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline flex items-center">
-            <Building className="mr-2 h-6 w-6" /> School Profile & Settings
+            <SettingsIcon className="mr-2 h-6 w-6" /> School Settings & Profile
           </CardTitle>
           <CardDescription>
-            Viewing details for {schoolDetails.schoolName}.
+            Viewing profile details for {schoolDetails.schoolName}. Core profile (name, logo, fees) is managed by Super Admin.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-            <Button variant="outline" disabled>
-                <Edit className="mr-2 h-4 w-4" /> Edit School Profile (Super Admin)
-            </Button>
-            <p className="text-xs text-muted-foreground mt-1">School profile details like name, logo, and core fee structures are managed by Super Administrators.</p>
-        </CardContent>
       </Card>
 
       <Card>
@@ -126,6 +118,7 @@ export default function AdminSchoolSettingsPage() {
                 <img 
                     src={schoolDetails.schoolLogoUrl} 
                     alt={`${schoolDetails.schoolName} Logo`}
+                    data-ai-hint="school logo"
                     width={80} 
                     height={80} 
                     className="h-20 w-20 rounded-md object-contain border bg-muted"
@@ -138,8 +131,11 @@ export default function AdminSchoolSettingsPage() {
                 </Avatar>
             )}
             <div>
-              <CardTitle className="text-xl">{schoolDetails.schoolName}</CardTitle>
+              <CardTitle className="text-xl flex items-center"><Building className="mr-2 h-5 w-5 text-primary" />{schoolDetails.schoolName}</CardTitle>
               <p className="text-muted-foreground">School ID: {schoolDetails._id.toString()}</p>
+               <Button variant="outline" disabled className="mt-2 text-xs">
+                <Edit className="mr-2 h-3 w-3" /> Edit School Profile (Super Admin Only)
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -148,7 +144,7 @@ export default function AdminSchoolSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary" /> Class Fee Structure</CardTitle>
-          <CardDescription>Configured fees for different classes in your school.</CardDescription>
+          <CardDescription>Configured fees for different classes (Managed by Super Admin).</CardDescription>
         </CardHeader>
         <CardContent>
           {schoolDetails.classFees && schoolDetails.classFees.length > 0 ? (
@@ -185,6 +181,28 @@ export default function AdminSchoolSettingsPage() {
           )}
         </CardContent>
       </Card>
+
+       <Card>
+        <CardHeader>
+          <CardTitle className="text-xl flex items-center">
+            <CalendarCog className="mr-2 h-5 w-5 text-primary" /> School Operational Settings
+          </CardTitle>
+          <CardDescription>Manage academic years, terms, and other school-specific operational settings.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div className="flex flex-col items-center justify-center h-40 border-2 border-dashed rounded-lg p-4">
+                <Info className="h-12 w-12 text-muted-foreground mb-3" />
+                <h3 className="text-lg font-semibold text-muted-foreground">
+                    Coming Soon
+                </h3>
+                <p className="text-sm text-muted-foreground text-center">
+                    Settings for academic year configuration, term dates, grading periods, and other operational parameters will be available here in a future update.
+                </p>
+            </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+
+    
