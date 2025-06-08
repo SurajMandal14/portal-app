@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { getPaymentById } from '@/app/actions/fees';
-import { getSchoolById } from '@/app/actions/schools'; // Assuming you have this action
+import { getSchoolById } from '@/app/actions/schools'; 
 import type { FeePayment } from '@/types/fees';
 import type { School } from '@/types/school';
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Printer, AlertTriangle } from "lucide-react";
 import { format } from 'date-fns';
-import Image from 'next/image';
+// Removed: import Image from 'next/image';
 
 export default function FeeReceiptPage() {
   const params = useParams();
@@ -114,13 +114,14 @@ export default function FeeReceiptPage() {
       <Card className="w-full max-w-2xl shadow-xl print-receipt-container print:shadow-none print:border-none">
         <CardHeader className="text-center space-y-2">
           {school.schoolLogoUrl && (
-            <Image 
+            <img 
                 src={school.schoolLogoUrl} 
                 alt={`${school.schoolName} Logo`} 
                 data-ai-hint="school logo"
                 width={80} 
                 height={80} 
-                className="mx-auto rounded-md object-contain"
+                className="mx-auto rounded-md object-contain h-20 w-20 border bg-muted" // Added fixed height/width and border/bg for consistency
+                onError={(e) => (e.currentTarget.src = "https://placehold.co/80x80.png")} // Fallback placeholder
             />
           )}
           <CardTitle className="text-3xl font-bold">{school.schoolName}</CardTitle>
