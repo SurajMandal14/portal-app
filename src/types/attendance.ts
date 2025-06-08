@@ -21,7 +21,7 @@ export interface AttendanceSubmissionPayload {
 
 export interface AttendanceRecord {
   _id: ObjectId | string;
-  studentId: string;
+  studentId: string; // Storing as string, assuming User._id is string after fetch
   studentName: string;
   classId: string; // Stores class name
   className: string;
@@ -35,3 +35,11 @@ export interface AttendanceRecord {
 
 // Use the centrally defined AuthUser
 export type AuthUser = CentralAuthUser;
+
+export interface DailyAttendanceOverview {
+  totalStudents: number;
+  present: number;
+  absent: number;
+  late: number;
+  percentage: number;
+}

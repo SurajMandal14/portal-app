@@ -3,9 +3,10 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { AttendanceRecord, AttendanceSubmissionPayload, AttendanceStatus } from '@/types/attendance';
+import type { AttendanceRecord, AttendanceSubmissionPayload, AttendanceStatus, DailyAttendanceOverview } from '@/types/attendance';
 import { ObjectId } from 'mongodb';
 import { revalidatePath } from 'next/cache';
+import type { User } from '@/types/user';
 
 const attendanceEntrySchema = z.object({
   studentId: z.string().min(1),
@@ -142,9 +143,9 @@ export async function getStudentAttendanceRecords(studentId: string, schoolId: s
     const attendanceCollection = db.collection<AttendanceRecord>('attendances');
     
     const records = await attendanceCollection.find({
-      studentId: studentId, // Student ID is likely already a string from AuthUser, but ensure it matches storage type if not
+      studentId: studentId, 
       schoolId: new ObjectId(schoolId) as any,
-    }).sort({ date: -1 }).toArray(); // Sort by date descending to show most recent first
+    }).sort({ date: -1 }).toArray();
     
     const recordsWithStrId = records.map(record => ({
       ...record,
@@ -159,4 +160,96 @@ export async function getStudentAttendanceRecords(studentId: string, schoolId: s
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch student attendance records.' };
   }
+}
+
+
+export interface GetDailyAttendanceOverviewResult {
+    success: boolean;
+    summary?: DailyAttendanceOverview;
+    error?: string;
+    message?: string;
+}
+
+export async function getDailyAttendanceOverviewForSchool(schoolId: string, date: Date): Promise<GetDailyAttendanceOverviewResult> {
+    try {
+        if (!ObjectId.isValid(schoolId)) {
+            return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.' };
+        }
+
+        const { db } = await connectToDatabase();
+        const usersCollection = db.collection<User>('users');
+        const attendanceCollection = db.collection<AttendanceRecord>('attendances');
+
+        const totalStudents = await usersCollection.countDocuments({
+            schoolId: new ObjectId(schoolId) as any,
+            role: 'student'
+        });
+
+        if (totalStudents === 0) {
+            return { success: true, summary: { totalStudents: 0, present: 0, absent: 0, late: 0, percentage: 0 } };
+        }
+        
+        const targetDate = new Date(date);
+        targetDate.setUTCHours(0,0,0,0);
+        const startDate = new Date(targetDate);
+        const endDate = new Date(targetDate);
+        endDate.setDate(startDate.getDate() + 1);
+
+        const attendanceRecords = await attendanceCollection.find({
+            schoolId: new ObjectId(schoolId) as any,
+            date: { $gte: startDate, $lt: endDate },
+        }).toArray();
+
+        let present = 0;
+        let late = 0;
+        const attendedStudentIds = new Set<string>();
+
+        attendanceRecords.forEach(record => {
+            if (record.status === 'present') {
+                present++;
+                attendedStudentIds.add(record.studentId.toString());
+            } else if (record.status === 'late') {
+                late++;
+                attendedStudentIds.add(record.studentId.toString());
+            }
+        });
+        
+        // To accurately calculate absent, we need all student IDs of the school
+        const schoolStudents = await usersCollection.find({ schoolId: new ObjectId(schoolId) as any, role: 'student' }).project({ _id: 1 }).toArray();
+        const totalStudentCountForSchool = schoolStudents.length;
+
+        // Students who have an attendance record (present or late)
+        const markedPresentOrLate = present + late;
+        
+        // Students explicitly marked absent
+        const markedAbsent = attendanceRecords.filter(r => r.status === 'absent').length;
+
+        // Students with no attendance record for the day are considered absent.
+        // This is total students minus those explicitly marked present or late.
+        // This count should be accurate if attendance is marked for all students.
+        // If only some classes mark attendance, this could be misleading.
+        // A better approach might be to sum up present + late and then totalStudents - (present+late) for absence
+        // assuming totalStudents is accurate for the day.
+
+        const calculatedAbsent = totalStudentCountForSchool - markedPresentOrLate;
+        const absent = calculatedAbsent < 0 ? 0 : calculatedAbsent; // ensure absent is not negative
+
+        const percentage = totalStudentCountForSchool > 0 ? Math.round(((present + late) / totalStudentCountForSchool) * 100) : 0;
+
+        return { 
+            success: true, 
+            summary: { 
+                totalStudents: totalStudentCountForSchool, 
+                present, 
+                absent, 
+                late, 
+                percentage 
+            } 
+        };
+
+    } catch (error) {
+        console.error('Get daily attendance overview error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        return { success: false, error: errorMessage, message: 'Failed to fetch daily attendance overview.' };
+    }
 }
