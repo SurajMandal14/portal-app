@@ -73,6 +73,8 @@ export default function AdminReportsPage() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [lastFetchedSchoolId, setLastFetchedSchoolId] = useState<string | null>(null);
+
 
   useEffect(() => {
     setReportDate(new Date()); 
@@ -110,7 +112,7 @@ export default function AdminReportsPage() {
       setOverallSummary(null);
       return;
     }
-    if (allSchoolStudents.length > 0 && attendanceRecords.length === 0 && reportDate) { // Check reportDate to ensure it's not an initial empty state
+    if (allSchoolStudents.length > 0 && attendanceRecords.length === 0 && reportDate) { 
         const summaries: ClassAttendanceSummary[] = allSchoolStudents
             .reduce((acc, student) => { 
                 if (student.classId) {
@@ -127,7 +129,7 @@ export default function AdminReportsPage() {
                 className: group.className,
                 totalStudents: group.students.length,
                 present: 0,
-                absent: group.students.length, // All absent if no records for the day
+                absent: group.students.length, 
                 late: 0,
                 attendancePercentage: 0,
             }))
@@ -137,7 +139,7 @@ export default function AdminReportsPage() {
         setOverallSummary({
             totalStudents: allSchoolStudents.length,
             totalPresent: 0,
-            totalAbsent: allSchoolStudents.length, // All absent
+            totalAbsent: allSchoolStudents.length, 
             totalLate: 0,
             overallAttendancePercentage: 0,
         });
@@ -285,81 +287,80 @@ export default function AdminReportsPage() {
         setIsLoading(false);
         return;
     }
-    if (!reportDate && !isManualRefresh) { // For fee report, date is not strictly needed but included for consistency
-        setIsLoading(false);
-        return;
-    }
-
+   
     setIsLoading(true);
+    let schoolDataFetchedThisRun = false;
 
-    let currentStudentList = allSchoolStudents;
-    let currentSchoolDetails = schoolDetails;
-    // let currentSchoolPayments = allSchoolPayments; // Not directly using this for decision to fetch, will always fetch payments on manual refresh or if empty
+    // Fetch school-wide data (students, details, payments) if:
+    // 1. It's a manual refresh OR
+    // 2. The schoolId has changed since last fetch OR
+    // 3. School-wide data has never been fetched (lastFetchedSchoolId is null)
+    if (isManualRefresh || lastFetchedSchoolId !== authUser.schoolId.toString()) {
+      try {
+        const [studentsResult, schoolRes, paymentsResult] = await Promise.all([
+          getSchoolUsers(authUser.schoolId.toString()),
+          getSchoolById(authUser.schoolId.toString()),
+          getFeePaymentsBySchool(authUser.schoolId.toString())
+        ]);
 
-    // Fetch students if list is empty, schoolId changed, or manual refresh
-    if (isManualRefresh || currentStudentList.length === 0 || 
-        (currentStudentList[0] && currentStudentList[0].schoolId?.toString() !== authUser.schoolId.toString())) {
-      const studentsResult = await getSchoolUsers(authUser.schoolId.toString());
-      if (studentsResult.success && studentsResult.users) {
-        currentStudentList = studentsResult.users.filter(u => u.role === 'student');
-        setAllSchoolStudents(currentStudentList); 
-      } else {
-        toast({ variant: "warning", title: "Student Data", description: studentsResult.message || "Could not fetch student list." });
-        setAllSchoolStudents([]);
-      }
-    }
+        if (studentsResult.success && studentsResult.users) {
+          setAllSchoolStudents(studentsResult.users.filter(u => u.role === 'student'));
+        } else {
+          toast({ variant: "warning", title: "Student Data", description: studentsResult.message || "Could not fetch student list." });
+          setAllSchoolStudents([]);
+        }
 
-    // Fetch school details if not present or manual refresh
-    if (isManualRefresh || !currentSchoolDetails) {
-        const schoolRes = await getSchoolById(authUser.schoolId.toString());
         if (schoolRes.success && schoolRes.school) {
-            currentSchoolDetails = schoolRes.school;
-            setSchoolDetails(currentSchoolDetails);
+          setSchoolDetails(schoolRes.school);
         } else {
-            toast({ variant: "destructive", title: "School Info Error", description: schoolRes.message || "Could not load school details for reports."});
-            setSchoolDetails(null);
+          toast({ variant: "destructive", title: "School Info Error", description: schoolRes.message || "Could not load school details for reports."});
+          setSchoolDetails(null);
         }
-    }
 
-    // Always fetch payments on manual refresh, or if current list is empty.
-    // The allSchoolPayments state doesn't depend on reportDate, so it's fetched once unless manually refreshed.
-     if (isManualRefresh || allSchoolPayments.length === 0) {
-        const paymentsResult = await getFeePaymentsBySchool(authUser.schoolId.toString());
         if (paymentsResult.success && paymentsResult.payments) {
-            setAllSchoolPayments(paymentsResult.payments);
+          setAllSchoolPayments(paymentsResult.payments);
         } else {
-            toast({ variant: "warning", title: "Fee Payment Data", description: paymentsResult.message || "Could not fetch fee payments." });
-            setAllSchoolPayments([]);
+          toast({ variant: "warning", title: "Fee Payment Data", description: paymentsResult.message || "Could not fetch fee payments." });
+          setAllSchoolPayments([]);
         }
+        setLastFetchedSchoolId(authUser.schoolId.toString());
+        schoolDataFetchedThisRun = true;
+      } catch (error) {
+         toast({ variant: "destructive", title: "Error Fetching School Data", description: "An error occurred while fetching school-wide information."});
+         console.error("Error fetching school-wide data:", error);
+      }
     }
 
     // Fetch attendance if reportDate is set
     if (reportDate) {
-        const attendanceResult = await getDailyAttendanceForSchool(authUser.schoolId.toString(), reportDate);
-        if (attendanceResult.success && attendanceResult.records) {
-        setAttendanceRecords(attendanceResult.records); 
-        if (attendanceResult.records.length === 0 && currentStudentList.length > 0 && isManualRefresh) {
-            toast({ title: "No Attendance Data", description: "No attendance records found for the selected date." });
-        }
-        } else {
-        toast({ variant: "destructive", title: "Attendance Data Error", description: attendanceResult.error || "Could not fetch attendance data." });
-        setAttendanceRecords([]);
+        try {
+            const attendanceResult = await getDailyAttendanceForSchool(authUser.schoolId.toString(), reportDate);
+            if (attendanceResult.success && attendanceResult.records) {
+                setAttendanceRecords(attendanceResult.records); 
+                if (attendanceResult.records.length === 0 && allSchoolStudents.length > 0 && (isManualRefresh || schoolDataFetchedThisRun)) {
+                    toast({ title: "No Attendance Data", description: "No attendance records found for the selected date." });
+                }
+            } else {
+                toast({ variant: "destructive", title: "Attendance Data Error", description: attendanceResult.error || "Could not fetch attendance data." });
+                setAttendanceRecords([]);
+            }
+        } catch (error) {
+            toast({ variant: "destructive", title: "Error Fetching Attendance", description: "An error occurred while fetching attendance."});
+            console.error("Error fetching attendance data:", error);
+            setAttendanceRecords([]);
         }
     } else {
-        setAttendanceRecords([]); // Clear if no date
+        setAttendanceRecords([]); 
     }
     
     setIsLoading(false);
-  }, [authUser, reportDate, toast, allSchoolStudents, schoolDetails, allSchoolPayments]); 
+  }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length]); // Dependencies are now more stable
 
   useEffect(() => {
-    if (authUser && authUser.schoolId && reportDate) { // Initial load for attendance uses reportDate
+    if (authUser && authUser.schoolId) {
       loadReportData(false); 
-    } else if (authUser && authUser.schoolId && (!allSchoolStudents.length || !schoolDetails || !allSchoolPayments.length)) {
-        // Initial load for fee data if attendance specific data not ready (e.g. reportDate not set)
-        loadReportData(false);
     }
-  }, [authUser, reportDate, loadReportData, allSchoolStudents.length, schoolDetails, allSchoolPayments.length]);
+  }, [authUser, reportDate, loadReportData]);
 
 
   const handleDownloadAttendancePdf = async () => {
@@ -376,13 +377,13 @@ export default function AdminReportsPage() {
     setIsDownloadingPdf(true);
     try {
       const canvas = await html2canvas(reportContent, {
-        scale: 2, // Increase scale for better quality
+        scale: 2, 
         useCORS: true,
-        logging: true,
+        logging: false, // Turned off excessive logging
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
-        orientation: 'landscape', // 'portrait' or 'landscape'
+        orientation: 'landscape', 
         unit: 'mm',
         format: 'a4',
       });
@@ -393,14 +394,12 @@ export default function AdminReportsPage() {
       const imgWidth = imgProps.width;
       const imgHeight = imgProps.height;
       
-      // Calculate the aspect ratio
       const ratio = imgWidth / imgHeight;
-      let newImgWidth = pdfWidth - 20; // 10mm margin on each side
+      let newImgWidth = pdfWidth - 20; 
       let newImgHeight = newImgWidth / ratio;
 
-      // If new height is too large, adjust based on height
       if (newImgHeight > pdfHeight - 20) {
-        newImgHeight = pdfHeight - 20; // 10mm margin on top/bottom
+        newImgHeight = pdfHeight - 20; 
         newImgWidth = newImgHeight * ratio;
       }
       
@@ -494,8 +493,8 @@ export default function AdminReportsPage() {
           ) : !reportDate ? (
              <p className="text-center text-muted-foreground py-4">Please select a date to generate the attendance report.</p>
           ) : classSummaries.length > 0 && overallSummary ? (
-            <div id="attendanceReportContent" className="p-4 bg-card rounded-md"> {/* Added ID and padding for PDF capture */}
-            <Card className="mb-6 bg-secondary/30 border-none shadow-none"> {/* Make internal card less prominent for PDF */}
+            <div id="attendanceReportContent" className="p-4 bg-card rounded-md"> 
+            <Card className="mb-6 bg-secondary/30 border-none shadow-none"> 
                 <CardHeader className="pt-2 pb-2">
                     <CardTitle className="text-lg">Overall School Attendance - {format(reportDate, "PPP")}</CardTitle>
                 </CardHeader>
@@ -656,3 +655,4 @@ export default function AdminReportsPage() {
     </div>
   );
 }
+
