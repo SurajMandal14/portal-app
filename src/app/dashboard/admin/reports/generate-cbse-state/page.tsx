@@ -16,7 +16,13 @@ import CBSEStateBack, {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Printer, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import { FileText, Printer, RotateCcw, Eye, EyeOff, Save, Loader2, User, School } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import type { AuthUser } from '@/types/user';
+import { saveReportCard } from '@/app/actions/reports';
+import type { ReportCardData } from '@/types/report';
+import { Input } from '@/components/ui/input'; // For Student ID input
+import { Label } from '@/components/ui/label'; // For Student ID label
 
 // --- Defaults for Front Side ---
 const mainSubjectsListFront = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"];
@@ -31,19 +37,19 @@ const getDefaultCoCurricularSaDataFront = (): FrontCoCurricularSAData => ({
 });
 
 const defaultStudentDataFront: FrontStudentData = {
-  udiseCodeSchoolName: '1234567890 XYZ Public School',
-  studentName: 'John Doe',
-  fatherName: 'Richard Doe',
-  motherName: 'Jane Doe',
-  class: 'X',
-  section: 'A',
-  studentIdNo: 'S1001',
-  rollNo: '101',
+  udiseCodeSchoolName: 'School UDISE & Name',
+  studentName: 'Student Name',
+  fatherName: 'Father Name',
+  motherName: 'Mother Name',
+  class: 'Class',
+  section: 'Section',
+  studentIdNo: 'Student ID',
+  rollNo: 'Roll No',
   medium: 'English',
-  dob: '01/01/2008',
-  admissionNo: 'A123',
-  examNo: 'E1001',
-  aadharNo: '1234 5678 9012',
+  dob: 'DD/MM/YYYY',
+  admissionNo: 'Admission No',
+  examNo: 'Exam No',
+  aadharNo: 'Aadhar No',
 };
 
 const defaultFaMarksFront: FrontSubjectFAData[] = mainSubjectsListFront.map(() => getDefaultSubjectFaDataFront());
@@ -76,6 +82,10 @@ const defaultAttendanceDataBack: BackAttendanceMonthData[] = Array(11).fill(null
 
 
 export default function GenerateCBSEStateReportPage() {
+  const { toast } = useToast();
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [targetStudentId, setTargetStudentId] = useState<string>(""); // For saving
+
   // Front Side State
   const [studentData, setStudentData] = useState<FrontStudentData>(defaultStudentDataFront);
   const [faMarks, setFaMarks] = useState<FrontSubjectFAData[]>(defaultFaMarksFront);
@@ -89,9 +99,26 @@ export default function GenerateCBSEStateReportPage() {
   const [finalOverallGradeInput, setFinalOverallGradeInput] = useState<string | null>(null);
 
   const [showBackSide, setShowBackSide] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    const storedUser = localStorage.getItem('loggedInUser');
+    if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
+      try {
+        const parsedUser: AuthUser = JSON.parse(storedUser);
+        if (parsedUser && parsedUser.role === 'admin' && parsedUser.schoolId) {
+          setAuthUser(parsedUser);
+          // Pre-fill school name in studentData if available from authUser's school context (optional)
+          // This would require fetching school details by schoolId, or having schoolName in AuthUser
+        } else {
+          toast({ variant: "destructive", title: "Access Denied", description: "You must be an admin." });
+        }
+      } catch (e) {
+        toast({ variant: "destructive", title: "Session Error", description: "Failed to load user data." });
+      }
+    }
+  }, [toast]);
 
-  // Calculate FA Totals (out of 200M) from front-side data to pass to back-side
   const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string, paperNameForBack: string): number | null => {
     let subjectIndexFront = -1;
     if (subjectNameForBack === "Science" && paperNameForBack === "Physics") {
@@ -113,7 +140,6 @@ export default function GenerateCBSEStateReportPage() {
     return overallTotal;
   }, [faMarks]);
 
-  // Update saData with calculated faTotal200M whenever faMarks changes
   useEffect(() => {
     setSaData(prevSaData => 
       prevSaData.map(row => ({
@@ -123,15 +149,13 @@ export default function GenerateCBSEStateReportPage() {
     );
   }, [faMarks, calculateFaTotal200MForRow]);
 
-
-  // --- Front Side Handlers ---
   const handleStudentDataChange = (field: keyof FrontStudentData, value: string) => {
     setStudentData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleFaMarksChange = (subjectIndex: number, faPeriod: keyof FrontSubjectFAData, toolKey: keyof FrontMarksEntry, value: string) => {
     const numValue = parseInt(value, 10);
-    const maxMark = toolKey === 'tool4' ? 20 : 10; // Max for tool4 is 20, others 10
+    const maxMark = toolKey === 'tool4' ? 20 : 10;
     const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), maxMark);
     
     setFaMarks(prev => {
@@ -139,10 +163,7 @@ export default function GenerateCBSEStateReportPage() {
         if (idx === subjectIndex) {
           return {
             ...subj,
-            [faPeriod]: {
-              ...subj[faPeriod],
-              [toolKey]: validatedValue,
-            }
+            [faPeriod]: { ...subj[faPeriod], [toolKey]: validatedValue }
           };
         }
         return subj;
@@ -160,19 +181,13 @@ export default function GenerateCBSEStateReportPage() {
         if (idx === subjectIndex) {
           const updatedSubj = { ...coSubj };
           const keyToUpdate = `${saPeriod}${type}` as keyof FrontCoCurricularSAData;
-          
           if (type === 'Marks' && validatedValue !== null) {
             const maxKey = `${saPeriod}Max` as keyof FrontCoCurricularSAData;
-            const currentMax = updatedSubj[maxKey] as number | null; // Explicitly cast
-            if (currentMax !== null && validatedValue > currentMax) {
-              validatedValue = currentMax;
-            }
+            const currentMax = updatedSubj[maxKey] as number | null;
+            if (currentMax !== null && validatedValue > currentMax) validatedValue = currentMax;
           }
-          if (type === 'Max' && validatedValue !== null && validatedValue < 1) { // Max should be at least 1
-            validatedValue = 1;
-          }
-
-          (updatedSubj[keyToUpdate] as number | null) = validatedValue; // Cast to allow assignment
+          if (type === 'Max' && validatedValue !== null && validatedValue < 1) validatedValue = 1;
+          (updatedSubj[keyToUpdate] as number | null) = validatedValue;
           return updatedSubj;
         }
         return coSubj;
@@ -181,19 +196,15 @@ export default function GenerateCBSEStateReportPage() {
     });
   };
 
-  // --- Back Side Handlers ---
   const handleSaDataChange = (rowIndex: number, period: 'sa1' | 'sa2', asKey: keyof BackSAPeriodMarksEntry, value: string) => {
     const numValue = parseInt(value, 10);
-    const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), 20); // AS parts are max 20
+    const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), 20);
 
     setSaData(prev => prev.map((row, idx) => {
       if (idx === rowIndex) {
         const updatedRow = { ...row };
-        if (period === 'sa1') {
-          updatedRow.sa1Marks = { ...updatedRow.sa1Marks, [asKey]: validatedValue };
-        } else { // period === 'sa2'
-          updatedRow.sa2Marks = { ...updatedRow.sa2Marks, [asKey]: validatedValue };
-        }
+        if (period === 'sa1') updatedRow.sa1Marks = { ...updatedRow.sa1Marks, [asKey]: validatedValue };
+        else updatedRow.sa2Marks = { ...updatedRow.sa2Marks, [asKey]: validatedValue };
         return updatedRow;
       }
       return row;
@@ -217,28 +228,25 @@ export default function GenerateCBSEStateReportPage() {
   };
 
   const handleFinalOverallGradeInputChange = (value: string) => {
-      setFinalOverallGradeInput(value); // Usually this will be read-only and derived, but allow prop for now
+      setFinalOverallGradeInput(value);
   }
 
   const handleLogData = () => {
-    console.log("Current Report Card Data (Front):", {
-      studentData,
-      faMarks,
-      coMarks,
-      frontSecondLanguage,
-      frontAcademicYear
+    console.log("Report Card Data:", {
+      targetStudentId,
+      academicYear: frontAcademicYear,
+      secondLanguage: frontSecondLanguage,
+      studentInfo: studentData,
+      formativeAssessments: faMarks,
+      coCurricularAssessments: coMarks,
+      summativeAssessments: saData,
+      attendance,
+      finalOverallGrade: finalOverallGradeInput,
     });
-    console.log("Current Report Card Data (Back):", {
-      saData,
-      attendanceData,
-      finalOverallGradeInput
-    });
-    alert("Report data logged to console. Check developer tools.");
+    toast({ title: "Data Logged", description: "Current report card data logged to console."});
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
   
   const handleResetData = () => {
     setStudentData(defaultStudentDataFront);
@@ -246,14 +254,52 @@ export default function GenerateCBSEStateReportPage() {
     setCoMarks(coCurricularSubjectsListFront.map(() => getDefaultCoCurricularSaDataFront()));
     setFrontSecondLanguage('Hindi');
     setFrontAcademicYear('2023-2024');
-
     setSaData(defaultSaDataBack.map(row => ({
         ...row,
-        faTotal200M: calculateFaTotal200MForRow(row.subjectName, row.paper) // Recalculate based on reset front data
+        faTotal200M: calculateFaTotal200MForRow(row.subjectName, row.paper)
     })));
     setAttendanceData(defaultAttendanceDataBack);
     setFinalOverallGradeInput(null);
+    setTargetStudentId("");
+    toast({ title: "Data Reset", description: "All fields have been reset to default values."});
   }
+
+  const handleSaveReportCard = async () => {
+    if (!authUser || !authUser.schoolId || !authUser._id) {
+      toast({ variant: "destructive", title: "Error", description: "Admin session not found." });
+      return;
+    }
+    if (!targetStudentId) {
+      toast({ variant: "destructive", title: "Missing Student ID", description: "Please enter the Student ID for whom this report is being generated." });
+      return;
+    }
+
+    setIsSaving(true);
+    const reportPayload: Omit<ReportCardData, '_id' | 'createdAt' | 'updatedAt'> = {
+      studentId: targetStudentId,
+      schoolId: authUser.schoolId.toString(),
+      academicYear: frontAcademicYear,
+      reportCardTemplateKey: 'cbse_state', // Hardcoding for this specific template page
+      studentInfo: studentData,
+      formativeAssessments: faMarks,
+      coCurricularAssessments: coMarks,
+      secondLanguage: frontSecondLanguage,
+      summativeAssessments: saData,
+      attendance: attendanceData,
+      finalOverallGrade: finalOverallGradeInput, // This might be derived or directly from input
+      generatedByAdminId: authUser._id.toString(),
+      term: "Annual", // Placeholder, can be made dynamic later
+    };
+
+    const result = await saveReportCard(reportPayload);
+    setIsSaving(false);
+
+    if (result.success) {
+      toast({ title: "Report Card Saved", description: result.message + (result.reportCardId ? ` ID: ${result.reportCardId}` : '') });
+    } else {
+      toast({ variant: "destructive", title: "Save Failed", description: result.error || result.message });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -268,7 +314,7 @@ export default function GenerateCBSEStateReportPage() {
             width: 100% !important; 
             margin: 0 !important; 
             padding: 0 !important; 
-            transform: scale(0.95); /* Optional: Adjust scale for printing */
+            transform: scale(0.95); 
             transform-origin: top left;
           }
           .no-print { display: none !important; }
@@ -284,45 +330,61 @@ export default function GenerateCBSEStateReportPage() {
             Fill in the details below to generate the report card. All calculations will update automatically.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row gap-2">
-            <Button onClick={handleLogData}>Log Current Report Data</Button>
-            <Button onClick={handlePrint} variant="outline"><Printer className="mr-2 h-4 w-4"/> Print Report</Button>
-            <Button onClick={() => setShowBackSide(prev => !prev)} variant="secondary">
-                {showBackSide ? <Eye className="mr-2 h-4 w-4" /> : <EyeOff className="mr-2 h-4 w-4" />}
-                {showBackSide ? "View Front Side" : "View Back Side"}
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row gap-2 items-end">
+            <div className="w-full sm:w-auto">
+              <Label htmlFor="targetStudentIdInput" className="mb-1 flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Target Student ID</Label>
+              <Input 
+                id="targetStudentIdInput"
+                placeholder="Enter Student ID to save for"
+                value={targetStudentId}
+                onChange={(e) => setTargetStudentId(e.target.value)}
+                className="w-full sm:min-w-[250px]"
+                disabled={isSaving}
+              />
+              <p className="text-xs text-muted-foreground mt-1">This ID links the report to a student in the system.</p>
+            </div>
+            {authUser?.schoolId && 
+              <div className="w-full sm:w-auto">
+                <Label className="mb-1 flex items-center"><School className="mr-2 h-4 w-4 text-muted-foreground"/>School ID (Auto)</Label>
+                <Input value={authUser.schoolId.toString()} disabled className="w-full sm:min-w-[200px]" />
+              </div>
+            }
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleSaveReportCard} disabled={isSaving || !targetStudentId || !authUser}>
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+              {isSaving ? "Saving..." : "Save Report Card"}
             </Button>
-            <Button onClick={handleResetData} variant="destructive" className="ml-auto"><RotateCcw className="mr-2 h-4 w-4"/> Reset All Data</Button>
+            <Button onClick={handleLogData} variant="outline">Log Current Data</Button>
+            <Button onClick={handlePrint} variant="outline"><Printer className="mr-2 h-4 w-4"/> Print Preview</Button>
+            <Button onClick={() => setShowBackSide(prev => !prev)} variant="secondary" className="ml-auto mr-2">
+                {showBackSide ? <Eye className="mr-2 h-4 w-4" /> : <EyeOff className="mr-2 h-4 w-4" />}
+                {showBackSide ? "View Front" : "View Back"}
+            </Button>
+            <Button onClick={handleResetData} variant="destructive"><RotateCcw className="mr-2 h-4 w-4"/> Reset All</Button>
+          </div>
         </CardContent>
       </Card>
 
       <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${showBackSide ? 'hidden' : ''}`}>
         <CBSEStateFront
-          studentData={studentData}
-          onStudentDataChange={handleStudentDataChange}
-          faMarks={faMarks}
-          onFaMarksChange={handleFaMarksChange}
-          coMarks={coMarks}
-          onCoMarksChange={handleCoMarksChange}
-          secondLanguage={frontSecondLanguage}
-          onSecondLanguageChange={setFrontSecondLanguage}
-          academicYear={frontAcademicYear}
-          onAcademicYearChange={setFrontAcademicYear}
+          studentData={studentData} onStudentDataChange={handleStudentDataChange}
+          faMarks={faMarks} onFaMarksChange={handleFaMarksChange}
+          coMarks={coMarks} onCoMarksChange={handleCoMarksChange}
+          secondLanguage={frontSecondLanguage} onSecondLanguageChange={setFrontSecondLanguage}
+          academicYear={frontAcademicYear} onAcademicYearChange={setFrontAcademicYear}
         />
       </div>
       
-      {/* This div helps ensure the back side starts on a new page when printing */}
-      {/* <div className={`${!showBackSide ? 'hidden' : ''} page-break`}></div>  */}
-
+      {showBackSide && <div className="page-break no-print"></div>}
 
       <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${!showBackSide ? 'hidden' : ''}`}>
         <CBSEStateBack
-          saData={saData}
-          onSaDataChange={handleSaDataChange}
+          saData={saData} onSaDataChange={handleSaDataChange}
           onFaTotalChange={handleFaTotalChangeBack}
-          attendanceData={attendanceData}
-          onAttendanceDataChange={handleAttendanceDataChange}
-          finalOverallGradeInput={finalOverallGradeInput}
-          onFinalOverallGradeInputChange={setFinalOverallGradeInput}
+          attendanceData={attendanceData} onAttendanceDataChange={handleAttendanceDataChange}
+          finalOverallGradeInput={finalOverallGradeInput} onFinalOverallGradeInputChange={setFinalOverallGradeInput}
           secondLanguageSubjectName={frontSecondLanguage} 
         />
       </div>
