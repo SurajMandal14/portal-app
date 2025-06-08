@@ -100,28 +100,13 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
     
     const faTotal200M_val = rowData.faTotal200M || 0;
 
-    // SA1 Final (Scaled from 80M to 100M implicitly by SA1 total itself if SA1 total is out of 80, the script scales SA total to 100M equivalent)
-    // The script implies SA1 total (from 6 AS inputs up to 20 each, max 120, but shows 80M in header?) is scaled.
-    // Let's assume SA total is out of 80 as per header: "Summative Assessment -1 (80 / 100 M)"
-    // The JS calculates: const sa1Final = Math.round((sa1Total / 80) * 100); -> this is if sa1Total is the 80M score
-    // If sa1Total is actually sum of 6x20 = 120M, the scaling needs clarification.
-    // For now, assuming sa1Total is the raw sum and the "80M" in header is the target it's scaled to for some calcs.
-    // The provided script's SA1-Final calculation is: const sa1Final = Math.round((sa1Total / 80) * 100); this implies sa1Total is already the value out of 80.
-    // Let's assume SA1 Total and SA2 Total are scores out of 80 for calculation purposes of "Internal" and "Final Total".
-    const sa1ForCalc = sa1Total > 80 ? 80 : sa1Total; // Cap at 80 if sum exceeds
-    const sa2ForCalc = sa2Total > 80 ? 80 : sa2Total; // Cap at 80
+    const sa1ForCalc = sa1Total > 80 ? 80 : sa1Total; 
+    const sa2ForCalc = sa2Total > 80 ? 80 : sa2Total; 
 
     const faSa1Total = faTotal200M_val + sa1ForCalc; 
     
-    // Internal (20M) = (FA1-4 (200M) + SA1 (80M) + SA2 (80M)) / 18
-    // The script has: (faSa1Total + sa2Total) / 18; which is ( (FA_200M + SA1_80M) + SA2_80M ) / 18
-    // This means (200 + 80 + 80) = 360. 360/18 = 20. This matches the note.
     const internalMarks = Math.round((faTotal200M_val + sa1ForCalc + sa2ForCalc) / 18);
 
-    // Final Total (100M) = Internal (20M) + SA2 (scaled to 80M if it was originally 100M, but here it's directly 80M from header)
-    // The script has: internal + sa2Final; where sa2Final is Math.round((sa2Total / 80) * 100);
-    // This seems to imply SA2 itself is scaled up to 80 to make the final total out of 100 (20 internal + 80 SA2_scaled)
-    // Let's use sa2ForCalc (capped at 80) directly as per "SA2 (80M)" in "TOTAL (100M)" column.
     const finalTotal100M = internalMarks + sa2ForCalc; 
     const finalGrade = finalGradeScale(finalTotal100M, isSecondLang);
     
@@ -133,7 +118,6 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
     };
   };
   
-  // Calculate overall final grade for the input field
   const calculateOverallFinalGrade = () => {
     const allFinalGrades: string[] = [];
     saData.forEach((rowData, rowIndex) => {
@@ -171,33 +155,33 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   return (
     <>
       <style jsx global>{`
-        .report-card-back-container body, .report-card-back-container { /* Apply to container too */
+        .report-card-back-container body, .report-card-back-container {
           font-family: Arial, sans-serif;
-          font-size: 10px; /* Smaller base font for back */
-          padding: 10px; /* Reduced padding */
+          font-size: 10px; 
+          padding: 10px; 
           color: #000;
           background-color: #fff;
         }
         .report-card-back-container table {
           border-collapse: collapse;
           width: 100%;
-          margin-bottom: 10px; /* Reduced margin */
+          margin-bottom: 10px; 
         }
         .report-card-back-container th, .report-card-back-container td {
           border: 1px solid #000;
           text-align: center;
-          padding: 2px; /* Reduced padding */
-          height: 20px; /* Fixed height for cells */
+          padding: 2px; 
+          height: 20px; 
         }
         .report-card-back-container th {
           background-color: #f0f0f0;
-          font-size: 10px; /* Ensure th font size */
+          font-size: 10px; 
         }
         .report-card-back-container td {
-            font-size: 10px; /* Ensure td font size */
+            font-size: 10px; 
         }
         .report-card-back-container .small {
-          font-size: 8px; /* Even smaller */
+          font-size: 8px; 
         }
         .report-card-back-container .bold {
           font-weight: bold;
@@ -206,13 +190,13 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           white-space: nowrap;
         }
         .report-card-back-container input[type="number"], .report-card-back-container input[type="text"] {
-          width: 35px; /* Slightly wider for better UX */
+          width: 35px; 
           text-align: center;
           border: 1px solid #ccc;
-          font-size: 10px; /* Match cell font size */
+          font-size: 10px; 
           padding: 1px;
           box-sizing: border-box;
-          -moz-appearance: textfield; /* Firefox */
+          -moz-appearance: textfield; 
         }
         .report-card-back-container input::-webkit-outer-spin-button,
         .report-card-back-container input::-webkit-inner-spin-button {
@@ -220,11 +204,11 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           margin: 0;
         }
         .report-card-back-container .calculated {
-          background-color: #e9e9e9; /* Slightly lighter grey */
+          background-color: #e9e9e9; 
           font-weight: bold;
         }
         .report-card-back-container h2 {
-            font-size: 14px; /* Adjusted heading */
+            font-size: 14px; 
         }
         .report-card-back-container .subject-cell {
             text-align: left;
@@ -237,7 +221,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             vertical-align: middle;
         }
         .report-card-back-container .attendance-table input[type="number"] {
-            width: 40px; /* Wider for attendance */
+            width: 40px; 
         }
          .report-card-back-container .final-grade-input {
             width: 60px !important;
@@ -257,13 +241,11 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
               <th colSpan={8}>Summative Assessment -2 (80 M)</th>
               <th colSpan={7}>Final Result (100 M)</th>
             </tr>
-            <tr>
-              {/* Empty row for spacing as in HTML, or can be removed if not needed for structure */}
+            <tr>{/* Empty row for table structure as per original HTML. Ensures correct row spanning. */}
             </tr>
-            <tr>
+            <tr><th>AS 1</th><th>AS 2</th><th>AS 3</th><th>AS 4</th><th>AS 5</th><th>AS 6</th><th>TOTAL</th><th>GRADE</th>
               <th>AS 1</th><th>AS 2</th><th>AS 3</th><th>AS 4</th><th>AS 5</th><th>AS 6</th><th>TOTAL</th><th>GRADE</th>
-              <th>AS 1</th><th>AS 2</th><th>AS 3</th><th>AS 4</th><th>AS 5</th><th>AS 6</th><th>TOTAL</th><th>GRADE</th>
-              <th className="small">FA1-FA4<br />(200M)</th><th className="small">SA1<br />(80M)</th><th className="small">FA(Avg)+SA1<br />(100M)</th> {/* Changed Header */}
+              <th className="small">FA1-FA4<br />(200M)</th><th className="small">SA1<br />(80M)</th><th className="small">FA(Avg)+SA1<br />(100M)</th>
               <th className="small">Internal<br />(20M)</th><th className="small">SA2<br />(80M)</th><th className="small">TOTAL<br />(100M)</th><th>GRADE</th>
             </tr>
           </thead>
@@ -271,47 +253,39 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             {subjectStructure.map((subjectInfo) => 
               subjectInfo.papers.map((paperName, paperIndex) => {
                 currentRowIndex++;
-                const rowIndex = currentRowIndex; // Capture for use in lambdas
+                const rowIndex = currentRowIndex; 
                 const rowData = saData[rowIndex];
                 if (!rowData) return <tr key={`empty-${rowIndex}`}><td colSpan={23}>Error: Data missing for row {rowIndex + 1}</td></tr>;
                 
                 const derived = calculateRowDerivedData(rowData, rowIndex);
                 const faTotal200M_display = rowData.faTotal200M ?? '';
                 
-                // This logic assumes that "FA(Avg)+SA1 (100M)" means average of FAs (200M -> 50M scale) + SA1 (80M scaled to 50M)
-                // FA Avg (out of 50) = FA Total (out of 200) / 4
-                // SA1 (out of 50 for avg) = SA1 Total (out of 80) * (50/80)
-                // So, FA(Avg)+SA1 (100M) = (FA_Total_200M / 4) + (SA1_Total_80M * 5/8)
                 const faAvg50 = (rowData.faTotal200M || 0) / 4;
                 const sa1_50_for_avg = (derived.sa1Total > 80 ? 80 : derived.sa1Total) * (50/80);
                 const faAvgPlusSa1_100M = Math.round(faAvg50 + sa1_50_for_avg);
-
 
                 return (
                   <tr key={`${subjectInfo.name}-${paperName}`}>
                     {paperIndex === 0 && <td rowSpan={subjectInfo.papers.length} className="subject-cell">{subjectInfo.name}</td>}
                     <td className="paper-cell">{paperName}</td>
                     
-                    {/* SA1 Marks */}
                     {(Object.keys(rowData.sa1Marks) as Array<keyof SAPeriodMarksEntry>).map(asKey => (
                       <td key={`sa1-${asKey}`}><input type="number" value={rowData.sa1Marks[asKey] ?? ''} min="0" max="20" onChange={e => onSaDataChange(rowIndex, 'sa1', asKey, e.target.value)} /></td>
                     ))}
                     <td className="sa1-total calculated">{derived.sa1Total}</td>
                     <td className="sa1-grade calculated">{derived.sa1Grade}</td>
 
-                    {/* SA2 Marks */}
                     {(Object.keys(rowData.sa2Marks) as Array<keyof SAPeriodMarksEntry>).map(asKey => (
                       <td key={`sa2-${asKey}`}><input type="number" value={rowData.sa2Marks[asKey] ?? ''} min="0" max="20" onChange={e => onSaDataChange(rowIndex, 'sa2', asKey, e.target.value)} /></td>
                     ))}
                     <td className="sa2-total calculated">{derived.sa2Total}</td>
                     <td className="sa2-grade calculated">{derived.sa2Grade}</td>
 
-                    {/* Final Result */}
                     <td><input type="number" value={faTotal200M_display} min="0" max="200" onChange={e => onFaTotalChange(rowIndex, e.target.value)} /></td>
-                    <td className="calculated">{derived.sa1Total > 80 ? 80 : derived.sa1Total}</td> {/* SA1 (80M) capped */}
-                    <td className="calculated">{faAvgPlusSa1_100M}</td> {/* FA(Avg)+SA1 (100M) */}
+                    <td className="calculated">{derived.sa1Total > 80 ? 80 : derived.sa1Total}</td>
+                    <td className="calculated">{faAvgPlusSa1_100M}</td>
                     <td className="internal calculated">{derived.internalMarks}</td>
-                    <td className="calculated">{derived.sa2Total > 80 ? 80 : derived.sa2Total}</td> {/* SA2 (80M) capped */}
+                    <td className="calculated">{derived.sa2Total > 80 ? 80 : derived.sa2Total}</td>
                     <td className="final-total calculated">{derived.finalTotal100M}</td>
                     <td className="final-grade calculated">{derived.finalGrade}</td>
                   </tr>
@@ -340,7 +314,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
               ))}
               <td className="calculated">{totalWorkingDays}</td>
               <td rowSpan={2} className="calculated">{attendancePercentage}%</td>
-              <td rowSpan={2}><input type="text" style={{width:'50px'}} /></td> {/* Result input */}
+              <td rowSpan={2}><input type="text" style={{width:'50px'}} /></td>
             </tr>
             <tr>
               <td>No. of days present</td>
