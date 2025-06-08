@@ -104,12 +104,15 @@ export default function FeeManagementPage() {
       return;
     }
     setIsLoading(true);
+    console.log("FeeManagementPage: fetchSchoolDataAndPayments called for schoolId:", authUser.schoolId);
     try {
       const [schoolResult, usersResult, paymentsResult] = await Promise.all([
         getSchoolById(authUser.schoolId.toString()),
         getSchoolUsers(authUser.schoolId.toString()),
         getFeePaymentsBySchool(authUser.schoolId.toString())
       ]);
+
+      console.log("FeeManagementPage: Initial paymentsResult:", JSON.stringify(paymentsResult, null, 2));
 
       if (schoolResult.success && schoolResult.school) {
         setSchoolDetails(schoolResult.school);
@@ -128,15 +131,18 @@ export default function FeeManagementPage() {
 
       if (paymentsResult.success && paymentsResult.payments) {
         setAllSchoolPayments(paymentsResult.payments);
+         console.log("FeeManagementPage: Initial setAllSchoolPayments called with:", JSON.stringify(paymentsResult.payments, null, 2));
       } else {
         toast({ variant: "warning", title: "Payment Info", description: paymentsResult.message || "Could not load payment history or none found." });
         setAllSchoolPayments([]);
+        console.warn("FeeManagementPage: Initial payments fetch failed or returned no payments. paymentsResult:", paymentsResult);
       }
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred fetching school data." });
       setSchoolDetails(null);
       setAllStudents([]);
       setAllSchoolPayments([]);
+      console.error("FeeManagementPage: Error in fetchSchoolDataAndPayments:", error);
     } finally {
       setIsLoading(false);
     }
@@ -162,7 +168,6 @@ export default function FeeManagementPage() {
   const selectedStudentFullData = selectedStudentId ? studentFeeList.find(s => s._id.toString() === selectedStudentId) : null;
 
   useEffect(() => {
-    // Initialize date on client-side
     if (selectedStudentFullData) {
       setPaymentAmount(selectedStudentFullData.dueAmount > 0 ? selectedStudentFullData.dueAmount : "");
       setPaymentDate(new Date()); 
@@ -195,14 +200,18 @@ export default function FeeManagementPage() {
     };
 
     const result = await recordFeePayment(payload);
-    setIsSubmittingPayment(false);
-
+    
     if (result.success) {
       toast({ title: "Payment Recorded", description: result.message });
       if (authUser?.schoolId) {
+        console.log("handleRecordPayment: Re-fetching payments after successful record...");
         const paymentsResult = await getFeePaymentsBySchool(authUser.schoolId.toString());
+        console.log("handleRecordPayment: Re-fetched paymentsResult:", JSON.stringify(paymentsResult, null, 2));
         if (paymentsResult.success && paymentsResult.payments) {
           setAllSchoolPayments(paymentsResult.payments); 
+          console.log("handleRecordPayment: setAllSchoolPayments called with:", JSON.stringify(paymentsResult.payments, null, 2));
+        } else {
+           console.warn("handleRecordPayment: Failed to re-fetch payments or no payments found after record. Message:", paymentsResult.message);
         }
       }
       setSelectedStudentId(null); 
@@ -213,13 +222,14 @@ export default function FeeManagementPage() {
     } else {
       toast({ variant: "destructive", title: "Payment Failed", description: result.error || result.message });
     }
+    setIsSubmittingPayment(false);
   };
 
   const handleGenerateReceipt = (studentId: string) => {
     const student = studentFeeList.find(s => s._id.toString() === studentId);
     
     console.log("handleGenerateReceipt: studentId to find:", studentId);
-    console.log("handleGenerateReceipt: found student object from studentFeeList:", student);
+    console.log("handleGenerateReceipt: found student object from studentFeeList:", student ? JSON.stringify(student, null, 2) : "Not found");
     console.log("handleGenerateReceipt: current allSchoolPayments state:", JSON.stringify(allSchoolPayments, null, 2));
 
     if (!student || !schoolDetails) {
@@ -227,10 +237,7 @@ export default function FeeManagementPage() {
         return;
     }
 
-    const studentPayments = allSchoolPayments.filter(p => {
-      // console.log(`Comparing payment studentId: '${p.studentId}' (type: ${typeof p.studentId}) with target studentId: '${studentId}' (type: ${typeof studentId})`);
-      return p.studentId === studentId; // p.studentId is already a string from server action
-    });
+    const studentPayments = allSchoolPayments.filter(p => p.studentId === studentId);
     console.log("handleGenerateReceipt: filtered studentPayments:", JSON.stringify(studentPayments, null, 2));
 
 
@@ -453,6 +460,5 @@ export default function FeeManagementPage() {
     </div>
   );
 }
-
 
     
