@@ -162,6 +162,7 @@ export default function FeeManagementPage() {
   const selectedStudentFullData = selectedStudentId ? studentFeeList.find(s => s._id.toString() === selectedStudentId) : null;
 
   useEffect(() => {
+    // Initialize date on client-side
     if (selectedStudentFullData) {
       setPaymentAmount(selectedStudentFullData.dueAmount > 0 ? selectedStudentFullData.dueAmount : "");
       setPaymentDate(new Date()); 
@@ -201,7 +202,7 @@ export default function FeeManagementPage() {
       if (authUser?.schoolId) {
         const paymentsResult = await getFeePaymentsBySchool(authUser.schoolId.toString());
         if (paymentsResult.success && paymentsResult.payments) {
-          setAllSchoolPayments(paymentsResult.payments); // This will trigger re-calculation
+          setAllSchoolPayments(paymentsResult.payments); 
         }
       }
       setSelectedStudentId(null); 
@@ -216,18 +217,28 @@ export default function FeeManagementPage() {
 
   const handleGenerateReceipt = (studentId: string) => {
     const student = studentFeeList.find(s => s._id.toString() === studentId);
+    
+    console.log("handleGenerateReceipt: studentId to find:", studentId);
+    console.log("handleGenerateReceipt: found student object from studentFeeList:", student);
+    console.log("handleGenerateReceipt: current allSchoolPayments state:", JSON.stringify(allSchoolPayments, null, 2));
+
     if (!student || !schoolDetails) {
         toast({variant: "destructive", title: "Error", description: "Student or school details not found."});
         return;
     }
 
-    const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === studentId);
+    const studentPayments = allSchoolPayments.filter(p => {
+      // console.log(`Comparing payment studentId: '${p.studentId}' (type: ${typeof p.studentId}) with target studentId: '${studentId}' (type: ${typeof studentId})`);
+      return p.studentId === studentId; // p.studentId is already a string from server action
+    });
+    console.log("handleGenerateReceipt: filtered studentPayments:", JSON.stringify(studentPayments, null, 2));
+
+
     if (studentPayments.length === 0) {
-        toast({title: "No Payments", description: `No payments found for ${student.name} to generate a receipt.`});
+        toast({title: "No Payments", description: `No payments found for ${student.name || 'this student'} to generate a receipt.`});
         return;
     }
 
-    // Sort payments by date to get the latest one
     const latestPayment = studentPayments.sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime())[0];
     
     if (latestPayment && latestPayment._id) {
@@ -442,3 +453,6 @@ export default function FeeManagementPage() {
     </div>
   );
 }
+
+
+    
