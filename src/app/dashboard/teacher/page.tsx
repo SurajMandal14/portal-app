@@ -4,14 +4,52 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { CheckSquare, BookOpen, MessageSquare, CalendarDays, User, Loader2, Info } from "lucide-react";
+import { CheckSquare, BookOpen, MessageSquare, CalendarDays, User, Loader2, Info, Users } from "lucide-react";
 import { useState, useEffect } from "react";
-import type { AuthUser } from "@/types/user"; // Assuming AuthUser type includes name and classId
+import type { AuthUser } from "@/types/user"; 
 import { useToast } from "@/hooks/use-toast";
+import { getStudentCountByClass } from "@/app/actions/schoolUsers";
+
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ElementType;
+  isLoading: boolean;
+  description?: string;
+  link?: string;
+  linkText?: string;
+}
+
+function StatCard({ title, value, icon: Icon, isLoading, description, link, linkText }: StatCardProps) {
+  return (
+    <Card className="shadow-sm hover:shadow-md transition-shadow">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className="h-5 w-5 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        ) : (
+          <div className="text-3xl font-bold">{value}</div>
+        )}
+        {description && !isLoading && <p className="text-xs text-muted-foreground">{description}</p>}
+        {link && linkText && !isLoading && (
+          <Link href={link} className="text-xs text-primary hover:underline mt-1 block">
+            {linkText}
+          </Link>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 
 export default function TeacherDashboardPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [studentCount, setStudentCount] = useState<number | null>(null);
+  const [isLoadingStudentCount, setIsLoadingStudentCount] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -24,8 +62,6 @@ export default function TeacherDashboardPage() {
           setAuthUser(parsedUser);
         } else {
           setAuthUser(null);
-          // Optional: Redirect or show access denied if not a teacher
-          // toast({ variant: "destructive", title: "Access Denied", description: "Not authorized."});
         }
       } catch(e) {
         console.error("TeacherDashboard: Failed to parse user from localStorage", e);
@@ -37,6 +73,25 @@ export default function TeacherDashboardPage() {
     }
     setIsLoading(false);
   }, [toast]);
+
+  useEffect(() => {
+    async function fetchStudentCount() {
+      if (authUser && authUser.schoolId && authUser.classId) {
+        setIsLoadingStudentCount(true);
+        const result = await getStudentCountByClass(authUser.schoolId.toString(), authUser.classId);
+        if (result.success && result.count !== undefined) {
+          setStudentCount(result.count);
+        } else {
+          toast({ variant: "warning", title: "Student Count", description: result.message || "Could not load student count."});
+          setStudentCount(null); // Set to null on error to differentiate from 0
+        }
+        setIsLoadingStudentCount(false);
+      } else {
+        setStudentCount(null); // Clear count if no classId or schoolId
+      }
+    }
+    fetchStudentCount();
+  }, [authUser, toast]);
 
   if (isLoading) {
     return (
@@ -74,8 +129,24 @@ export default function TeacherDashboardPage() {
           <p>Use the sections below to manage your daily tasks and access class resources.</p>
         </CardContent>
       </Card>
+      
+      {authUser.classId && (
+        <div className="grid gap-4 md:grid-cols-3">
+            <StatCard
+                title="Students in Class"
+                value={studentCount ?? 'N/A'}
+                icon={Users}
+                isLoading={isLoadingStudentCount}
+                description={assignedClass}
+            />
+             {/* Placeholder for more stats */}
+            <div /> 
+            <div /> 
+        </div>
+      )}
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pt-4">
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CheckSquare className="h-10 w-10 text-primary mb-2" />
@@ -145,3 +216,4 @@ export default function TeacherDashboardPage() {
     </div>
   );
 }
+

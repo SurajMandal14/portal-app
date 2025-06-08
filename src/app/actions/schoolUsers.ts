@@ -317,3 +317,36 @@ export async function getSchoolUserRoleCounts(schoolId: string): Promise<GetScho
     return { success: false, error: errorMessage, message: 'Failed to fetch user role counts.' };
   }
 }
+
+export interface GetStudentCountByClassResult {
+  success: boolean;
+  count?: number;
+  error?: string;
+  message?: string;
+}
+
+export async function getStudentCountByClass(schoolId: string, className: string): Promise<GetStudentCountByClassResult> {
+  try {
+    if (!ObjectId.isValid(schoolId)) {
+      return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.' };
+    }
+    if (!className || className.trim() === "") {
+      return { success: false, message: 'Class name must be provided.', error: 'Invalid class name.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const usersCollection = db.collection<User>('users');
+
+    const count = await usersCollection.countDocuments({
+      schoolId: new ObjectId(schoolId) as any,
+      classId: className,
+      role: 'student'
+    });
+
+    return { success: true, count };
+  } catch (error) {
+    console.error('Get student count by class server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch student count for the class.' };
+  }
+}
