@@ -3,8 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChartBig, CalendarDays, Loader2, Info, Filter } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { BarChartBig, CalendarDays, Loader2, Info } from "lucide-react"; // Removed Filter icon for now
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,7 +13,7 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { getDailyAttendanceForSchool } from "@/app/actions/attendance";
 import type { AttendanceRecord, AuthUser } from "@/types/attendance";
-import { getSchoolUsers } from "@/app/actions/schoolUsers"; // To get total students per class
+import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import type { User as AppUser } from "@/types/user";
 
 interface ClassAttendanceSummary {
@@ -45,7 +44,8 @@ export default function AdminReportsPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    setReportDate(new Date()); // Initialize date on client-side
+    // Initialize date on client-side
+    setReportDate(new Date()); 
 
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
@@ -67,26 +67,52 @@ export default function AdminReportsPage() {
     }
   }, [toast]);
 
-  const fetchSchoolStudents = useCallback(async (schoolId: string) => {
-    const studentsResult = await getSchoolUsers(schoolId);
-    if (studentsResult.success && studentsResult.users) {
-      setAllSchoolStudents(studentsResult.users.filter(u => u.role === 'student'));
-    } else {
-      toast({ variant: "warning", title: "Student Data", description: "Could not fetch student list for report generation." });
-      setAllSchoolStudents([]);
-    }
-  }, [toast]);
-
   const processAttendanceData = useCallback(() => {
-    if (!allSchoolStudents.length || !attendanceRecords.length) {
+    if (allSchoolStudents.length === 0 && attendanceRecords.length === 0) {
+       // If there are no students for the school at all, and no attendance, clear summaries.
       setClassSummaries([]);
       setOverallSummary(null);
       return;
     }
+    if (allSchoolStudents.length > 0 && attendanceRecords.length === 0) {
+        // Students exist, but no attendance records for the day (e.g., holiday, or not marked yet)
+        // Show classes with 0 attendance.
+        const summaries: ClassAttendanceSummary[] = allSchoolStudents
+            .reduce((acc, student) => { // Group students by classId
+                if (student.classId) {
+                    let classGroup = acc.find(g => g.className === student.classId);
+                    if (!classGroup) {
+                        classGroup = { className: student.classId, students: [] };
+                        acc.push(classGroup);
+                    }
+                    classGroup.students.push(student);
+                }
+                return acc;
+            }, [] as { className: string; students: AppUser[] }[])
+            .map(group => ({
+                className: group.className,
+                totalStudents: group.students.length,
+                present: 0,
+                absent: 0, // Or treat all as absent if no record means absent: group.students.length
+                late: 0,
+                attendancePercentage: 0,
+            }))
+            .sort((a, b) => a.className.localeCompare(b.className));
+        
+        setClassSummaries(summaries);
+        setOverallSummary({
+            totalStudents: allSchoolStudents.length,
+            totalPresent: 0,
+            totalAbsent: 0, // Or allSchoolStudents.length
+            totalLate: 0,
+            overallAttendancePercentage: 0,
+        });
+        return;
+    }
+
 
     const classMap = new Map<string, { students: AppUser[], present: number, absent: number, late: number }>();
 
-    // Initialize map with all classes and their students
     allSchoolStudents.forEach(student => {
       if (student.classId) {
         if (!classMap.has(student.classId)) {
@@ -96,7 +122,6 @@ export default function AdminReportsPage() {
       }
     });
     
-    // Populate attendance counts
     attendanceRecords.forEach(record => {
       if (classMap.has(record.className)) {
         const classData = classMap.get(record.className)!;
@@ -114,21 +139,31 @@ export default function AdminReportsPage() {
     const summaries: ClassAttendanceSummary[] = [];
     for (const [className, data] of classMap.entries()) {
       const totalStudentsInClass = data.students.length;
-      const attendedInClass = data.present + data.late;
+      // If attendance wasn't marked for some students in a class, they are effectively absent for that day's record.
+      const markedStudentsCount = data.present + data.absent + data.late;
+      const unmarkedAsAbsent = totalStudentsInClass - markedStudentsCount; // Students in class but not in attendance records
+
+      const actualPresent = data.present;
+      const actualLate = data.late;
+      const actualAbsent = data.absent + (unmarkedAsAbsent > 0 ? unmarkedAsAbsent : 0) ;
+
+
+      const attendedInClass = actualPresent + actualLate;
       const attendancePercentage = totalStudentsInClass > 0 ? Math.round((attendedInClass / totalStudentsInClass) * 100) : 0;
+      
       summaries.push({
         className,
         totalStudents: totalStudentsInClass,
-        present: data.present,
-        absent: data.absent,
-        late: data.late,
+        present: actualPresent,
+        absent: actualAbsent,
+        late: actualLate,
         attendancePercentage,
       });
 
       totalSchoolStudents += totalStudentsInClass;
-      totalSchoolPresent += data.present;
-      totalSchoolAbsent += data.absent;
-      totalSchoolLate += data.late;
+      totalSchoolPresent += actualPresent;
+      totalSchoolAbsent += actualAbsent;
+      totalSchoolLate += actualLate;
     }
 
     const overallAttended = totalSchoolPresent + totalSchoolLate;
@@ -146,56 +181,60 @@ export default function AdminReportsPage() {
 
   }, [allSchoolStudents, attendanceRecords]);
 
-
-  const fetchReportData = useCallback(async () => {
-    if (!authUser || !authUser.schoolId) {
-      if (authUser && !authUser.schoolId) {
-          toast({ variant: "destructive", title: "Error", description: "School information missing for admin." });
-      }
-      setAttendanceRecords([]);
-      setClassSummaries([]);
-      setOverallSummary(null);
-      return;
-    }
-    if (!reportDate) {
-      toast({ variant: "info", title: "Select Date", description: "Please select a date to generate the report." });
-      setAttendanceRecords([]);
-      setClassSummaries([]);
-      setOverallSummary(null);
-      return;
-    }
-
-    setIsLoading(true);
-    // Fetch all students first (or ensure it's already fetched and up-to-date)
-    if (allSchoolStudents.length === 0 || allSchoolStudents[0]?.schoolId?.toString() !== authUser.schoolId.toString()){
-        await fetchSchoolStudents(authUser.schoolId.toString());
-    }
-
-    const result = await getDailyAttendanceForSchool(authUser.schoolId.toString(), reportDate);
-    setIsLoading(false);
-
-    if (result.success && result.records) {
-      setAttendanceRecords(result.records);
-      if (result.records.length === 0 && allSchoolStudents.length > 0) {
-        toast({ title: "No Attendance Data", description: "No attendance records found for the selected date." });
-      }
-    } else {
-      toast({ variant: "destructive", title: "Failed to Load Report", description: result.error || "Could not fetch attendance data." });
-      setAttendanceRecords([]);
-    }
-    // processAttendanceData will be called by its own useEffect dependency change
-  }, [authUser, reportDate, toast, allSchoolStudents, fetchSchoolStudents]);
-
-  useEffect(() => {
-    if (authUser && authUser.schoolId && reportDate) {
-      fetchSchoolStudents(authUser.schoolId.toString()); // Fetch students when authUser and date are set
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authUser, reportDate]); // Don't add fetchSchoolStudents here to avoid loop
-
   useEffect(() => {
     processAttendanceData();
   }, [allSchoolStudents, attendanceRecords, processAttendanceData]);
+
+
+  const loadReportData = useCallback(async (isManualRefresh = false) => {
+    if (!authUser || !authUser.schoolId || !reportDate) {
+      setAllSchoolStudents([]);
+      setAttendanceRecords([]);
+      setIsLoading(false);
+      if (isManualRefresh && (!authUser || !authUser.schoolId || !reportDate)) {
+          toast({variant: "info", title: "Cannot Refresh", description: "User, school or date info missing."});
+      }
+      return;
+    }
+    setIsLoading(true);
+
+    let currentStudentList = allSchoolStudents;
+    // Fetch or re-fetch students if list is empty, or if schoolId changed, or if it's a manual refresh
+    if (isManualRefresh || currentStudentList.length === 0 || 
+        (currentStudentList[0] && currentStudentList[0].schoolId?.toString() !== authUser.schoolId.toString())) {
+      const studentsResult = await getSchoolUsers(authUser.schoolId.toString());
+      if (studentsResult.success && studentsResult.users) {
+        currentStudentList = studentsResult.users.filter(u => u.role === 'student');
+        setAllSchoolStudents(currentStudentList); // This will trigger processAttendanceData
+      } else {
+        toast({ variant: "warning", title: "Student Data", description: studentsResult.message || "Could not fetch student list for report." });
+        setAllSchoolStudents([]); // Clear students
+        // processAttendanceData will clear summaries
+        setIsLoading(false);
+        return;
+      }
+    }
+    
+    const attendanceResult = await getDailyAttendanceForSchool(authUser.schoolId.toString(), reportDate);
+    if (attendanceResult.success && attendanceResult.records) {
+      setAttendanceRecords(attendanceResult.records); // This will trigger processAttendanceData
+      if (attendanceResult.records.length === 0 && currentStudentList.length > 0 && isManualRefresh) {
+        toast({ title: "No Attendance Data", description: "No attendance records found for the selected date." });
+      }
+    } else {
+      toast({ variant: "destructive", title: "Report Data Error", description: attendanceResult.error || "Could not fetch attendance data." });
+      setAttendanceRecords([]); // Clear attendance
+    }
+    setIsLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser, reportDate, toast]); // allSchoolStudents intentionally omitted from deps to manage its refresh explicitly inside
+
+  useEffect(() => {
+    // Auto-load data when authUser or reportDate changes
+    if (authUser && authUser.schoolId && reportDate) {
+      loadReportData(false); // false indicates it's not a manual refresh
+    }
+  }, [authUser, reportDate, loadReportData]);
 
 
   return (
@@ -232,7 +271,7 @@ export default function AdminReportsPage() {
                             <Calendar
                                 mode="single"
                                 selected={reportDate}
-                                onSelect={setReportDate}
+                                onSelect={setReportDate} // This will trigger the useEffect for loadReportData
                                 initialFocus
                                 disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
                             />
@@ -241,11 +280,11 @@ export default function AdminReportsPage() {
                     </div>
                     <Button 
                         variant="default" 
-                        onClick={fetchReportData} 
+                        onClick={() => loadReportData(true)} // True for manual refresh
                         disabled={isLoading || !authUser || !reportDate}
                         className="w-full sm:w-auto"
                     >
-                        {isLoading ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <Filter className="mr-0 sm:mr-2 h-4 w-4"/>}
+                        {isLoading ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <BarChartBig className="mr-0 sm:mr-2 h-4 w-4"/>}
                         <span className="sm:inline hidden">Generate Report</span>
                         <span className="sm:hidden inline">Generate</span>
                     </Button>
@@ -320,9 +359,10 @@ export default function AdminReportsPage() {
                 <Info className="mx-auto h-12 w-12 text-muted-foreground" />
                 <p className="mt-4 text-lg font-semibold">No Data to Display</p>
                 <p className="text-muted-foreground">
-                    {attendanceRecords.length === 0 && allSchoolStudents.length > 0 ? "No attendance was marked for this date." : "No students found for this school, or no attendance data for the selected date."}
+                    {(allSchoolStudents.length > 0 && attendanceRecords.length === 0) ? "No attendance was marked for this date, or all students were absent." : 
+                     (allSchoolStudents.length === 0) ? "No students found for this school. Please add students via User Management." :
+                     "No attendance data for the selected date."}
                 </p>
-                
             </div>
           )}
         </CardContent>
@@ -330,5 +370,6 @@ export default function AdminReportsPage() {
     </div>
   );
 }
+    
 
     
