@@ -1,20 +1,74 @@
 
+"use client";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { CheckSquare, BookOpen, MessageSquare, CalendarDays, User } from "lucide-react";
+import { CheckSquare, BookOpen, MessageSquare, CalendarDays, User, Loader2, Info } from "lucide-react";
+import { useState, useEffect } from "react";
+import type { AuthUser } from "@/types/user"; // Assuming AuthUser type includes name and classId
+import { useToast } from "@/hooks/use-toast";
 
 export default function TeacherDashboardPage() {
-  // Placeholder for teacher's name and assigned class, would come from context or props
-  const teacherName = "Mrs. Davis";
-  const assignedClass = "Grade 10A";
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setIsLoading(true);
+    const storedUser = localStorage.getItem('loggedInUser');
+    if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
+      try {
+        const parsedUser: AuthUser = JSON.parse(storedUser);
+        if (parsedUser && parsedUser.role === 'teacher') {
+          setAuthUser(parsedUser);
+        } else {
+          setAuthUser(null);
+          // Optional: Redirect or show access denied if not a teacher
+          // toast({ variant: "destructive", title: "Access Denied", description: "Not authorized."});
+        }
+      } catch(e) {
+        console.error("TeacherDashboard: Failed to parse user from localStorage", e);
+        setAuthUser(null);
+        toast({ variant: "destructive", title: "Session Error", description: "Could not load user data."});
+      }
+    } else {
+      setAuthUser(null);
+    }
+    setIsLoading(false);
+  }, [toast]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-10">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center"><Info className="mr-2 h-6 w-6 text-destructive"/>Access Denied</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>You must be logged in as a teacher to view this page.</p>
+           <Button asChild className="mt-4"><Link href="/">Go to Login</Link></Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  const teacherName = authUser.name || "Teacher";
+  const assignedClass = authUser.classId || "your assigned class";
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline">Teacher Dashboard</CardTitle>
-          <CardDescription>Welcome, {teacherName}. Manage attendance and view information for your class: {assignedClass}.</CardDescription>
+          <CardDescription>Welcome, {teacherName}. Manage attendance and view information for {assignedClass}.</CardDescription>
         </CardHeader>
         <CardContent>
           <p>Use the sections below to manage your daily tasks and access class resources.</p>
@@ -29,9 +83,10 @@ export default function TeacherDashboardPage() {
           </CardHeader>
           <CardContent>
             <CardDescription>Record daily student attendance for {assignedClass}.</CardDescription>
-            <Button asChild className="mt-4">
+            <Button asChild className="mt-4" disabled={!authUser.classId}>
               <Link href="/dashboard/teacher/attendance">Go to Attendance</Link>
             </Button>
+            {!authUser.classId && <p className="text-xs text-destructive mt-1">Class not assigned.</p>}
           </CardContent>
         </Card>
 
