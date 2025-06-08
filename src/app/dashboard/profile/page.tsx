@@ -5,38 +5,33 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserCircle, Save, Loader2 } from "lucide-react";
+import { UserCircle, Save, Loader2, Image as ImageIcon } from "lucide-react";
 import { useForm } from "react-hook-form";
-import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import type { AuthUser } from "@/types/attendance"; // Using AuthUser for loggedInUser type
+import type { AuthUser, UpdateProfileFormData } from "@/types/user"; 
+import { updateProfileFormSchema } from "@/types/user";
+import { updateUserProfile } from "@/app/actions/profile";
 
-const profileFormSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters."),
-  email: z.string().email("Invalid email address.").optional(), // Email is non-editable for now
-  phone: z.string().optional(),
-  // Password fields would be added here if password change is implemented
-});
-
-type ProfileFormData = z.infer<typeof profileFormSchema>;
 
 export default function ProfilePage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // For initial load
+  const [isSubmitting, setIsSubmitting] = useState(false); // For form submission
 
-  const form = useForm<ProfileFormData>({
-    resolver: zodResolver(profileFormSchema),
+  const form = useForm<UpdateProfileFormData>({
+    resolver: zodResolver(updateProfileFormSchema),
     defaultValues: {
       name: "",
-      email: "",
       phone: "",
+      avatarUrl: "",
     },
   });
 
+  // Effect to load user from localStorage and set form defaults
   useEffect(() => {
     setIsLoading(true);
     const storedUser = localStorage.getItem('loggedInUser');
@@ -47,8 +42,9 @@ export default function ProfilePage() {
           setAuthUser(parsedUser);
           form.reset({
             name: parsedUser.name || "",
-            email: parsedUser.email || "",
-            phone: (parsedUser as any).phone || "", // Assuming phone might exist on user object
+            // email: parsedUser.email || "", // Email is not part of UpdateProfileFormData
+            phone: (parsedUser as any).phone || "", 
+            avatarUrl: parsedUser.avatarUrl || "",
           });
         } else {
           setAuthUser(null);
@@ -64,14 +60,50 @@ export default function ProfilePage() {
     setIsLoading(false);
   }, [form, toast]);
 
-  function onSubmit(values: ProfileFormData) {
-    // TODO: Implement actual profile update logic with a server action
-    console.log("Updating profile with:", values);
-    toast({
-      title: "Profile Update (Simulated)",
-      description: "Your profile information has been logged. Backend update not yet implemented.",
-    });
+  async function onSubmit(values: UpdateProfileFormData) {
+    if (!authUser || !authUser._id) {
+        toast({ variant: "destructive", title: "Error", description: "User session not found."});
+        return;
+    }
+    setIsSubmitting(true);
+    const result = await updateUserProfile(authUser._id.toString(), values);
+    setIsSubmitting(false);
+
+    if (result.success && result.user) {
+        toast({ title: "Profile Updated", description: result.message });
+        
+        // Create the new authUser state based on the server response
+        const updatedAuthUser: AuthUser = {
+            _id: result.user._id!, // server returns _id as string
+            name: result.user.name!,
+            email: result.user.email!, 
+            role: result.user.role!,
+            schoolId: result.user.schoolId,
+            classId: result.user.classId,
+            avatarUrl: result.user.avatarUrl,
+            // phone: result.user.phone, // AuthUser type doesn't include phone currently
+        };
+        // Add phone to the object if it exists (for full user object in localStorage if needed)
+        // This is a bit of a hack as AuthUser type doesn't have phone, but localStorage might store more.
+        const fullUserForStorage = { ...updatedAuthUser, phone: result.user.phone };
+
+
+        setAuthUser(updatedAuthUser); // Update local state for UI reactivity
+        localStorage.setItem('loggedInUser', JSON.stringify(fullUserForStorage)); // Update localStorage
+
+        // Update form with potentially sanitized/defaulted values from server (e.g. avatarUrl cleared)
+        form.reset({
+            name: result.user.name || "",
+            phone: result.user.phone || "",
+            avatarUrl: result.user.avatarUrl || "",
+        });
+
+    } else {
+        toast({ variant: "destructive", title: "Update Failed", description: result.error || "Could not update profile." });
+    }
   }
+
+  const currentAvatarUrl = form.watch("avatarUrl") || authUser?.avatarUrl;
 
   if (isLoading) {
     return (
@@ -110,11 +142,11 @@ export default function ProfilePage() {
         <CardHeader>
           <div className="flex items-center space-x-4">
             <Avatar className="h-20 w-20">
-              <AvatarImage src={"https://placehold.co/128x128.png"} alt={authUser.name} data-ai-hint="profile avatar" />
+              <AvatarImage src={currentAvatarUrl || "https://placehold.co/128x128.png"} alt={authUser.name} data-ai-hint="profile avatar" />
               <AvatarFallback>{authUser.name ? authUser.name.substring(0, 2).toUpperCase() : "U"}</AvatarFallback>
             </Avatar>
             <div>
-              <CardTitle className="text-xl">{authUser.name}</CardTitle>
+              <CardTitle className="text-xl">{form.watch("name") || authUser.name}</CardTitle>
               <p className="text-muted-foreground">{authUser.email}</p>
               <p className="text-sm text-muted-foreground capitalize">
                 Role: {authUser.role}
@@ -134,26 +166,20 @@ export default function ProfilePage() {
                   <FormItem>
                     <FormLabel>Full Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Your full name" {...field} />
+                      <Input placeholder="Your full name" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email Address</FormLabel>
-                    <FormControl>
-                      <Input placeholder="your.email@example.com" {...field} disabled />
-                    </FormControl>
-                    <FormDescription>Email address cannot be changed through this form.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormItem>
+                <FormLabel>Email Address</FormLabel>
+                <FormControl>
+                  <Input placeholder="your.email@example.com" value={authUser.email} disabled />
+                </FormControl>
+                <FormDescription>Email address cannot be changed through this form.</FormDescription>
+              </FormItem>
+              
               <FormField
                 control={form.control}
                 name="phone"
@@ -161,21 +187,30 @@ export default function ProfilePage() {
                   <FormItem>
                     <FormLabel>Phone Number (Optional)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Your phone number" {...field} />
+                      <Input placeholder="Your phone number" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              {/* 
-              Placeholder for password change fields:
-              <FormField name="currentPassword" ... />
-              <FormField name="newPassword" ... />
-              <FormField name="confirmNewPassword" ... />
-              */}
+              <FormField
+                control={form.control}
+                name="avatarUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center"><ImageIcon className="mr-2 h-4 w-4 text-muted-foreground"/>Avatar URL (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="url" placeholder="https://example.com/avatar.png" {...field} disabled={isSubmitting}/>
+                    </FormControl>
+                     <FormDescription>Enter a publicly accessible URL for your avatar image. Leave blank to remove.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <div className="flex justify-end">
-                <Button type="submit">
-                  <Save className="mr-2 h-4 w-4" /> Save Changes (Simulated)
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Save className="mr-2 h-4 w-4" /> {isSubmitting ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </form>

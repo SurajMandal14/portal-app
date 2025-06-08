@@ -22,7 +22,7 @@ export interface User {
 }
 
 // Centralized AuthUser type
-export type AuthUser = Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId' | 'classId'>;
+export type AuthUser = Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId' | 'classId' | 'avatarUrl'>;
 
 
 // Zod schema for Super Admin creating/updating School Admins
@@ -65,3 +65,12 @@ export interface CreateSchoolUserServerFormData {
   schoolId: string;
   classId?: string;
 }
+
+// Schema for updating basic profile info (name, phone, avatar)
+export const updateProfileFormSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters."),
+  phone: z.string().optional(),
+  avatarUrl: z.string().url("Invalid URL format for avatar.").optional().or(z.literal('')),
+});
+export type UpdateProfileFormData = z.infer<typeof updateProfileFormSchema>;
+
