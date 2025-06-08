@@ -4,7 +4,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { PlusCircle, School, Upload, DollarSign, Bus, Utensils, Loader2, Edit, XCircle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PlusCircle, School as SchoolIconUI, Upload, DollarSign, Bus, Utensils, Loader2, Edit, XCircle, FileText } from "lucide-react"; // Renamed School to SchoolIconUI
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { createSchool, getSchools, updateSchool } from "@/app/actions/schools";
-import { schoolFormSchema, type SchoolFormData } from "@/types/school"; 
+import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey } from '@/types/school'; 
 import type { School as SchoolType } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
@@ -36,6 +37,7 @@ export default function SchoolManagementPage() {
       schoolName: "",
       classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
       schoolLogo: undefined,
+      reportCardTemplate: 'none',
     },
   });
 
@@ -65,9 +67,8 @@ export default function SchoolManagementPage() {
 
   const mapSchoolToFormData = (school: SchoolType): SchoolFormData => ({
     schoolName: school.schoolName,
-    // For logo, we don't prefill the file input for editing. User must re-upload if changing.
-    // The existing schoolLogoUrl is not part of SchoolFormData.
     schoolLogo: undefined, 
+    reportCardTemplate: school.reportCardTemplate || 'none',
     classFees: school.classFees.map(cf => ({ 
       className: cf.className,
       tuitionFee: cf.tuitionFee,
@@ -79,7 +80,7 @@ export default function SchoolManagementPage() {
   const handleEdit = (school: SchoolType) => {
     setEditingSchool(school);
     form.reset(mapSchoolToFormData(school));
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
 
   const cancelEdit = () => {
@@ -88,6 +89,7 @@ export default function SchoolManagementPage() {
       schoolName: "",
       classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
       schoolLogo: undefined,
+      reportCardTemplate: 'none',
     });
   };
 
@@ -109,7 +111,7 @@ export default function SchoolManagementPage() {
         description: result.message,
       });
       fetchSchools();
-      cancelEdit(); // Reset form and editing state
+      cancelEdit(); 
     } else {
       toast({
         variant: "destructive",
@@ -124,10 +126,10 @@ export default function SchoolManagementPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline flex items-center">
-            <School className="mr-2 h-6 w-6" /> School Management
+            <SchoolIconUI className="mr-2 h-6 w-6" /> School Management 
           </CardTitle>
           <CardDescription>
-            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create new schools, configure class-wise fees, and upload school logos."}
+            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create new schools, configure class-wise fees, logos, and report card templates."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -139,6 +141,7 @@ export default function SchoolManagementPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
                 name="schoolName"
@@ -180,6 +183,32 @@ export default function SchoolManagementPage() {
                   </FormItem>
                 )}
               />
+                <FormField
+                  control={form.control}
+                  name="reportCardTemplate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center"><FileText className="mr-2 h-4 w-4 text-muted-foreground" /> Report Card Template</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || 'none'} disabled={isSubmitting}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a report card template" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Object.entries(REPORT_CARD_TEMPLATES).map(([key, label]) => (
+                            <SelectItem key={key} value={key}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
 
               <div className="space-y-4">
                 <FormLabel>Class-wise Fees Configuration</FormLabel>
@@ -295,14 +324,15 @@ export default function SchoolManagementPage() {
                     height={48} 
                     className="h-12 w-12 rounded-md object-cover flex-shrink-0" 
                 />
-                <div>
+                <div className="flex-grow">
                   <h3 className="font-semibold">{school.schoolName}</h3>
                   <p className="text-sm text-muted-foreground">{school.classFees.length} class configuration(s)</p>
+                  <p className="text-xs text-muted-foreground">Report Card: <span className="font-medium">{REPORT_CARD_TEMPLATES[school.reportCardTemplate || 'none']}</span></p>
                   <p className="text-xs text-muted-foreground">Created: {new Date(school.createdAt).toLocaleDateString()}</p>
-                   <p className="text-xs text-muted-foreground">Last Updated: {new Date(school.updatedAt).toLocaleDateString()}</p>
+                  <p className="text-xs text-muted-foreground">Last Updated: {new Date(school.updatedAt).toLocaleDateString()}</p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => handleEdit(school)} className="w-full sm:w-auto">
+              <Button variant="outline" size="sm" onClick={() => handleEdit(school)} className="w-full sm:w-auto flex-shrink-0">
                 <Edit className="mr-2 h-4 w-4" /> Edit
               </Button> 
             </Card>
