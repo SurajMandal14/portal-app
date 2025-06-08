@@ -12,12 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Added Avatar components
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"; // Added SheetTitle
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; 
 import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import type { AuthUser } from "@/types/user"; // Import central AuthUser
+import type { AuthUser } from "@/types/user"; 
 
 const navLinksBase = {
   superadmin: [
@@ -199,6 +199,7 @@ export function Header() {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="pt-10">
+                  <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                   <nav className="grid gap-4 text-base font-medium">
                     <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold mb-4" onClick={() => setIsSheetOpen(false)}>
                       <School className="h-7 w-7 text-primary" />
@@ -232,3 +233,4 @@ export function Header() {
     </header>
   );
 }
+
