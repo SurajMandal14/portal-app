@@ -206,10 +206,9 @@ export default function FeeManagementPage() {
     if (result.success) {
       toast({ title: "Payment Recorded", description: result.message });
       if (authUser?.schoolId) {
-        // Re-fetch all school data to ensure all derived states are updated correctly
         await fetchSchoolDataAndPayments(); 
       }
-      setSelectedStudentId(null); // This will trigger the useEffect for selectedStudentFullData to reset form fields
+      setSelectedStudentId(null); 
     } else {
       toast({ variant: "destructive", title: "Payment Failed", description: result.error || result.message });
     }
@@ -247,7 +246,7 @@ export default function FeeManagementPage() {
     }
   };
   
-  if (isLoading && !authUser) { // Show loader only if authUser is not yet determined AND isLoading is true
+  if (isLoading && !authUser) { 
     return (
       <div className="flex flex-1 items-center justify-center py-10">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -256,7 +255,7 @@ export default function FeeManagementPage() {
     );
   }
   
-  if (!authUser && !isLoading) { // If loading is finished and still no authUser
+  if (!authUser && !isLoading) { 
     return (
       <Card>
         <CardHeader>
@@ -270,7 +269,6 @@ export default function FeeManagementPage() {
     );
   }
 
-  // Show loader while initial school data is being fetched, even if authUser is present
   if (isLoading && authUser) {
      return (
       <div className="flex flex-1 items-center justify-center py-10">
@@ -281,7 +279,7 @@ export default function FeeManagementPage() {
   }
 
 
-   if (!schoolDetails && !isLoading) { // If loading is finished and schoolDetails are still null
+   if (!schoolDetails && !isLoading) { 
     return (
       <Card>
         <CardHeader>
@@ -334,13 +332,13 @@ export default function FeeManagementPage() {
             {selectedStudentFullData && (
               <>
                 <p className="text-sm">Class: {selectedStudentFullData.className || 'N/A'}</p>
-                <p className="text-sm">Total Fee: ${selectedStudentFullData.totalFee.toLocaleString()}</p>
-                <p className="text-sm">Amount Paid: ${selectedStudentFullData.paidAmount.toLocaleString()}</p>
-                <p className="text-sm font-semibold">Amount Due: ${selectedStudentFullData.dueAmount.toLocaleString()}</p>
+                <p className="text-sm">Total Fee: <span className="font-sans">₹</span>{selectedStudentFullData.totalFee.toLocaleString()}</p>
+                <p className="text-sm">Amount Paid: <span className="font-sans">₹</span>{selectedStudentFullData.paidAmount.toLocaleString()}</p>
+                <p className="text-sm font-semibold">Amount Due: <span className="font-sans">₹</span>{selectedStudentFullData.dueAmount.toLocaleString()}</p>
                 
                 <div className="pt-2 space-y-3">
                     <div>
-                        <Label htmlFor="payment-amount">Payment Amount</Label>
+                        <Label htmlFor="payment-amount">Payment Amount (<span className="font-sans">₹</span>)</Label>
                         <Input 
                             id="payment-amount" 
                             type="number" 
@@ -425,9 +423,9 @@ export default function FeeManagementPage() {
                   <TableRow>
                     <TableHead>Student Name</TableHead>
                     <TableHead>Class</TableHead>
-                    <TableHead className="text-right">Total Fee</TableHead>
-                    <TableHead className="text-right">Paid</TableHead>
-                    <TableHead className="text-right">Due</TableHead>
+                    <TableHead className="text-right">Total Fee (₹)</TableHead>
+                    <TableHead className="text-right">Paid (₹)</TableHead>
+                    <TableHead className="text-right">Due (₹)</TableHead>
                     <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -436,10 +434,10 @@ export default function FeeManagementPage() {
                     <TableRow key={student._id.toString()}>
                       <TableCell>{student.name}</TableCell>
                       <TableCell>{student.className || 'N/A'}</TableCell>
-                      <TableCell className="text-right">${student.totalFee.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">${student.paidAmount.toLocaleString()}</TableCell>
+                      <TableCell className="text-right"><span className="font-sans">₹</span>{student.totalFee.toLocaleString()}</TableCell>
+                      <TableCell className="text-right"><span className="font-sans">₹</span>{student.paidAmount.toLocaleString()}</TableCell>
                       <TableCell className={`text-right font-semibold ${student.dueAmount > 0 ? "text-destructive" : "text-green-600"}`}>
-                        ${student.dueAmount.toLocaleString()}
+                        <span className="font-sans">₹</span>{student.dueAmount.toLocaleString()}
                       </TableCell>
                       <TableCell className="space-x-1 text-center">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setSelectedStudentId(student._id.toString())} title="Record Payment">

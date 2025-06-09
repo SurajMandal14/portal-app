@@ -22,8 +22,6 @@ import { createSchool, getSchools, updateSchool } from "@/app/actions/schools";
 import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey } from '@/types/school'; 
 import type { School as SchoolType } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
-// Removed NextImage as we'll use standard <img> for broader URL compatibility for now
-// import Image from "next/image"; 
 
 export default function SchoolManagementPage() {
   const { toast } = useToast();
@@ -229,7 +227,7 @@ export default function SchoolManagementPage() {
                         name={`classFees.${index}.tuitionFee`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="flex items-center"><DollarSign className="h-4 w-4 mr-1 text-muted-foreground"/>Tuition Fee</FormLabel>
+                            <FormLabel className="flex items-center"><span className="font-sans mr-1">₹</span>Tuition Fee</FormLabel>
                             <FormControl>
                               <Input type="number" placeholder="e.g., 5000" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting} />
                             </FormControl>
@@ -242,7 +240,7 @@ export default function SchoolManagementPage() {
                         name={`classFees.${index}.busFee`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="flex items-center"><Bus className="h-4 w-4 mr-1 text-muted-foreground"/>Bus Fee (Optional)</FormLabel>
+                            <FormLabel className="flex items-center"><Bus className="h-4 w-4 mr-1 text-muted-foreground"/><span className="font-sans mr-1">₹</span>Bus Fee (Optional)</FormLabel>
                             <FormControl>
                               <Input type="number" placeholder="e.g., 500" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting}/>
                             </FormControl>
@@ -255,7 +253,7 @@ export default function SchoolManagementPage() {
                         name={`classFees.${index}.canteenFee`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="flex items-center"><Utensils className="h-4 w-4 mr-1 text-muted-foreground"/>Canteen Fee (Optional)</FormLabel>
+                            <FormLabel className="flex items-center"><Utensils className="h-4 w-4 mr-1 text-muted-foreground"/><span className="font-sans mr-1">₹</span>Canteen Fee (Optional)</FormLabel>
                             <FormControl>
                               <Input type="number" placeholder="e.g., 300" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting}/>
                             </FormControl>
@@ -312,10 +310,10 @@ export default function SchoolManagementPage() {
             schools.map(school => (
             <Card key={school._id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-4">
               <div className="flex items-center gap-4">
-                {/* Using standard img tag for broader URL compatibility for now */}
                 <img 
                     src={school.schoolLogoUrl || "https://placehold.co/100x100.png"} 
                     alt={`${school.schoolName} logo`} 
+                    data-ai-hint="school logo"
                     width={48} 
                     height={48} 
                     className="h-12 w-12 rounded-md object-cover flex-shrink-0 bg-muted border" 

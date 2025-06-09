@@ -432,7 +432,7 @@ export default function AdminReportsPage() {
         logging: false,
       });
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ // Default portrait, A4
+      const pdf = new jsPDF({
         orientation: 'portrait', 
         unit: 'mm',
         format: 'a4',
@@ -490,7 +490,6 @@ export default function AdminReportsPage() {
                     <span>CBSE State Template</span>
                  </Button>
             </Link>
-             {/* Placeholder for more templates */}
             <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center" disabled>
                 <FileText className="h-6 w-6 mb-1 text-muted-foreground"/>
                 <span className="text-muted-foreground">More Templates (Soon)</span>
@@ -498,7 +497,6 @@ export default function AdminReportsPage() {
         </CardContent>
       </Card>
 
-      {/* Attendance Summary Report */}
       <Card>
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
@@ -634,7 +632,6 @@ export default function AdminReportsPage() {
       </Card>
 
 
-      {/* Fee Collection Summary Report */}
       <Card>
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
@@ -668,15 +665,15 @@ export default function AdminReportsPage() {
                     <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                         <div>
                             <p className="text-sm text-muted-foreground">Total Expected</p>
-                            <p className="text-2xl font-bold">${feeOverallSummary.grandTotalExpected.toLocaleString()}</p>
+                            <p className="text-2xl font-bold"><span className="font-sans">₹</span>{feeOverallSummary.grandTotalExpected.toLocaleString()}</p>
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Total Collected</p>
-                            <p className="text-2xl font-bold text-green-600">${feeOverallSummary.grandTotalCollected.toLocaleString()}</p>
+                            <p className="text-2xl font-bold text-green-600"><span className="font-sans">₹</span>{feeOverallSummary.grandTotalCollected.toLocaleString()}</p>
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Total Due</p>
-                            <p className="text-2xl font-bold text-red-600">${feeOverallSummary.grandTotalDue.toLocaleString()}</p>
+                            <p className="text-2xl font-bold text-red-600"><span className="font-sans">₹</span>{feeOverallSummary.grandTotalDue.toLocaleString()}</p>
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Collection %</p>
@@ -690,9 +687,9 @@ export default function AdminReportsPage() {
                 <TableHeader>
                     <TableRow>
                     <TableHead>Class Name</TableHead>
-                    <TableHead className="text-right">Expected Fees</TableHead>
-                    <TableHead className="text-right">Collected Fees</TableHead>
-                    <TableHead className="text-right">Dues</TableHead>
+                    <TableHead className="text-right">Expected Fees (₹)</TableHead>
+                    <TableHead className="text-right">Collected Fees (₹)</TableHead>
+                    <TableHead className="text-right">Dues (₹)</TableHead>
                     <TableHead className="text-center">Collection %</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -700,9 +697,9 @@ export default function AdminReportsPage() {
                     {feeClassSummaries.map((summary) => (
                     <TableRow key={summary.className}>
                         <TableCell className="font-medium">{summary.className}</TableCell>
-                        <TableCell className="text-right">${summary.totalExpected.toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-green-600 font-medium">${summary.totalCollected.toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-red-600 font-medium">${summary.totalDue.toLocaleString()}</TableCell>
+                        <TableCell className="text-right"><span className="font-sans">₹</span>{summary.totalExpected.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-green-600 font-medium"><span className="font-sans">₹</span>{summary.totalCollected.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-red-600 font-medium"><span className="font-sans">₹</span>{summary.totalDue.toLocaleString()}</TableCell>
                         <TableCell className="text-center">
                             <div className="flex flex-col items-center">
                                 <span className={`font-bold ${summary.collectionPercentage >= 90 ? 'text-green-600' : summary.collectionPercentage >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
@@ -734,6 +731,3 @@ export default function AdminReportsPage() {
     </div>
   );
 }
-
-
-    

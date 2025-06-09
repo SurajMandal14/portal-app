@@ -152,21 +152,21 @@ export default function AdminSchoolSettingsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Class Name</TableHead>
-                  <TableHead className="text-right">Tuition Fee</TableHead>
-                  <TableHead className="text-right">Bus Fee</TableHead>
-                  <TableHead className="text-right">Canteen Fee</TableHead>
-                  <TableHead className="text-right">Total Fee</TableHead>
+                  <TableHead className="text-right">Tuition Fee (₹)</TableHead>
+                  <TableHead className="text-right">Bus Fee (₹)</TableHead>
+                  <TableHead className="text-right">Canteen Fee (₹)</TableHead>
+                  <TableHead className="text-right">Total Fee (₹)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {schoolDetails.classFees.map((cf) => (
                   <TableRow key={cf.className}>
                     <TableCell className="font-medium">{cf.className}</TableCell>
-                    <TableCell className="text-right">${(cf.tuitionFee || 0).toLocaleString()}</TableCell>
-                    <TableCell className="text-right">${(cf.busFee || 0).toLocaleString()}</TableCell>
-                    <TableCell className="text-right">${(cf.canteenFee || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.tuitionFee || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.busFee || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.canteenFee || 0).toLocaleString()}</TableCell>
                     <TableCell className="text-right font-semibold">
-                        ${((cf.tuitionFee || 0) + (cf.busFee || 0) + (cf.canteenFee || 0)).toLocaleString()}
+                        <span className="font-sans">₹</span>{((cf.tuitionFee || 0) + (cf.busFee || 0) + (cf.canteenFee || 0)).toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -204,5 +204,3 @@ export default function AdminSchoolSettingsPage() {
     </div>
   );
 }
-
-    

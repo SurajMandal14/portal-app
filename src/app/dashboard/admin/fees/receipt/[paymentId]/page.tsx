@@ -12,7 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Printer, AlertTriangle } from "lucide-react";
 import { format } from 'date-fns';
-// Removed: import Image from 'next/image';
 
 export default function FeeReceiptPage() {
   const params = useParams();
@@ -120,8 +119,8 @@ export default function FeeReceiptPage() {
                 data-ai-hint="school logo"
                 width={80} 
                 height={80} 
-                className="mx-auto rounded-md object-contain h-20 w-20 border bg-muted" // Added fixed height/width and border/bg for consistency
-                onError={(e) => (e.currentTarget.src = "https://placehold.co/80x80.png")} // Fallback placeholder
+                className="mx-auto rounded-md object-contain h-20 w-20 border bg-muted"
+                onError={(e) => (e.currentTarget.src = "https://placehold.co/80x80.png")} 
             />
           )}
           <CardTitle className="text-3xl font-bold">{school.schoolName}</CardTitle>
@@ -142,7 +141,7 @@ export default function FeeReceiptPage() {
             <h3 className="text-md font-semibold mb-2">Payment Details:</h3>
             <div className="flex justify-between">
               <span>Amount Paid:</span>
-              <span className="font-bold text-lg">${payment.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="font-bold text-lg"><span className="font-sans">₹</span>{payment.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between">
               <span>Mode of Payment:</span>

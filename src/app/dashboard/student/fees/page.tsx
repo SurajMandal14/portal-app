@@ -12,7 +12,7 @@ import { getFeePaymentsByStudent } from "@/app/actions/fees";
 import { getSchoolById } from "@/app/actions/schools";
 import type { FeePayment } from "@/types/fees";
 import type { School } from "@/types/school";
-import type { AuthUser } from "@/types/attendance"; // Re-using for student's AuthUser structure
+import type { AuthUser } from "@/types/attendance"; 
 
 interface FeeSummary {
   totalFee: number;
@@ -100,7 +100,7 @@ export default function StudentFeesPage() {
     if (authUser?._id && authUser?.schoolId && authUser?.classId) {
       fetchData();
     } else {
-      setIsLoading(false); // Not enough info to fetch
+      setIsLoading(false); 
     }
   }, [authUser, fetchData]);
 
@@ -172,16 +172,16 @@ export default function StudentFeesPage() {
           <CardContent className="grid gap-6 md:grid-cols-3">
             <div className="flex flex-col space-y-1 rounded-lg border p-4 shadow-sm">
               <p className="text-sm font-medium text-muted-foreground">Total Applicable Fee</p>
-              <p className="text-2xl font-bold">${feeSummary.totalFee.toLocaleString()}</p>
+              <p className="text-2xl font-bold"><span className="font-sans">₹</span>{feeSummary.totalFee.toLocaleString()}</p>
             </div>
             <div className="flex flex-col space-y-1 rounded-lg border p-4 shadow-sm">
               <p className="text-sm font-medium text-muted-foreground">Total Paid</p>
-              <p className="text-2xl font-bold text-green-600">${feeSummary.totalPaid.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-green-600"><span className="font-sans">₹</span>{feeSummary.totalPaid.toLocaleString()}</p>
             </div>
             <div className="flex flex-col space-y-1 rounded-lg border p-4 shadow-sm">
               <p className="text-sm font-medium text-muted-foreground">Remaining Due</p>
               <p className={`text-2xl font-bold ${feeSummary.totalDue > 0 ? 'text-destructive' : 'text-green-600'}`}>
-                ${feeSummary.totalDue.toLocaleString()}
+                <span className="font-sans">₹</span>{feeSummary.totalDue.toLocaleString()}
               </p>
             </div>
             <div className="md:col-span-3 flex flex-col space-y-1 rounded-lg border p-4 shadow-sm">
@@ -191,7 +191,7 @@ export default function StudentFeesPage() {
               </div>
               <p className="text-2xl font-bold">{feeSummary.percentagePaid}%</p>
               <Progress value={feeSummary.percentagePaid} className="h-3 mt-1" />
-              <p className="text-xs text-muted-foreground">{feeSummary.totalPaid.toLocaleString()} / {feeSummary.totalFee.toLocaleString()} paid</p>
+              <p className="text-xs text-muted-foreground"><span className="font-sans">₹</span>{feeSummary.totalPaid.toLocaleString()} / <span className="font-sans">₹</span>{feeSummary.totalFee.toLocaleString()} paid</p>
             </div>
           </CardContent>
         </Card>
@@ -214,26 +214,20 @@ export default function StudentFeesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Payment Date</TableHead>
-                  <TableHead>Amount Paid</TableHead>
+                  <TableHead>Amount Paid (₹)</TableHead>
                   <TableHead>Payment Method</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Recorded On</TableHead>
-                  {/* <TableHead>Receipt</TableHead> */}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {feePayments.map((payment) => (
                   <TableRow key={payment._id.toString()}>
                     <TableCell>{format(new Date(payment.paymentDate), "PPP")}</TableCell>
-                    <TableCell>${payment.amountPaid.toLocaleString()}</TableCell>
+                    <TableCell><span className="font-sans">₹</span>{payment.amountPaid.toLocaleString()}</TableCell>
                     <TableCell>{payment.paymentMethod || 'N/A'}</TableCell>
                     <TableCell>{payment.notes || 'N/A'}</TableCell>
                     <TableCell>{format(new Date(payment.createdAt), "Pp")}</TableCell>
-                    {/* <TableCell>
-                      <Button variant="outline" size="icon" className="h-8 w-8" disabled>
-                        <Receipt className="h-4 w-4" />
-                      </Button>
-                    </TableCell> */}
                   </TableRow>
                 ))}
               </TableBody>
