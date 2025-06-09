@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, DollarSign, CheckSquare, BarChart2, Settings, Briefcase, BookOpen, Percent, Loader2 } from "lucide-react";
+import { Users, DollarSign, CheckSquare, BarChart2, Settings, Briefcase, BookOpen, Percent, Loader2, BookCopy } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { AuthUser } from "@/types/user";
 import type { School } from "@/types/school";
@@ -194,6 +194,19 @@ export default function AdminDashboardPage() {
 
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
+            <BookCopy className="h-10 w-10 text-primary mb-2" />
+            <CardTitle>Class Management</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription>Define classes, assign class teachers, and manage subjects.</CardDescription>
+            <Button asChild className="mt-4">
+              <Link href="/dashboard/admin/classes">Manage Classes</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
             <DollarSign className="h-10 w-10 text-primary mb-2" />
             <CardTitle>Fee Management</CardTitle>
           </CardHeader>
@@ -247,3 +260,4 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+

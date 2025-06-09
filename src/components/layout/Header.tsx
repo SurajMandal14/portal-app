@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon } from "lucide-react"; // Renamed User to UserIcon
+import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy } from "lucide-react"; // Renamed User to UserIcon, Added BookCopy
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ const navLinksBase = {
   admin: [
     { href: "/dashboard/admin", label: "Admin Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/admin/users", label: "Users", icon: Users },
+    { href: "/dashboard/admin/classes", label: "Classes", icon: BookCopy }, // Added Classes link
     { href: "/dashboard/admin/fees", label: "Fees", icon: DollarSign },
     { href: "/dashboard/admin/attendance", label: "Attendance", icon: CheckSquare },
   ],
