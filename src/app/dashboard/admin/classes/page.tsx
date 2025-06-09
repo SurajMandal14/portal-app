@@ -28,6 +28,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolClass, getSchoolClasses, updateSchoolClass, deleteSchoolClass } from "@/app/actions/classes";
@@ -37,6 +38,8 @@ import { createClassFormSchema } from '@/types/classes';
 import type { AuthUser, User as AppUser } from "@/types/user";
 import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
+
+const NONE_TEACHER_VALUE = "__NONE_TEACHER_OPTION__";
 
 export default function AdminClassManagementPage() {
   const { toast } = useToast();
@@ -54,7 +57,7 @@ export default function AdminClassManagementPage() {
     resolver: zodResolver(createClassFormSchema),
     defaultValues: {
       name: "",
-      classTeacherId: "",
+      classTeacherId: "", // Empty string signifies no teacher selected
       subjects: [{ name: "" }],
     },
   });
@@ -203,12 +206,18 @@ export default function AdminClassManagementPage() {
                 <FormField control={form.control} name="classTeacherId" render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center"><UserCheck className="mr-2 h-4 w-4 text-muted-foreground"/>Assign Class Teacher (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting || isLoadingData || availableTeachers.length === 0}>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value === NONE_TEACHER_VALUE ? "" : value);
+                      }}
+                      value={field.value || ""} // If field.value is "", placeholder shows. If an ID, that teacher is selected.
+                      disabled={isSubmitting || isLoadingData || availableTeachers.length === 0}
+                    >
                       <FormControl><SelectTrigger>
                           <SelectValue placeholder={availableTeachers.length > 0 ? "Select a teacher" : "No teachers available"} />
                       </SelectTrigger></FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value={NONE_TEACHER_VALUE}>None</SelectItem>
                         {availableTeachers.map(teacher => (
                           <SelectItem key={teacher._id!.toString()} value={teacher._id!.toString()}>{teacher.name}</SelectItem>
                         ))}
