@@ -14,8 +14,10 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { submitAttendance } from "@/app/actions/attendance";
 import { getStudentsByClass } from "@/app/actions/schoolUsers";
+import { getSchoolClasses } from "@/app/actions/classes"; // To fetch class details
 import type { AttendanceEntry, AttendanceStatus, AttendanceSubmissionPayload } from "@/types/attendance";
 import type { AuthUser } from "@/types/user";
+import type { SchoolClass } from "@/types/classes";
 
 export default function TeacherAttendancePage() {
   const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(undefined);
@@ -23,11 +25,11 @@ export default function TeacherAttendancePage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [isLoadingClassDetails, setIsLoadingClassDetails] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [assignedClassName, setAssignedClassName] = useState<string | null>(null);
+  const [assignedClassDetails, setAssignedClassDetails] = useState<SchoolClass | null>(null);
 
   useEffect(() => {
-    // Initialize date on client-side to prevent hydration mismatch
     setAttendanceDate(new Date());
   }, []); 
 
@@ -36,87 +38,80 @@ export default function TeacherAttendancePage() {
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
             const parsedUser: AuthUser = JSON.parse(storedUser);
-            console.log("TeacherAttendancePage: (Effect 1) Parsed user from localStorage:", JSON.stringify(parsedUser, null, 2));
-
             if (parsedUser && parsedUser.role === 'teacher') {
                 setAuthUser(parsedUser); 
-
-                let className: string | null = null;
-                if (parsedUser.classId && typeof parsedUser.classId === 'string') {
-                    const trimmedClassId = parsedUser.classId.trim();
-                    if (trimmedClassId !== "") {
-                        className = trimmedClassId;
-                        console.log("TeacherAttendancePage: (Effect 1) Successfully derived className:", className);
-                    } else {
-                        console.warn("TeacherAttendancePage: (Effect 1) parsedUser.classId is an empty string after trim. Raw:", parsedUser.classId);
-                    }
-                } else {
-                     console.warn("TeacherAttendancePage: (Effect 1) parsedUser.classId is missing, not a string, or null. Raw:", parsedUser.classId);
-                }
-                setAssignedClassName(className);
-
-            } else if (parsedUser && parsedUser.role !== 'teacher') {
-                setAuthUser(null); 
-                setAssignedClassName(null);
-                toast({ variant: "destructive", title: "Access Denied", description: "You must be a teacher to mark attendance." });
             } else {
-                // Parsed user is not as expected or role is missing
                 setAuthUser(null); 
-                setAssignedClassName(null);
-                console.warn("TeacherAttendancePage: (Effect 1) Parsed user is invalid or role is not teacher.");
+                if (parsedUser && parsedUser.role !== 'teacher') {
+                    toast({ variant: "destructive", title: "Access Denied", description: "You must be a teacher to mark attendance." });
+                }
             }
         } catch(e) {
-            console.error("TeacherAttendancePage: (Effect 1) Failed to parse user from localStorage:", e);
             setAuthUser(null);
-            setAssignedClassName(null);
+            console.error("TeacherAttendancePage: Failed to parse user from localStorage:", e);
         }
     } else {
-      console.log("TeacherAttendancePage: (Effect 1) No valid user in localStorage or storedUser is 'undefined'/'null'.");
       setAuthUser(null);
-      setAssignedClassName(null);
     }
   }, [toast]); 
 
-  const fetchStudents = useCallback(async () => {
-    if (!authUser || !authUser.schoolId || !assignedClassName) {
+  const fetchClassDetailsAndStudents = useCallback(async () => {
+    if (!authUser || !authUser.schoolId || !authUser.classId) {
+      setAssignedClassDetails(null);
       setStudentAttendance([]);
+      setIsLoadingClassDetails(false);
       setIsLoadingStudents(false);
-      if (authUser && !assignedClassName) {
-        console.log("TeacherAttendancePage: fetchStudents - authUser present but assignedClassName is missing or empty. authUser.classId from AuthUser object:", authUser.classId, "Current assignedClassName state:", assignedClassName);
-      } else if (!authUser) {
-        console.log("TeacherAttendancePage: fetchStudents - authUser is null.");
-      } else if (authUser && !authUser.schoolId) {
-        console.log("TeacherAttendancePage: fetchStudents - authUser.schoolId is missing.");
+      if (authUser && !authUser.classId) {
+        console.log("TeacherAttendancePage: fetchClassDetails - authUser.classId is missing.");
       }
       return;
     }
-    console.log("TeacherAttendancePage: Fetching students for schoolId:", authUser.schoolId, "className:", assignedClassName);
-    setIsLoadingStudents(true);
-    const result = await getStudentsByClass(authUser.schoolId.toString(), assignedClassName);
-    if (result.success && result.users) {
-      const studentsForAttendance: AttendanceEntry[] = result.users.map(student => ({
-        studentId: student._id!.toString(),
-        studentName: student.name || 'Unknown Student',
-        status: 'present' as AttendanceStatus, 
-      }));
-      setStudentAttendance(studentsForAttendance);
-      if (studentsForAttendance.length === 0 && authUser.classId) {
-        toast({ title: "No Students", description: `No students found in your assigned class: ${assignedClassName}. Please contact admin.` });
+
+    setIsLoadingClassDetails(true);
+    const classesResult = await getSchoolClasses(authUser.schoolId.toString());
+    if (classesResult.success && classesResult.classes) {
+      const foundClass = classesResult.classes.find(cls => cls._id === authUser.classId);
+      if (foundClass) {
+        setAssignedClassDetails(foundClass);
+        // Now fetch students for this class
+        setIsLoadingStudents(true);
+        const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), foundClass.name);
+        if (studentsResult.success && studentsResult.users) {
+          const studentsForAttendance: AttendanceEntry[] = studentsResult.users.map(student => ({
+            studentId: student._id!.toString(),
+            studentName: student.name || 'Unknown Student',
+            status: 'present' as AttendanceStatus, 
+          }));
+          setStudentAttendance(studentsForAttendance);
+          if (studentsForAttendance.length === 0) {
+            toast({ title: "No Students", description: `No students found in your assigned class: ${foundClass.name}. Please contact admin.` });
+          }
+        } else {
+          toast({ variant: "destructive", title: "Error Loading Students", description: studentsResult.message || "Could not fetch students." });
+          setStudentAttendance([]);
+        }
+        setIsLoadingStudents(false);
+      } else {
+        toast({ variant: "destructive", title: "Class Not Found", description: "Your assigned class details could not be found. Contact admin." });
+        setAssignedClassDetails(null);
+        setStudentAttendance([]);
       }
     } else {
-      toast({ variant: "destructive", title: "Error Loading Students", description: result.message || "Could not fetch students for the class." });
+      toast({ variant: "destructive", title: "Error Loading Classes", description: classesResult.message || "Could not fetch class list." });
+      setAssignedClassDetails(null);
       setStudentAttendance([]);
     }
-    setIsLoadingStudents(false);
-  }, [authUser, assignedClassName, toast]);
+    setIsLoadingClassDetails(false);
+  }, [authUser, toast]);
 
   useEffect(() => {
-    if (authUser && authUser.schoolId && assignedClassName) {
-      fetchStudents();
+    if (authUser && authUser.schoolId && authUser.classId) {
+      fetchClassDetailsAndStudents();
     } else {
-      setStudentAttendance([]); 
+      setAssignedClassDetails(null);
+      setStudentAttendance([]);
     }
-  }, [authUser, assignedClassName, fetchStudents]);
+  }, [authUser, fetchClassDetailsAndStudents]);
 
 
   const handleAttendanceChange = (studentId: string, status: AttendanceStatus) => {
@@ -130,7 +125,7 @@ export default function TeacherAttendancePage() {
   }
 
   const handleSubmitAttendance = async () => {
-    if (!authUser || !authUser.schoolId || !authUser._id || !assignedClassName) { 
+    if (!authUser || !authUser.schoolId || !authUser._id || !authUser.classId || !assignedClassDetails) { 
       toast({ variant: "destructive", title: "Error", description: "User or class information not found. Please log in again or contact admin if class is not assigned."});
       return;
     }
@@ -142,8 +137,8 @@ export default function TeacherAttendancePage() {
     setIsSubmitting(true);
 
     const payload: AttendanceSubmissionPayload = {
-      classId: assignedClassName, 
-      className: assignedClassName, 
+      classId: authUser.classId, // This is the actual Class _id
+      className: assignedClassDetails.name, 
       schoolId: authUser.schoolId.toString(),
       date: attendanceDate,
       entries: studentAttendance,
@@ -159,6 +154,8 @@ export default function TeacherAttendancePage() {
       toast({ variant: "destructive", title: "Submission Failed", description: result.error || result.message });
     }
   };
+  
+  const currentClassName = assignedClassDetails?.name || "your assigned class";
 
   return (
     <div className="space-y-6">
@@ -168,9 +165,9 @@ export default function TeacherAttendancePage() {
             <CheckSquare className="mr-2 h-6 w-6" /> Mark Student Attendance
           </CardTitle>
           <CardDescription>
-            {assignedClassName 
-              ? `Marking attendance for class: ${assignedClassName}.`
-              : "Please ensure you are assigned to a class to mark attendance."}
+            {assignedClassDetails 
+              ? `Marking attendance for class: ${assignedClassDetails.name}.`
+              : authUser?.classId ? "Loading class details..." : "Please ensure you are assigned to a class to mark attendance."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -178,7 +175,7 @@ export default function TeacherAttendancePage() {
       <Card>
         <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full md:w-auto">
-                {assignedClassName && <p className="font-semibold text-lg">Class: {assignedClassName}</p>}
+                {assignedClassDetails && <p className="font-semibold text-lg">Class: {assignedClassDetails.name}</p>}
                  <div>
                     <Label htmlFor="date-picker" className="mb-1 block text-sm font-medium">Select Date</Label>
                     <Popover>
@@ -187,7 +184,7 @@ export default function TeacherAttendancePage() {
                             id="date-picker"
                             variant={"outline"}
                             className="w-full sm:w-[280px] justify-start text-left font-normal"
-                            disabled={isSubmitting || !authUser || !assignedClassName || !attendanceDate}
+                            disabled={isSubmitting || !authUser || !assignedClassDetails || !attendanceDate}
                         >
                             <CalendarDays className="mr-2 h-4 w-4" />
                             {attendanceDate ? format(attendanceDate, "PPP") : <span>Pick a date</span>}
@@ -205,10 +202,10 @@ export default function TeacherAttendancePage() {
                     </Popover>
                 </div>
             </div>
-           {authUser && assignedClassName && studentAttendance.length > 0 && (
+           {authUser && assignedClassDetails && studentAttendance.length > 0 && (
             <div className="flex gap-2 mt-4 md:mt-0 self-start md:self-center">
-                <Button variant="outline" size="sm" onClick={() => handleMarkAll('present')} disabled={isSubmitting || isLoadingStudents}>Mark All Present</Button>
-                <Button variant="outline" size="sm" onClick={() => handleMarkAll('absent')} disabled={isSubmitting || isLoadingStudents}>Mark All Absent</Button>
+                <Button variant="outline" size="sm" onClick={() => handleMarkAll('present')} disabled={isSubmitting || isLoadingStudents || isLoadingClassDetails}>Mark All Present</Button>
+                <Button variant="outline" size="sm" onClick={() => handleMarkAll('absent')} disabled={isSubmitting || isLoadingStudents || isLoadingClassDetails}>Mark All Absent</Button>
             </div>
            )}
         </CardHeader>
@@ -219,17 +216,22 @@ export default function TeacherAttendancePage() {
                 <p className="mt-4 text-lg font-semibold">User Not Loaded</p>
                 <p className="text-muted-foreground">Please try refreshing or logging in again.</p>
             </div>
-          ) : !assignedClassName ? (
+          ) : isLoadingClassDetails ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2">Loading class details...</p>
+            </div>
+          ) : !assignedClassDetails ? (
              <div className="text-center py-6">
                 <Info className="mx-auto h-12 w-12 text-muted-foreground" />
                 <p className="mt-4 text-lg font-semibold">Not Assigned to a Class</p>
-                <p className="text-muted-foreground">You are not currently assigned to a class. Please contact your school administrator.</p>
+                <p className="text-muted-foreground">You are not currently assigned to a class, or your assigned class (ID: {authUser.classId || 'N/A'}) could not be found. Please contact your school administrator.</p>
                  <p className="text-xs text-muted-foreground mt-2">(Ensure you have logged out and back in if your class was recently assigned.)</p>
             </div>
           ) : isLoadingStudents ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2">Loading students for {assignedClassName}...</p>
+              <p className="ml-2">Loading students for {currentClassName}...</p>
             </div>
           ) : studentAttendance.length > 0 ? (
             <Table>
@@ -277,12 +279,12 @@ export default function TeacherAttendancePage() {
             </Table>
           ) : (
             <p className="text-center text-muted-foreground py-4">
-              No students found for your assigned class: {assignedClassName}. Please ensure students are assigned by the admin.
+              No students found for your assigned class: {currentClassName}. Please ensure students are assigned by the admin.
             </p>
           )}
-           {authUser && assignedClassName && studentAttendance.length > 0 && (
+           {authUser && assignedClassDetails && studentAttendance.length > 0 && (
             <div className="mt-6 flex justify-end">
-                <Button onClick={handleSubmitAttendance} disabled={isSubmitting || isLoadingStudents || !attendanceDate}>
+                <Button onClick={handleSubmitAttendance} disabled={isSubmitting || isLoadingStudents || isLoadingClassDetails || !attendanceDate}>
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {isSubmitting ? "Submitting..." : <><Save className="mr-2 h-4 w-4" /> Submit Attendance</>}
                 </Button>

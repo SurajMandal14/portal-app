@@ -11,8 +11,8 @@ export interface AttendanceEntry {
 }
 
 export interface AttendanceSubmissionPayload {
-  classId: string; // This should ideally be a unique ID, but currently using class name
-  className: string;
+  classId: string; // Actual Class _id
+  className: string; // Human-readable class name
   schoolId: string;
   date: Date;
   entries: AttendanceEntry[];
@@ -21,15 +21,15 @@ export interface AttendanceSubmissionPayload {
 
 export interface AttendanceRecord {
   _id: ObjectId | string;
-  studentId: string; // Storing as string, assuming User._id is string after fetch
+  studentId: string; 
   studentName: string;
-  classId: string; // Stores class name
-  className: string;
+  classId: ObjectId | string; // Actual Class _id stored in DB
+  className: string; // Human-readable class name stored in DB
   schoolId: ObjectId | string;
   date: Date;
   status: AttendanceStatus;
   markedByTeacherId: ObjectId | string;
-  markedByTeacherName?: string; // Added to hold teacher's name
+  markedByTeacherName?: string; 
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,4 +44,3 @@ export interface DailyAttendanceOverview {
   late: number;
   percentage: number;
 }
-
