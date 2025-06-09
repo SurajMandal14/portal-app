@@ -29,6 +29,7 @@ export interface AttendanceRecord {
   date: Date;
   status: AttendanceStatus;
   markedByTeacherId: ObjectId | string;
+  markedByTeacherName?: string; // Added to hold teacher's name
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,3 +44,4 @@ export interface DailyAttendanceOverview {
   late: number;
   percentage: number;
 }
+

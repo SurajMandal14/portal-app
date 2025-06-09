@@ -170,7 +170,7 @@ export default function AdminAttendancePage() {
                   <TableHead>Class</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Marked By (Teacher)</TableHead>
+                  <TableHead>Marked By Teacher</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -188,7 +188,7 @@ export default function AdminAttendancePage() {
                             {record.status}
                         </span>
                     </TableCell>
-                    <TableCell>{record.markedByTeacherId.toString().substring(0, 8)}...</TableCell>
+                    <TableCell>{record.markedByTeacherName || 'N/A'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -201,3 +201,4 @@ export default function AdminAttendancePage() {
     </div>
   );
 }
+

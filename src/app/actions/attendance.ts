@@ -101,7 +101,6 @@ export async function getDailyAttendanceForSchool(schoolId: string, date: Date):
     }
 
     const { db } = await connectToDatabase();
-    const attendanceCollection = db.collection<AttendanceRecord>('attendances');
     
     const targetDate = new Date(date);
     targetDate.setUTCHours(0,0,0,0);
@@ -110,20 +109,56 @@ export async function getDailyAttendanceForSchool(schoolId: string, date: Date):
     const endDate = new Date(targetDate);
     endDate.setDate(startDate.getDate() + 1);
     
-    const records = await attendanceCollection.find({
-      schoolId: new ObjectId(schoolId) as any, 
-      date: {
-        $gte: startDate,
-        $lt: endDate,
+    const recordsWithTeacherName = await db.collection('attendances').aggregate([
+      {
+        $match: {
+          schoolId: new ObjectId(schoolId) as any,
+          date: {
+            $gte: startDate,
+            $lt: endDate,
+          },
+        }
       },
-    }).sort({ className: 1, studentName: 1 }).toArray();
+      {
+        $lookup: {
+          from: 'users', // The collection to join
+          localField: 'markedByTeacherId', // Field from the input documents (attendances)
+          foreignField: '_id', // Field from the documents of the "from" collection (users)
+          as: 'teacherInfo' // Output array field
+        }
+      },
+      {
+        $unwind: { // Deconstructs the teacherInfo array field
+          path: '$teacherInfo',
+          preserveNullAndEmptyArrays: true // Keep attendance record even if teacher not found
+        }
+      },
+      {
+        $project: { // Select the fields you want
+          _id: 1,
+          studentId: 1,
+          studentName: 1,
+          classId: 1,
+          className: 1,
+          schoolId: 1,
+          date: 1,
+          status: 1,
+          markedByTeacherId: 1,
+          markedByTeacherName: '$teacherInfo.name', // Get the teacher's name
+          createdAt: 1,
+          updatedAt: 1,
+        }
+      },
+      { $sort: { className: 1, studentName: 1 } }
+    ]).toArray();
     
-    const recordsWithStrId = records.map(record => ({
+    const recordsWithStrId = recordsWithTeacherName.map(record => ({
       ...record,
-      _id: record._id.toString(),
-      schoolId: record.schoolId.toString(),
-      markedByTeacherId: record.markedByTeacherId.toString(),
-    }));
+      _id: (record._id as ObjectId).toString(),
+      schoolId: (record.schoolId as ObjectId).toString(),
+      markedByTeacherId: (record.markedByTeacherId as ObjectId).toString(),
+      markedByTeacherName: record.markedByTeacherName || 'N/A', // Fallback if name is not found
+    })) as AttendanceRecord[];
 
     return { success: true, records: recordsWithStrId };
   } catch (error) {
@@ -202,37 +237,25 @@ export async function getDailyAttendanceOverviewForSchool(schoolId: string, date
 
         let present = 0;
         let late = 0;
-        const attendedStudentIds = new Set<string>();
+        // const attendedStudentIds = new Set<string>(); // Not strictly needed for summary if using totalStudentCountForSchool for absent calculation
 
         attendanceRecords.forEach(record => {
             if (record.status === 'present') {
                 present++;
-                attendedStudentIds.add(record.studentId.toString());
+                // attendedStudentIds.add(record.studentId.toString());
             } else if (record.status === 'late') {
                 late++;
-                attendedStudentIds.add(record.studentId.toString());
+                // attendedStudentIds.add(record.studentId.toString());
             }
         });
         
-        // To accurately calculate absent, we need all student IDs of the school
         const schoolStudents = await usersCollection.find({ schoolId: new ObjectId(schoolId) as any, role: 'student' }).project({ _id: 1 }).toArray();
         const totalStudentCountForSchool = schoolStudents.length;
 
-        // Students who have an attendance record (present or late)
         const markedPresentOrLate = present + late;
         
-        // Students explicitly marked absent
-        const markedAbsent = attendanceRecords.filter(r => r.status === 'absent').length;
-
-        // Students with no attendance record for the day are considered absent.
-        // This is total students minus those explicitly marked present or late.
-        // This count should be accurate if attendance is marked for all students.
-        // If only some classes mark attendance, this could be misleading.
-        // A better approach might be to sum up present + late and then totalStudents - (present+late) for absence
-        // assuming totalStudents is accurate for the day.
-
         const calculatedAbsent = totalStudentCountForSchool - markedPresentOrLate;
-        const absent = calculatedAbsent < 0 ? 0 : calculatedAbsent; // ensure absent is not negative
+        const absent = calculatedAbsent < 0 ? 0 : calculatedAbsent; 
 
         const percentage = totalStudentCountForSchool > 0 ? Math.round(((present + late) / totalStudentCountForSchool) * 100) : 0;
 
@@ -253,3 +276,4 @@ export async function getDailyAttendanceOverviewForSchool(schoolId: string, date
         return { success: false, error: errorMessage, message: 'Failed to fetch daily attendance overview.' };
     }
 }
+
