@@ -28,6 +28,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser } from "@/app/actions/schoolUsers";
@@ -209,7 +210,14 @@ export default function AdminUserManagementPage() {
 
   const availableClasses = schoolDetails?.classFees?.map(cf => cf.className).filter(Boolean) as string[] || [];
 
-  if (!authUser && !isLoadingData) { /* ... unchanged ... */ }
+  if (!authUser && !isLoadingData) { 
+    return (
+      <Card>
+        <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
+        <CardContent><p>Please log in as an admin.</p></CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -400,3 +408,4 @@ export default function AdminUserManagementPage() {
     </div>
   );
 }
+
