@@ -687,9 +687,9 @@ export default function AdminReportsPage() {
                 <TableHeader>
                     <TableRow>
                     <TableHead>Class Name</TableHead>
-                    <TableHead className="text-right">Expected Fees (₹)</TableHead>
-                    <TableHead className="text-right">Collected Fees (₹)</TableHead>
-                    <TableHead className="text-right">Dues (₹)</TableHead>
+                    <TableHead className="text-right">Expected Fees (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Collected Fees (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Dues (<span className="font-sans">₹</span>)</TableHead>
                     <TableHead className="text-center">Collection %</TableHead>
                     </TableRow>
                 </TableHeader>

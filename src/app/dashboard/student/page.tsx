@@ -88,11 +88,11 @@ function StudentDashboardContent() {
           <CardContent>
             {feeSummary ? (
               <>
-                <div className="text-3xl font-bold">${feeSummary.totalDue.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Due out of ${feeSummary.totalFee.toLocaleString()}</p>
+                <div className="text-3xl font-bold"><span className="font-sans">₹</span>{feeSummary.totalDue.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">Due out of <span className="font-sans">₹</span>{feeSummary.totalFee.toLocaleString()}</p>
                 <Progress value={feeSummary.percentagePaid} className="mt-2 h-3" />
                 <div className="mt-2 flex justify-between text-sm">
-                  <span>Paid: ${feeSummary.totalPaid.toLocaleString()}</span>
+                  <span>Paid: <span className="font-sans">₹</span>{feeSummary.totalPaid.toLocaleString()}</span>
                   <span className={`font-semibold ${feeSummary.totalDue > 0 ? 'text-destructive' : 'text-green-600'}`}>
                     {feeSummary.totalDue > 0 ? "Partially Paid" : "Fully Paid"}
                   </span>

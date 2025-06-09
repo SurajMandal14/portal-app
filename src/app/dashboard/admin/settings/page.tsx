@@ -152,10 +152,10 @@ export default function AdminSchoolSettingsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Class Name</TableHead>
-                  <TableHead className="text-right">Tuition Fee (₹)</TableHead>
-                  <TableHead className="text-right">Bus Fee (₹)</TableHead>
-                  <TableHead className="text-right">Canteen Fee (₹)</TableHead>
-                  <TableHead className="text-right">Total Fee (₹)</TableHead>
+                  <TableHead className="text-right">Tuition Fee (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Bus Fee (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Canteen Fee (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Total Fee (<span className="font-sans">₹</span>)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

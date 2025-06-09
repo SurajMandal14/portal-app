@@ -423,9 +423,9 @@ export default function FeeManagementPage() {
                   <TableRow>
                     <TableHead>Student Name</TableHead>
                     <TableHead>Class</TableHead>
-                    <TableHead className="text-right">Total Fee (₹)</TableHead>
-                    <TableHead className="text-right">Paid (₹)</TableHead>
-                    <TableHead className="text-right">Due (₹)</TableHead>
+                    <TableHead className="text-right">Total Fee (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Paid (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Due (<span className="font-sans">₹</span>)</TableHead>
                     <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>

@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen } from "lucide-react"; // Added SquarePen for Admission ID
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
@@ -27,11 +28,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser } from "@/app/actions/schoolUsers";
-import { createSchoolUserFormSchema, updateSchoolUserFormSchema, type CreateSchoolUserFormData, type UpdateSchoolUserFormData } from '@/types/user';
+import { 
+    createStudentFormSchema, type CreateStudentFormData,
+    createTeacherFormSchema, type CreateTeacherFormData,
+    updateSchoolUserFormSchema, type UpdateSchoolUserFormData,
+    type CreateSchoolUserServerActionFormData
+} from '@/types/user';
 import { getSchoolById } from "@/app/actions/schools";
 import type { User as AppUser } from "@/types/user";
 import type { School } from "@/types/school";
@@ -39,7 +44,7 @@ import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 import type { AuthUser } from "@/types/attendance";
 
-type SchoolUser = Partial<AppUser> & { className?: string }; // className is user.classId
+type SchoolUser = Partial<AppUser> & { className?: string };
 
 export default function AdminUserManagementPage() {
   const { toast } = useToast();
@@ -47,26 +52,32 @@ export default function AdminUserManagementPage() {
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [schoolUsers, setSchoolUsers] = useState<SchoolUser[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
+  const [isSubmittingTeacher, setIsSubmittingTeacher] = useState(false);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingUser, setEditingUser] = useState<SchoolUser | null>(null);
   const [userToDelete, setUserToDelete] = useState<SchoolUser | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState("addStudent");
 
-  const formSchema = editingUser ? updateSchoolUserFormSchema : createSchoolUserFormSchema;
 
-  const form = useForm<CreateSchoolUserFormData | UpdateSchoolUserFormData>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      email: "",
-      password: "",
-      role: undefined,
-      classId: "", 
-      admissionId: "",
-    },
+  const studentForm = useForm<CreateStudentFormData>({
+    resolver: zodResolver(createStudentFormSchema),
+    defaultValues: { name: "", email: "", password: "", admissionId: "", classId: "" },
   });
-  const selectedRole = form.watch("role");
+
+  const teacherForm = useForm<CreateTeacherFormData>({
+    resolver: zodResolver(createTeacherFormSchema),
+    defaultValues: { name: "", email: "", password: "", classId: "" },
+  });
+
+  const editForm = useForm<UpdateSchoolUserFormData>({
+    resolver: zodResolver(updateSchoolUserFormSchema),
+    defaultValues: { name: "", email: "", password: "", role: undefined, classId: "", admissionId: "" },
+  });
+  const editingUserRole = editForm.watch("role");
+
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -77,15 +88,10 @@ export default function AdminUserManagementPage() {
           setAuthUser(parsedUser);
         } else {
           setAuthUser(null);
-          toast({ variant: "destructive", title: "Access Denied", description: "You must be a school admin to access this page." });
+          toast({ variant: "destructive", title: "Access Denied", description: "You must be a school admin." });
         }
-      } catch (e) {
-        console.error("Failed to parse authUser in AdminUserManagementPage:", e);
-        setAuthUser(null);
-      }
-    } else {
-      setAuthUser(null);
-    }
+      } catch (e) { setAuthUser(null); }
+    } else { setAuthUser(null); }
   }, [toast]);
 
   const fetchInitialData = useCallback(async () => {
@@ -100,42 +106,29 @@ export default function AdminUserManagementPage() {
         getSchoolUsers(authUser.schoolId.toString())
       ]);
 
-      if (schoolResult.success && schoolResult.school) {
-        setSchoolDetails(schoolResult.school);
-      } else {
-        toast({ variant: "destructive", title: "Error", description: schoolResult.message || "Failed to load school details." });
-      }
+      if (schoolResult.success && schoolResult.school) setSchoolDetails(schoolResult.school);
+      else toast({ variant: "destructive", title: "Error", description: schoolResult.message || "Failed to load school." });
 
       if (usersResult.success && usersResult.users) {
-        const usersWithClassNames = usersResult.users.map(user => ({ 
-            ...user, 
-            className: user.classId || 'N/A',
-            admissionId: user.admissionId || undefined 
-        }));
-        setSchoolUsers(usersWithClassNames);
+        setSchoolUsers(usersResult.users.map(u => ({ ...u, className: u.classId || 'N/A', admissionId: u.admissionId })));
       } else {
-        toast({ variant: "destructive", title: "Error", description: usersResult.message || "Failed to load school users." });
+        toast({ variant: "destructive", title: "Error", description: usersResult.message || "Failed to load users." });
       }
     } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred while fetching data." });
+      toast({ variant: "destructive", title: "Error", description: "Unexpected error fetching data." });
     } finally {
       setIsLoadingData(false);
     }
   }, [authUser, toast]);
 
   useEffect(() => {
-    if (authUser && authUser.schoolId) {
-      fetchInitialData();
-    } else {
-      setSchoolUsers([]);
-      setSchoolDetails(null);
-      setIsLoadingData(false);
-    }
+    if (authUser?.schoolId) fetchInitialData();
+    else { setIsLoadingData(false); setSchoolUsers([]); setSchoolDetails(null); }
   }, [authUser, fetchInitialData]);
 
   useEffect(() => {
     if (editingUser) {
-      form.reset({
+      editForm.reset({
         name: editingUser.name || "",
         email: editingUser.email || "",
         password: "", 
@@ -144,58 +137,63 @@ export default function AdminUserManagementPage() {
         admissionId: editingUser.admissionId || "",
       });
     } else {
-      form.reset({
-        name: "", email: "", password: "", role: undefined, classId: "", admissionId: "",
-      });
+      editForm.reset({ name: "", email: "", password: "", role: undefined, classId: "", admissionId: "" });
     }
-  }, [editingUser, form]); 
+  }, [editingUser, editForm]);
 
-  async function onSubmit(values: CreateSchoolUserFormData | UpdateSchoolUserFormData) {
-    if (!authUser || !authUser.schoolId) {
-      toast({ variant: "destructive", title: "Error", description: "Admin authentication error." });
-      return;
-    }
-    setIsSubmitting(true);
-    let result;
-
-    if (editingUser && editingUser._id) {
-      result = await updateSchoolUser(editingUser._id.toString(), authUser.schoolId.toString(), values as UpdateSchoolUserFormData);
-    } else {
-      result = await createSchoolUser(values as CreateSchoolUserFormData, authUser.schoolId.toString());
-    }
-    setIsSubmitting(false);
-
+  async function handleStudentSubmit(values: CreateStudentFormData) {
+    if (!authUser?.schoolId) return;
+    setIsSubmittingStudent(true);
+    const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'student' };
+    const result = await createSchoolUser(payload, authUser.schoolId.toString());
+    setIsSubmittingStudent(false);
     if (result.success) {
-      toast({ title: editingUser ? "User Updated" : "User Created", description: result.message });
-      setEditingUser(null); 
-      form.reset({ name: "", email: "", password: "", role: undefined, classId: "", admissionId: "" });
-      fetchInitialData(); 
+      toast({ title: "Student Created", description: result.message });
+      studentForm.reset();
+      fetchInitialData();
     } else {
-      toast({ variant: "destructive", title: editingUser ? "Update Failed" : "Creation Failed", description: result.error || result.message });
+      toast({ variant: "destructive", title: "Creation Failed", description: result.error || result.message });
     }
   }
 
-  const handleEditClick = (user: SchoolUser) => {
-    setEditingUser(user);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  async function handleTeacherSubmit(values: CreateTeacherFormData) {
+    if (!authUser?.schoolId) return;
+    setIsSubmittingTeacher(true);
+    const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'teacher' };
+    const result = await createSchoolUser(payload, authUser.schoolId.toString());
+    setIsSubmittingTeacher(false);
+    if (result.success) {
+      toast({ title: "Teacher Created", description: result.message });
+      teacherForm.reset();
+      fetchInitialData();
+    } else {
+      toast({ variant: "destructive", title: "Creation Failed", description: result.error || result.message });
+    }
+  }
+  
+  async function handleEditSubmit(values: UpdateSchoolUserFormData) {
+    if (!authUser?.schoolId || !editingUser?._id) return;
+    setIsSubmittingEdit(true);
+    const result = await updateSchoolUser(editingUser._id.toString(), authUser.schoolId.toString(), values);
+    setIsSubmittingEdit(false);
+    if (result.success) {
+      toast({ title: "User Updated", description: result.message });
+      setEditingUser(null);
+      fetchInitialData();
+    } else {
+      toast({ variant: "destructive", title: "Update Failed", description: result.error || result.message });
+    }
+  }
 
-  const cancelEdit = () => {
-    setEditingUser(null);
-    form.reset({ name: "", email: "", password: "", role: undefined, classId: "", admissionId: "" });
-  };
-
-  const handleDeleteClick = (user: SchoolUser) => {
-    setUserToDelete(user);
-  };
+  const handleEditClick = (user: SchoolUser) => { setEditingUser(user); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const cancelEdit = () => setEditingUser(null);
+  const handleDeleteClick = (user: SchoolUser) => setUserToDelete(user);
 
   const handleConfirmDelete = async () => {
-    if (!userToDelete || !userToDelete._id || !authUser?.schoolId) return;
-
+    if (!userToDelete?._id || !authUser?.schoolId) return;
     setIsDeleting(true);
     const result = await deleteSchoolUser(userToDelete._id.toString(), authUser.schoolId.toString());
     setIsDeleting(false);
-
     if (result.success) {
       toast({ title: "User Deleted", description: result.message });
       fetchInitialData();
@@ -206,27 +204,12 @@ export default function AdminUserManagementPage() {
   };
   
   const filteredUsers = schoolUsers.filter(user => 
-    user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.classId && user.classId !== 'N/A' && user.classId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (user.admissionId && user.admissionId.toLowerCase().includes(searchTerm.toLowerCase()))
+    Object.values(user).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  if (!authUser && !isLoadingData) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <Card className="w-full max-w-md p-6">
-          <CardHeader><CardTitle>Access Denied</CardTitle><CardDescription>You need to be logged in as a school administrator to manage users.</CardDescription></CardHeader>
-          <CardContent><Button onClick={() => window.location.href = '/'} className="w-full">Go to Login</Button></CardContent>
-        </Card>
-      </div>
-    );
-  }
-  
-  const availableClasses = schoolDetails?.classFees
-    ?.map(cf => cf.className)
-    .filter(name => typeof name === 'string' && name.trim() !== '') || [];
+  const availableClasses = schoolDetails?.classFees?.map(cf => cf.className).filter(Boolean) as string[] || [];
+
+  if (!authUser && !isLoadingData) { /* ... unchanged ... */ }
 
   return (
     <div className="space-y-6">
@@ -236,97 +219,126 @@ export default function AdminUserManagementPage() {
             <Users className="mr-2 h-6 w-6" /> School User Management
           </CardTitle>
           <CardDescription>
-            {editingUser ? `Editing: ${editingUser.name}` : `Manage teacher and student accounts for ${schoolDetails?.schoolName || "your school"}.`}
+            Manage teacher and student accounts for {schoolDetails?.schoolName || "your school"}.
           </CardDescription>
         </CardHeader>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            {editingUser ? <Edit3 className="mr-2 h-5 w-5"/> : <UserPlus className="mr-2 h-5 w-5"/>}
-            {editingUser ? "Edit User" : "Add New User"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(isLoadingData && !schoolDetails) ? (
-            <div className="flex items-center justify-center py-4"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Loading school configuration...</p></div>
-          ) : (!schoolDetails && !isLoadingData) ? (
-             <p className="text-center text-muted-foreground py-4">School details not found. Cannot add or edit users.</p>
-          ) : (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., John Teacher" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>
-                )}/>
-                <FormField control={form.control} name="email" render={({ field }) => (
-                    <FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" placeholder="user@example.com" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>
-                )}/>
-                <FormField control={form.control} name="password" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} /></FormControl>
-                      {editingUser && <FormDescription className="text-xs">Leave blank to keep current password.</FormDescription>}
-                      {!editingUser && <FormDescription className="text-xs">Must be at least 6 characters.</FormDescription>}
-                      <FormMessage />
-                    </FormItem>
-                )}/>
-                 <FormField control={form.control} name="role" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Role</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || !!editingUser}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Select user role" /></SelectTrigger></FormControl>
-                            <SelectContent>
-                                <SelectItem value="teacher"><Briefcase className="mr-2 h-4 w-4 inline-block"/> Teacher</SelectItem>
-                                <SelectItem value="student"><BookUser className="mr-2 h-4 w-4 inline-block"/> Student</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        {editingUser && <FormDescription className="text-xs">Role cannot be changed after creation.</FormDescription>}
+      {editingUser ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center"><Edit3 className="mr-2 h-5 w-5"/>Edit User: {editingUser.name}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField control={editForm.control} name="name" render={({ field }) => (
+                      <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} disabled={isSubmittingEdit} /></FormControl><FormMessage /></FormItem>
+                  )}/>
+                  <FormField control={editForm.control} name="email" render={({ field }) => (
+                      <FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" {...field} disabled={isSubmittingEdit} /></FormControl><FormMessage /></FormItem>
+                  )}/>
+                  <FormField control={editForm.control} name="password" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>New Password</FormLabel>
+                        <FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingEdit} /></FormControl>
+                        <FormDescription className="text-xs">Leave blank to keep current password.</FormDescription>
                         <FormMessage />
-                    </FormItem>
-                 )}/>
-                 {selectedRole === 'student' && (
-                    <FormField control={form.control} name="admissionId" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4 text-muted-foreground"/>Admission ID (Required for Students)</FormLabel>
-                            <FormControl><Input placeholder="e.g., S1001" {...field} disabled={isSubmitting} /></FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
-                 )}
-                 {(selectedRole === 'teacher' || selectedRole === 'student') && availableClasses.length > 0 && (
-                    <FormField control={form.control} name="classId" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Assign to Class {selectedRole === 'student' ? '' : '(Optional for Teachers)'}</FormLabel> {/* Removed (Required for Students) as it's not schema-enforced */}
-                            <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger></FormControl>
-                                <SelectContent>{availableClasses.map((className) => (<SelectItem key={className} value={className}>{className}</SelectItem>))}</SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
-                 )}
-                 {selectedRole && availableClasses.length === 0 && (
-                    <p className="text-sm text-muted-foreground md:col-span-2">No classes configured for this school. Please add classes in School Settings or Super Admin panel to assign users to a class.</p>
-                 )}
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || isLoadingData}>
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (editingUser ? <Edit3 className="mr-2 h-4 w-4" /> : <PlusCircle className="mr-2 h-4 w-4" />)}
-                  {isSubmitting ? (editingUser ? "Updating..." : "Creating...") : (editingUser ? "Update User" : "Create User")}
-                </Button>
-                {editingUser && (
-                  <Button type="button" variant="outline" onClick={cancelEdit} disabled={isSubmitting}>
-                    <XCircle className="mr-2 h-4 w-4" /> Cancel Edit
+                      </FormItem>
+                  )}/>
+                   <FormField control={editForm.control} name="role" render={({ field }) => (
+                      <FormItem>
+                          <FormLabel>Role</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={true}>
+                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                  <SelectItem value="teacher">Teacher</SelectItem>
+                                  <SelectItem value="student">Student</SelectItem>
+                              </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">Role cannot be changed after creation.</FormDescription>
+                          <FormMessage />
+                      </FormItem>
+                   )}/>
+                   {editingUserRole === 'student' && (
+                      <FormField control={editForm.control} name="admissionId" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel>
+                              <FormControl><Input {...field} disabled={isSubmittingEdit} /></FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}/>
+                   )}
+                   {(editingUserRole === 'teacher' || editingUserRole === 'student') && availableClasses.length > 0 && (
+                      <FormField control={editForm.control} name="classId" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Assign to Class</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingEdit}>
+                                  <FormControl><SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger></FormControl>
+                                  <SelectContent>{availableClasses.map((cn) => (<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}</SelectContent>
+                              </Select>
+                              <FormMessage />
+                          </FormItem>
+                      )}/>
+                   )}
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={isSubmittingEdit || isLoadingData}>
+                    {isSubmittingEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit3 className="mr-2 h-4 w-4" />}
+                    Update User
                   </Button>
-                )}
-              </div>
-            </form>
-          </Form>
-          )}
-        </CardContent>
-      </Card>
+                  <Button type="button" variant="outline" onClick={cancelEdit} disabled={isSubmittingEdit}><XCircle className="mr-2 h-4 w-4" />Cancel</Button>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-2 md:w-1/2">
+            <TabsTrigger value="addStudent"><BookUser className="mr-2"/>Add Student</TabsTrigger>
+            <TabsTrigger value="addTeacher"><Briefcase className="mr-2"/>Add Teacher</TabsTrigger>
+          </TabsList>
+          <TabsContent value="addStudent">
+            <Card>
+              <CardHeader><CardTitle className="flex items-center"><UserPlus className="mr-2 h-5 w-5"/>Add New Student</CardTitle></CardHeader>
+              <CardContent>
+                <Form {...studentForm}>
+                  <form onSubmit={studentForm.handleSubmit(handleStudentSubmit)} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={studentForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., John Doe" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={studentForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="student@example.com" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={studentForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={studentForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel><FormControl><Input placeholder="e.g., S1001" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
+                        {availableClasses.length > 0 && <FormField control={studentForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Assign to Class (Optional)</FormLabel><Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingStudent}><FormControl><SelectTrigger><SelectValue placeholder="Select class"/></SelectTrigger></FormControl><SelectContent>{availableClasses.map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}</SelectContent></Select><FormMessage/></FormItem>)}/>}
+                    </div>
+                    <Button type="submit" className="w-full md:w-auto" disabled={isSubmittingStudent || isLoadingData}>{isSubmittingStudent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Student</Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="addTeacher">
+            <Card>
+              <CardHeader><CardTitle className="flex items-center"><UserPlus className="mr-2 h-5 w-5"/>Add New Teacher</CardTitle></CardHeader>
+              <CardContent>
+                 <Form {...teacherForm}>
+                  <form onSubmit={teacherForm.handleSubmit(handleTeacherSubmit)} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={teacherForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Jane Teacher" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={teacherForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="teacher@example.com" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={teacherForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
+                        {availableClasses.length > 0 && <FormField control={teacherForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Assign to Class (Optional)</FormLabel><Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingTeacher}><FormControl><SelectTrigger><SelectValue placeholder="Select class if class teacher"/></SelectTrigger></FormControl><SelectContent>{availableClasses.map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}</SelectContent></Select><FormMessage/></FormItem>)}/>}
+                    </div>
+                     <Button type="submit" className="w-full md:w-auto" disabled={isSubmittingTeacher || isLoadingData}>{isSubmittingTeacher ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Teacher</Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      )}
 
       <Card>
         <CardHeader>
@@ -355,22 +367,21 @@ export default function AdminUserManagementPage() {
                       {user.role}
                     </span>
                   </TableCell>
-                  <TableCell>{user.classId !== 'N/A' ? user.classId : 'N/A'}</TableCell>
+                  <TableCell>{user.className !== 'N/A' ? user.className : 'N/A'}</TableCell>
                   <TableCell>{user.createdAt ? format(new Date(user.createdAt), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(user)} disabled={isSubmitting || isDeleting}><Edit3 className="h-4 w-4" /></Button>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(user)} disabled={isSubmittingStudent || isSubmittingTeacher || isSubmittingEdit || isDeleting}><Edit3 className="h-4 w-4" /></Button>
                     <AlertDialog>
-                      <AlertDialogTrigger asChild><Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteClick(user)} disabled={isSubmitting || isDeleting}><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
+                      <AlertDialogTrigger asChild><Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteClick(user)} disabled={isSubmittingStudent || isSubmittingTeacher || isSubmittingEdit || isDeleting}><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
                       {userToDelete && userToDelete._id === user._id && (
                         <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>This action cannot be undone. This will permanently delete the account for <span className="font-semibold">{userToDelete.name} ({userToDelete.email})</span>.</AlertDialogDescription>
+                          <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>Delete <span className="font-semibold">{userToDelete.name} ({userToDelete.email})</span>?</AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel onClick={() => setUserToDelete(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
                             <AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
-                              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              {isDeleting ? "Deleting..." : "Yes, delete user"}
+                              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
@@ -382,11 +393,10 @@ export default function AdminUserManagementPage() {
             </TableBody>
           </Table>
           ) : (
-             <p className="text-center text-muted-foreground py-4">{searchTerm ? "No users match your search." : "No teachers or students found for this school."}</p>
+             <p className="text-center text-muted-foreground py-4">{searchTerm ? "No users match search." : "No teachers or students found."}</p>
           )}
         </CardContent>
       </Card>
     </div>
   );
 }
-

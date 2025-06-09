@@ -214,7 +214,7 @@ export default function StudentFeesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Payment Date</TableHead>
-                  <TableHead>Amount Paid (₹)</TableHead>
+                  <TableHead>Amount Paid (<span className="font-sans">₹</span>)</TableHead>
                   <TableHead>Payment Method</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Recorded On</TableHead>

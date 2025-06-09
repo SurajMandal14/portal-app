@@ -18,6 +18,8 @@ export interface User {
   admissionId?: string; // New field for admin-defined student ID
   avatarUrl?: string;
   phone?: string;
+  // classTeacherOfClassId?: string | ObjectId; // ID of the class this teacher is a class teacher for
+  // subjectsTaught?: string[]; // For teachers, list of subject names or IDs they teach
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,7 +38,27 @@ export const schoolAdminFormSchema = z.object({
 export type SchoolAdminFormData = z.infer<typeof schoolAdminFormSchema>;
 
 
-// Zod schema for admin creating school users (teachers, students)
+// Zod schema for admin creating students
+export const createStudentFormSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  email: z.string().email({ message: "Invalid email address." }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  admissionId: z.string().min(1, { message: "Admission ID is required for students."}),
+  classId: z.string().optional(), // Optional class assignment at creation
+});
+export type CreateStudentFormData = z.infer<typeof createStudentFormSchema>;
+
+// Zod schema for admin creating teachers
+export const createTeacherFormSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  email: z.string().email({ message: "Invalid email address." }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  classId: z.string().optional(), // Optional: if teacher is also a class teacher for a specific class
+});
+export type CreateTeacherFormData = z.infer<typeof createTeacherFormSchema>;
+
+
+// Generic Zod schema for admin creating school users (teachers, students) - used by server action
 export const createSchoolUserFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
@@ -55,6 +77,7 @@ export const createSchoolUserFormSchema = z.object({
 });
 export type CreateSchoolUserFormData = z.infer<typeof createSchoolUserFormSchema>;
 
+
 // Zod schema for admin updating school users (teachers, students)
 export const updateSchoolUserFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -67,16 +90,16 @@ export const updateSchoolUserFormSchema = z.object({
 export type UpdateSchoolUserFormData = z.infer<typeof updateSchoolUserFormSchema>;
 
 
-// Added for school admin creating teachers/students
-export interface CreateSchoolUserServerFormData {
+// Added for school admin creating teachers/students (used by createSchoolUser action parameter)
+export interface CreateSchoolUserServerActionFormData {
   name: string;
   email: string;
-  password?: string; // Required for create
+  password: string; // Required for create by server action
   role: 'teacher' | 'student';
-  schoolId: string;
   classId?: string;
-  admissionId?: string; // Added field
+  admissionId?: string;
 }
+
 
 // Schema for updating basic profile info (name, phone, avatar)
 export const updateProfileFormSchema = z.object({
@@ -85,4 +108,3 @@ export const updateProfileFormSchema = z.object({
   avatarUrl: z.string().url("Invalid URL format for avatar.").optional().or(z.literal('')),
 });
 export type UpdateProfileFormData = z.infer<typeof updateProfileFormSchema>;
-
