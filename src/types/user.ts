@@ -14,12 +14,12 @@ export interface User {
   name: string;
   role: UserRole;
   schoolId?: ObjectId | string;
-  classId?: string; // Storing className as string for now
-  admissionId?: string; // New field for admin-defined student ID
+  classId?: string; // For students: class they belong to. For teachers: primary class they can mark attendance for.
+  admissionId?: string; 
   avatarUrl?: string;
   phone?: string;
-  // classTeacherOfClassId?: string | ObjectId; // ID of the class this teacher is a class teacher for
-  // subjectsTaught?: string[]; // For teachers, list of subject names or IDs they teach
+  // classTeacherOfClassId?: string | ObjectId; // ID of the class this teacher is a class teacher for (DEPRECATED - logic moved to SchoolClass.classTeacherId and User.classId for attendance focus)
+  subjectsTaught?: string[]; // For teachers, list of subject names or IDs they teach (Future use)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,7 +53,7 @@ export const createTeacherFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  classId: z.string().optional(), // Optional: if teacher is also a class teacher for a specific class
+  classId: z.string().optional(), // Optional: if teacher is also a class teacher for a specific class (this will be their primary attendance class)
 });
 export type CreateTeacherFormData = z.infer<typeof createTeacherFormSchema>;
 
@@ -84,8 +84,8 @@ export const updateSchoolUserFormSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "New password must be at least 6 characters." }).optional().or(z.literal('')), // Optional for update
   role: z.enum(['teacher', 'student'], { required_error: "Role is required." }), // Role might be non-editable in UI, but schema needs it
-  classId: z.string().optional(),
-  admissionId: z.string().optional(), // Can be empty if admin wants to clear it. Uniqueness check on server.
+  classId: z.string().optional(), // For students: their class. For teachers: their primary attendance class.
+  admissionId: z.string().optional(), 
 });
 export type UpdateSchoolUserFormData = z.infer<typeof updateSchoolUserFormSchema>;
 
