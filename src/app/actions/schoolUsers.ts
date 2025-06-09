@@ -31,11 +31,6 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
 
     const { name, email, password, role, classId, admissionId } = validatedFields.data;
 
-    // Server-side check: classId is required if role is student (Can be made optional if not strictly needed at creation)
-    // if (role === 'student' && (!classId || classId.trim() === "")) {
-    //   return { success: false, message: 'Validation failed', error: 'A class assignment is required for students.' };
-    // }
-
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<Omit<User, '_id'>>('users');
 
@@ -54,14 +49,14 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
     const hashedPassword = await bcrypt.hash(password, 10);
     const userSchoolId = new ObjectId(schoolId);
 
-    const newUser: Omit<User, '_id'> = {
+    const newUser: Omit<User, '_id' | 'createdAt' | 'updatedAt'> & { createdAt: Date, updatedAt: Date } = {
       name,
       email,
       password: hashedPassword,
       role: role as UserRole,
       schoolId: userSchoolId,
-      classId: classId || undefined, 
-      admissionId: role === 'student' ? admissionId || undefined : undefined,
+      classId: (classId && classId.trim() !== "") ? classId.trim() : undefined,
+      admissionId: role === 'student' ? (admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined) : undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -79,12 +74,12 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
     return {
       success: true,
       message: `${role.charAt(0).toUpperCase() + role.slice(1)} created successfully!`,
-      user: { 
-        ...userWithoutPassword, 
+      user: {
+        ...userWithoutPassword,
         _id: result.insertedId.toString(),
         schoolId: userSchoolId.toString(),
-        classId: classId || undefined, 
-        admissionId: newUser.admissionId,
+        createdAt: newUser.createdAt.toISOString(),
+        updatedAt: newUser.updatedAt.toISOString(),
       },
     };
 
@@ -97,7 +92,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
 
 export interface GetSchoolUsersResult {
   success: boolean;
-  users?: Partial<User>[]; 
+  users?: Partial<User>[];
   error?: string;
   message?: string;
 }
@@ -108,13 +103,14 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         return { success: false, message: 'Invalid School ID format for fetching users.', error: 'Invalid School ID.'};
     }
     const { db } = await connectToDatabase();
-    
-    const usersFromDb = await db.collection<User>('users').find({ 
+
+    const usersFromDb = await db.collection('users').find({
       schoolId: new ObjectId(schoolId) as any,
-      role: { $in: ['teacher', 'student'] } 
+      role: { $in: ['teacher', 'student'] }
     }).sort({ createdAt: -1 }).toArray();
-    
-    const users = usersFromDb.map(user => {
+
+    const users = usersFromDb.map(userDoc => {
+      const user = userDoc as unknown as User; // Cast to User to help TypeScript with field access
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...userWithoutPassword } = user;
       return {
@@ -122,7 +118,9 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         _id: user._id.toString(),
         schoolId: user.schoolId?.toString(),
         classId: user.classId || undefined,
-        admissionId: user.admissionId || undefined, 
+        admissionId: user.admissionId || undefined,
+        createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
+        updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : undefined,
       };
     });
 
@@ -156,11 +154,6 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
 
     const { name, email, password, role, classId, admissionId } = validatedFields.data;
 
-    // Server-side check: classId can be optional if not strictly needed for students at all times
-    // if (role === 'student' && (!classId || classId.trim() === "")) {
-    //   return { success: false, message: 'Validation failed', error: 'A class assignment is required for students.' };
-    // }
-
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
 
@@ -169,38 +162,36 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
       return { success: false, message: 'User not found or does not belong to this school.', error: 'User mismatch.' };
     }
 
-    // Check if email is being changed to one that already exists (and isn't the current user's)
     const existingUserByEmail = await usersCollection.findOne({ email });
     if (existingUserByEmail && existingUserByEmail._id.toString() !== userId) {
       return { success: false, message: 'This email is already in use by another account.', error: 'Email already in use.' };
     }
 
     if (role === 'student' && admissionId && admissionId.trim() !== "") {
-        const existingUserByAdmissionId = await usersCollection.findOne({ 
-            admissionId, 
-            schoolId: new ObjectId(schoolId), 
+        const existingUserByAdmissionId = await usersCollection.findOne({
+            admissionId,
+            schoolId: new ObjectId(schoolId),
             role: 'student',
-            _id: { $ne: new ObjectId(userId) as any } // Exclude current user
+            _id: { $ne: new ObjectId(userId) as any }
         });
         if (existingUserByAdmissionId) {
             return { success: false, message: `Admission ID '${admissionId}' is already in use for another student in this school.`, error: 'Admission ID already taken.' };
         }
     }
-    
-    const updateData: Partial<Omit<User, '_id' | 'role'>> & { role?: UserRole } = { 
+
+    const updateData: Partial<Omit<User, '_id' | 'role' | 'createdAt'>> & { role?: UserRole; updatedAt: Date } = {
       name,
       email,
-      classId: classId || undefined,
+      classId: (classId && classId.trim() !== "") ? classId.trim() : undefined,
       updatedAt: new Date(),
     };
 
-    if (role && (role === 'teacher' || role === 'student')) { 
-        updateData.role = role; // Role typically shouldn't change, but schema allows it
+    if (role && (role === 'teacher' || role === 'student')) {
+        updateData.role = role;
         if (role === 'student') {
             updateData.admissionId = admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined;
         } else {
-            // If role changed from student to teacher, or is teacher, clear admissionId
-            updateData.admissionId = undefined; 
+            updateData.admissionId = undefined;
         }
     }
 
@@ -220,9 +211,9 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
     if (result.matchedCount === 0) {
       return { success: false, message: 'User not found for update.', error: 'User not found.' };
     }
-    
+
     revalidatePath('/dashboard/admin/users');
-    
+
     const updatedUserDoc = await usersCollection.findOne({ _id: new ObjectId(userId) as any });
     if (!updatedUserDoc) {
       return { success: false, message: 'Failed to retrieve user after update.', error: 'Could not fetch updated user.' };
@@ -239,6 +230,8 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         schoolId: updatedUserDoc.schoolId?.toString(),
         classId: updatedUserDoc.classId || undefined,
         admissionId: updatedUserDoc.admissionId || undefined,
+        createdAt: updatedUserDoc.createdAt ? new Date(updatedUserDoc.createdAt).toISOString() : undefined,
+        updatedAt: updatedUserDoc.updatedAt ? new Date(updatedUserDoc.updatedAt).toISOString() : undefined,
       }
     };
 
@@ -264,10 +257,10 @@ export async function deleteSchoolUser(userId: string, schoolId: string): Promis
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
 
-    const result = await usersCollection.deleteOne({ 
-      _id: new ObjectId(userId) as any, 
+    const result = await usersCollection.deleteOne({
+      _id: new ObjectId(userId) as any,
       schoolId: new ObjectId(schoolId) as any,
-      role: { $in: ['teacher', 'student'] } 
+      role: { $in: ['teacher', 'student'] }
     });
 
     if (result.deletedCount === 0) {
@@ -294,23 +287,30 @@ export async function getStudentsByClass(schoolId: string, className: string): P
     }
 
     const { db } = await connectToDatabase();
-    const usersCollection = db.collection<User>('users');
+    const usersCollection = db.collection('users');
 
-    const students = await usersCollection.find({
+    const studentsFromDb = await usersCollection.find({
       schoolId: new ObjectId(schoolId) as any,
-      classId: className, 
+      classId: className,
       role: 'student'
-    }).project({ password: 0 }).sort({ name: 1 }).toArray(); 
+    }).project({ password: 0 }).sort({ name: 1 }).toArray();
 
-    const studentsWithStrId = students.map(student => ({
-      ...student,
-      _id: student._id.toString(),
-      schoolId: student.schoolId?.toString(),
-      classId: student.classId || undefined,
-      admissionId: student.admissionId || undefined,
-    }));
+    const students = studentsFromDb.map(studentDoc => {
+      const student = studentDoc as unknown as User;
+      return {
+        _id: student._id.toString(),
+        name: student.name,
+        email: student.email,
+        role: student.role,
+        schoolId: student.schoolId?.toString(),
+        classId: student.classId || undefined,
+        admissionId: student.admissionId || undefined,
+        createdAt: student.createdAt ? new Date(student.createdAt).toISOString() : undefined,
+        updatedAt: student.updatedAt ? new Date(student.updatedAt).toISOString() : undefined,
+      };
+    });
 
-    return { success: true, users: studentsWithStrId };
+    return { success: true, users: students };
   } catch (error) {
     console.error('Get students by class server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -380,3 +380,4 @@ export async function getStudentCountByClass(schoolId: string, className: string
     return { success: false, error: errorMessage, message: 'Failed to fetch student count for the class.' };
   }
 }
+

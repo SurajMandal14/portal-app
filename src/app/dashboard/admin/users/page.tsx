@@ -47,9 +47,9 @@ import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 import type { AuthUser } from "@/types/attendance";
 
-type SchoolUser = Partial<AppUser> & { className?: string };
+type SchoolUser = Partial<AppUser>; // User object from server action will have string IDs/dates
 
-const NONE_CLASS_VALUE = "__NONE_CLASS__"; // Constant for "None" class option
+const NONE_CLASS_VALUE = "__NONE_CLASS__"; 
 
 export default function AdminUserManagementPage() {
   const { toast } = useToast();
@@ -118,14 +118,13 @@ export default function AdminUserManagementPage() {
       else toast({ variant: "destructive", title: "Error", description: schoolResult.message || "Failed to load school details." });
 
       if (usersResult.success && usersResult.users) {
-        setSchoolUsers(usersResult.users.map(u => ({ ...u, className: u.classId || 'N/A', admissionId: u.admissionId })));
+        setSchoolUsers(usersResult.users); // Directly set, as users are already mapped in action
       } else {
         toast({ variant: "destructive", title: "Error", description: usersResult.message || "Failed to load users." });
       }
 
       if (classesResult.success && classesResult.classes) {
         setManagedClasses(classesResult.classes);
-        // Filter out any potential null, undefined, or empty string class names
         const classNamesFromManaged = classesResult.classes.map(cls => cls.name).filter(Boolean) as string[];
         setAvailableClassNames(classNamesFromManaged);
       } else {
@@ -153,7 +152,7 @@ export default function AdminUserManagementPage() {
         email: editingUser.email || "",
         password: "", 
         role: editingUser.role as 'teacher' | 'student' | undefined,
-        classId: (editingUser.classId && editingUser.classId !== 'N/A') ? editingUser.classId : "", 
+        classId: editingUser.classId || "", 
         admissionId: editingUser.admissionId || "",
       });
     } else {
@@ -318,7 +317,7 @@ export default function AdminUserManagementPage() {
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes available. Create them in Class Management.</FormDescription>}
+                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -369,7 +368,7 @@ export default function AdminUserManagementPage() {
                                         {availableClassNames.filter(Boolean).map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
                                     </SelectContent>
                                 </Select>
-                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes available. Create them in Class Management.</FormDescription>}
+                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
                                 <FormMessage/>
                             </FormItem>
                         )}/>
@@ -407,7 +406,7 @@ export default function AdminUserManagementPage() {
                                     </SelectContent>
                                 </Select>
                                 <FormDescription className="text-xs">Assigning here makes them the primary class teacher for attendance.</FormDescription>
-                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes available. Create them in Class Management.</FormDescription>}
+                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
                                 <FormMessage/>
                             </FormItem>
                         )}/>
@@ -448,11 +447,11 @@ export default function AdminUserManagementPage() {
                       {user.role}
                     </span>
                   </TableCell>
-                  <TableCell>{user.classId && user.classId !== 'N/A' ? user.classId : 'N/A'}</TableCell>
-                  <TableCell>{user.createdAt ? format(new Date(user.createdAt as string | Date), "PP") : 'N/A'}</TableCell>
+                  <TableCell>{user.classId || 'N/A'}</TableCell>
+                  <TableCell>{user.createdAt ? format(new Date(user.createdAt as string), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(user)} disabled={isSubmittingStudent || isSubmittingTeacher || isSubmittingEdit || isDeleting}><Edit3 className="h-4 w-4" /></Button>
-                    <AlertDialog>
+                    <AlertDialog open={userToDelete?._id === user._id} onOpenChange={(open) => !open && setUserToDelete(null)}>
                       <AlertDialogTrigger asChild><Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteClick(user)} disabled={isSubmittingStudent || isSubmittingTeacher || isSubmittingEdit || isDeleting}><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
                       {userToDelete && userToDelete._id === user._id && (
                         <AlertDialogContent>
