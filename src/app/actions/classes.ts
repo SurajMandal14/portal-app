@@ -9,30 +9,27 @@ import type { User } from '@/types/user';
 import { ObjectId } from 'mongodb';
 import { revalidatePath } from 'next/cache';
 
-// Helper function to update teacher's classId
-async function updateTeacherClassAssignment(db: any, teacherId: string | ObjectId | null | undefined, newClassIdForTeacher: string | null, schoolId: string | ObjectId) {
-  if (!teacherId) return; // No teacher to update
+// Helper function to update teacher's User.classId field.
+// This field indicates the class for which the teacher is the primary attendance marker.
+async function updateTeacherPrimaryClassAssignment(db: any, teacherId: string | ObjectId | null | undefined, newPrimaryClassIdForTeacher: string | null, schoolId: string | ObjectId) {
+  if (!teacherId) return; 
 
   const teacherObjectId = new ObjectId(teacherId);
   const usersCollection = db.collection<User>('users');
 
-  // Find the teacher
   const teacher = await usersCollection.findOne({ _id: teacherObjectId, schoolId: new ObjectId(schoolId), role: 'teacher' });
   if (!teacher) {
-    console.warn(`updateTeacherClassAssignment: Teacher with ID ${teacherId} not found in school ${schoolId}.`);
+    console.warn(`updateTeacherPrimaryClassAssignment: Teacher with ID ${teacherId} not found in school ${schoolId}.`);
     return;
   }
-
-  // 1. Clear `classId` for any teacher who was previously assigned to the class `newClassIdForTeacher` (if `newClassIdForTeacher` is not null).
-  // This is important if a class is getting a *new* class teacher. The *old* class teacher of that class needs their `classId` cleared.
-  // This situation is handled when updating a class below.
-
-  // 2. Update the specified teacher's `classId`
+  
+  // Update the specified teacher's `User.classId` to point to the new class ID (or clear it if newPrimaryClassIdForTeacher is null)
+  // The User.classId should store the *string representation* of the Class's _id.
   await usersCollection.updateOne(
     { _id: teacherObjectId, schoolId: new ObjectId(schoolId), role: 'teacher' },
-    { $set: { classId: newClassIdForTeacher ? newClassIdForTeacher.toString() : undefined, updatedAt: new Date().toISOString() } }
+    { $set: { classId: newPrimaryClassIdForTeacher ? newPrimaryClassIdForTeacher.toString() : undefined, updatedAt: new Date() } } 
   );
-  console.log(`Teacher ${teacherId} classId updated to ${newClassIdForTeacher}`);
+  console.log(`Teacher ${teacherId} User.classId updated to ${newPrimaryClassIdForTeacher}`);
 }
 
 
@@ -51,16 +48,14 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
     const { name, classTeacherId, subjects } = validatedFields.data;
 
     const { db } = await connectToDatabase();
-    const classesCollection = db.collection('school_classes'); // Use raw collection for insertion
+    const classesCollection = db.collection('school_classes'); 
     const usersCollection = db.collection<User>('users');
 
-    // Check if class name already exists for this school
     const existingClass = await classesCollection.findOne({ name, schoolId: new ObjectId(schoolId) });
     if (existingClass) {
       return { success: false, message: `Class with name "${name}" already exists in this school.` };
     }
 
-    // Validate classTeacherId if provided
     let validTeacherObjectId: ObjectId | undefined = undefined;
     if (classTeacherId && classTeacherId.trim() !== "" && classTeacherId !== "__NONE_TEACHER_OPTION__") {
       if (!ObjectId.isValid(classTeacherId)) {
@@ -71,12 +66,25 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
       if (!teacherExists) {
         return { success: false, message: 'Selected class teacher not found or is not a teacher in this school.' };
       }
+
+      // Check if this teacher is already a class teacher for any other class in this school
+      const otherClassWithThisTeacher = await classesCollection.findOne({
+        schoolId: new ObjectId(schoolId),
+        classTeacherId: validTeacherObjectId,
+      });
+      if (otherClassWithThisTeacher) {
+        const teacherDoc = await usersCollection.findOne({ _id: validTeacherObjectId });
+        return { 
+          success: false, 
+          message: `Teacher "${teacherDoc?.name || 'Selected Teacher'}" is already assigned as class teacher to class "${otherClassWithThisTeacher.name}". A teacher can only be a class teacher for one class.` 
+        };
+      }
     }
 
     const newClassDataForDb = {
       schoolId: new ObjectId(schoolId),
       name,
-      classTeacherId: validTeacherObjectId, // Store as ObjectId in DB
+      classTeacherId: validTeacherObjectId, 
       subjects: subjects.map(s => ({ name: s.name.trim() })),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -90,7 +98,7 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
     const createdClassId = result.insertedId;
 
     if (validTeacherObjectId) {
-      await updateTeacherClassAssignment(db, validTeacherObjectId, createdClassId.toString(), schoolId);
+      await updateTeacherPrimaryClassAssignment(db, validTeacherObjectId, createdClassId.toString(), schoolId);
     }
     
     revalidatePath('/dashboard/admin/classes');
@@ -124,12 +132,12 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
     }
     const { db } = await connectToDatabase();
     
-    const classesWithTeacherDetails = await db.collection('school_classes').aggregate([ // Use raw collection
+    const classesWithTeacherDetails = await db.collection('school_classes').aggregate([ 
       { $match: { schoolId: new ObjectId(schoolId) } },
       {
         $lookup: {
           from: 'users',
-          localField: 'classTeacherId', // This is ObjectId in DB
+          localField: 'classTeacherId', 
           foreignField: '_id',
           as: 'classTeacherInfo'
         }
@@ -148,7 +156,7 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
           subjects: 1,
           createdAt: 1,
           updatedAt: 1,
-          classTeacherId: 1, // This is ObjectId
+          classTeacherId: 1, 
           classTeacherName: '$classTeacherInfo.name'
         }
       },
@@ -188,7 +196,7 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
     const { name, classTeacherId, subjects } = validatedFields.data;
 
     const { db } = await connectToDatabase();
-    const classesCollection = db.collection('school_classes'); // Use raw collection
+    const classesCollection = db.collection('school_classes'); 
     const usersCollection = db.collection<User>('users');
 
     const existingClassDoc = await classesCollection.findOne({ _id: new ObjectId(classId), schoolId: new ObjectId(schoolId) });
@@ -203,28 +211,40 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
       }
     }
 
-    let newTeacherObjectId: ObjectId | null | undefined = undefined; 
-    if (classTeacherId === null || classTeacherId === '' || classTeacherId === "__NONE_TEACHER_OPTION__") {
-        newTeacherObjectId = null;
-    } else if (classTeacherId && ObjectId.isValid(classTeacherId)) {
-        newTeacherObjectId = new ObjectId(classTeacherId);
-        const teacherExists = await usersCollection.findOne({ _id: newTeacherObjectId, schoolId: new ObjectId(schoolId), role: 'teacher' });
+    let newTeacherObjectIdForClass: ObjectId | null = null; 
+    if (classTeacherId && classTeacherId.trim() !== "" && classTeacherId !== "__NONE_TEACHER_OPTION__") {
+        if (!ObjectId.isValid(classTeacherId)) {
+             return { success: false, message: 'Invalid New Class Teacher ID format.'};
+        }
+        newTeacherObjectIdForClass = new ObjectId(classTeacherId);
+        const teacherExists = await usersCollection.findOne({ _id: newTeacherObjectIdForClass, schoolId: new ObjectId(schoolId), role: 'teacher' });
         if (!teacherExists) {
             return { success: false, message: 'Selected new class teacher not found or is not a teacher in this school.' };
         }
-    } else if (classTeacherId) { 
-        return { success: false, message: 'Invalid New Class Teacher ID format.'};
-    }
+        // Check if this teacher is already a class teacher for *another* class in this school
+        const otherClassWithThisTeacher = await classesCollection.findOne({
+            schoolId: new ObjectId(schoolId),
+            classTeacherId: newTeacherObjectIdForClass,
+            _id: { $ne: new ObjectId(classId) } // Exclude the current class itself
+        });
+        if (otherClassWithThisTeacher) {
+            const teacherDoc = await usersCollection.findOne({ _id: newTeacherObjectIdForClass });
+            return { 
+                success: false, 
+                message: `Teacher "${teacherDoc?.name || 'Selected Teacher'}" is already assigned as class teacher to class "${otherClassWithThisTeacher.name}". A teacher can only be a class teacher for one class.` 
+            };
+        }
+    } // If classTeacherId is "" or "__NONE_TEACHER_OPTION__", newTeacherObjectIdForClass remains null (unassigning)
 
-    const updateDataForDb: Partial<any> = { // Use any for DB update flexibility
+    
+    const oldTeacherObjectIdFromDb = existingClassDoc.classTeacherId as ObjectId | null;
+
+    const updateDataForDb: Partial<any> = {
       name,
       subjects: subjects.map(s => ({ name: s.name.trim() })),
+      classTeacherId: newTeacherObjectIdForClass, // This will be null if unassigning
       updatedAt: new Date(),
     };
-
-    if (newTeacherObjectId !== undefined) { 
-        updateDataForDb.classTeacherId = newTeacherObjectId; // Store as ObjectId or null
-    }
 
     const result = await classesCollection.updateOne(
       { _id: new ObjectId(classId) },
@@ -235,18 +255,18 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
       return { success: false, message: 'Class not found for update.' };
     }
 
-    const oldTeacherIdFromDb = existingClassDoc.classTeacherId; // This is an ObjectId from DB
-    const newAssignedTeacherIdFromInput = updateDataForDb.classTeacherId; // This is ObjectId or null
-
-    if (oldTeacherIdFromDb?.toString() !== newAssignedTeacherIdFromInput?.toString()) {
-        if (oldTeacherIdFromDb) {
-            const oldTeacherDoc = await usersCollection.findOne({ _id: oldTeacherIdFromDb });
-            if (oldTeacherDoc && oldTeacherDoc.classId === classId) { 
-                 await updateTeacherClassAssignment(db, oldTeacherIdFromDb, null, schoolId);
+    // Handle User.classId updates for the teachers involved
+    if (oldTeacherObjectIdFromDb?.toString() !== newTeacherObjectIdForClass?.toString()) {
+        // If there was an old teacher for *this* class, clear their User.classId if it pointed to this class
+        if (oldTeacherObjectIdFromDb) {
+            const oldTeacherUserDoc = await usersCollection.findOne({_id: oldTeacherObjectIdFromDb, role: 'teacher'});
+            if (oldTeacherUserDoc && oldTeacherUserDoc.classId === classId.toString()) { // Check if they were primary for THIS class
+                await updateTeacherPrimaryClassAssignment(db, oldTeacherObjectIdFromDb, null, schoolId); // Clears User.classId
             }
         }
-        if (newAssignedTeacherIdFromInput) { // if not null
-             await updateTeacherClassAssignment(db, newAssignedTeacherIdFromInput, classId, schoolId);
+        // If a new teacher is being assigned to *this* class (and it's not null)
+        if (newTeacherObjectIdForClass) { 
+            await updateTeacherPrimaryClassAssignment(db, newTeacherObjectIdForClass, classId.toString(), schoolId); // Sets User.classId to this class's ID string
         }
     }
     
@@ -265,7 +285,7 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
         createdAt: new Date(updatedClassDocAfterDb.createdAt).toISOString(),
         updatedAt: new Date(updatedClassDocAfterDb.updatedAt).toISOString(),
         classTeacherId: updatedClassDocAfterDb.classTeacherId ? (updatedClassDocAfterDb.classTeacherId as ObjectId).toString() : undefined,
-        classTeacherName: undefined, // Not easily available without another lookup; list view will have it.
+        classTeacherName: undefined, 
     };
     return { success: true, message: 'Class updated successfully!', class: clientUpdatedClass };
 
@@ -282,7 +302,7 @@ export async function deleteSchoolClass(classId: string, schoolId: string): Prom
     }
 
     const { db } = await connectToDatabase();
-    const classesCollection = db.collection('school_classes'); // Raw collection
+    const classesCollection = db.collection('school_classes'); 
     const usersCollection = db.collection<User>('users');
 
     const classToDelete = await classesCollection.findOne({ _id: new ObjectId(classId), schoolId: new ObjectId(schoolId) });
@@ -290,18 +310,19 @@ export async function deleteSchoolClass(classId: string, schoolId: string): Prom
       return { success: false, message: 'Class not found or does not belong to this school.' };
     }
 
+    // Unassign students from this class by clearing their classId (if it stores class NAME)
+    // This needs alignment: if User.classId stores class ID, this needs to change.
+    // Assuming User.classId for students stores class NAME for now as per previous User Management setup.
     await usersCollection.updateMany(
       { schoolId: new ObjectId(schoolId), role: 'student', classId: classToDelete.name },
-      { $set: { classId: undefined, updatedAt: new Date().toISOString() } }
+      { $set: { classId: undefined, updatedAt: new Date() } }
     );
     
+    // If a teacher was assigned as class teacher to this class, clear their User.classId
     if (classToDelete.classTeacherId) {
         const teacher = await usersCollection.findOne({_id: classToDelete.classTeacherId as ObjectId, role: 'teacher'});
-        if(teacher && teacher.classId === classToDelete._id.toString()){
-            await usersCollection.updateOne(
-                { _id: classToDelete.classTeacherId as ObjectId },
-                { $set: { classId: undefined, updatedAt: new Date().toISOString() } }
-            );
+        if(teacher && teacher.classId === classToDelete._id.toString()){ // Check if their User.classId was this class's ID
+            await updateTeacherPrimaryClassAssignment(db, classToDelete.classTeacherId as ObjectId, null, schoolId); // Clears User.classId
         }
     }
 
@@ -329,15 +350,17 @@ export async function getClassesForSchoolAsOptions(schoolId: string): Promise<{ 
   }
   try {
     const { db } = await connectToDatabase();
-    const classes = await db.collection('school_classes') // Raw collection
+    const classes = await db.collection('school_classes') 
       .find({ schoolId: new ObjectId(schoolId) })
       .project({ _id: 1, name: 1 })
       .sort({ name: 1 })
       .toArray();
     
+    // Returns options where value is class ID (string) and label is class name
     return classes.map(cls => ({ value: (cls._id as ObjectId).toString(), label: cls.name as string }));
   } catch (error) {
     console.error("Error fetching classes for options:", error);
     return [];
   }
 }
+

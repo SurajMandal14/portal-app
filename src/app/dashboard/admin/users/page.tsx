@@ -39,10 +39,10 @@ import {
     type CreateSchoolUserServerActionFormData
 } from '@/types/user';
 import { getSchoolById } from "@/app/actions/schools";
-import { getSchoolClasses } from "@/app/actions/classes"; // Import action to get managed classes
+import { getSchoolClasses } from "@/app/actions/classes"; 
 import type { User as AppUser } from "@/types/user";
 import type { School } from "@/types/school";
-import type { SchoolClass } from "@/types/classes"; // Import SchoolClass type
+import type { SchoolClass } from "@/types/classes"; 
 import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 import type { AuthUser } from "@/types/attendance";
@@ -52,8 +52,8 @@ type SchoolUser = Partial<AppUser> & { className?: string };
 export default function AdminUserManagementPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [schoolDetails, setSchoolDetails] = useState<School | null>(null); // Still useful for school name etc.
-  const [managedClasses, setManagedClasses] = useState<SchoolClass[]>([]); // State for classes from Class Management
+  const [schoolDetails, setSchoolDetails] = useState<School | null>(null); 
+  const [managedClasses, setManagedClasses] = useState<SchoolClass[]>([]); 
   const [schoolUsers, setSchoolUsers] = useState<SchoolUser[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
@@ -108,7 +108,7 @@ export default function AdminUserManagementPage() {
       const [schoolResult, usersResult, classesResult] = await Promise.all([
         getSchoolById(authUser.schoolId.toString()),
         getSchoolUsers(authUser.schoolId.toString()),
-        getSchoolClasses(authUser.schoolId.toString()) // Fetch managed classes
+        getSchoolClasses(authUser.schoolId.toString()) 
       ]);
 
       if (schoolResult.success && schoolResult.school) setSchoolDetails(schoolResult.school);
@@ -146,7 +146,7 @@ export default function AdminUserManagementPage() {
         email: editingUser.email || "",
         password: "", 
         role: editingUser.role as 'teacher' | 'student' | undefined,
-        classId: editingUser.classId === 'N/A' ? "" : editingUser.classId || "", 
+        classId: (editingUser.classId && editingUser.classId !== 'N/A') ? editingUser.classId : "", 
         admissionId: editingUser.admissionId || "",
       });
     } else {
@@ -163,7 +163,7 @@ export default function AdminUserManagementPage() {
     if (result.success) {
       toast({ title: "Student Created", description: result.message });
       studentForm.reset();
-      fetchInitialData(); // Refresh user list
+      fetchInitialData(); 
     } else {
       toast({ variant: "destructive", title: "Creation Failed", description: result.error || result.message });
     }
@@ -178,7 +178,7 @@ export default function AdminUserManagementPage() {
     if (result.success) {
       toast({ title: "Teacher Created", description: result.message });
       teacherForm.reset();
-      fetchInitialData(); // Refresh user list
+      fetchInitialData(); 
     } else {
       toast({ variant: "destructive", title: "Creation Failed", description: result.error || result.message });
     }
@@ -192,7 +192,7 @@ export default function AdminUserManagementPage() {
     if (result.success) {
       toast({ title: "User Updated", description: result.message });
       setEditingUser(null);
-      fetchInitialData(); // Refresh user list
+      fetchInitialData(); 
     } else {
       toast({ variant: "destructive", title: "Update Failed", description: result.error || result.message });
     }
@@ -209,7 +209,7 @@ export default function AdminUserManagementPage() {
     setIsDeleting(false);
     if (result.success) {
       toast({ title: "User Deleted", description: result.message });
-      fetchInitialData(); // Refresh user list
+      fetchInitialData(); 
     } else {
       toast({ variant: "destructive", title: "Deletion Failed", description: result.error || result.message });
     }
@@ -220,7 +220,6 @@ export default function AdminUserManagementPage() {
     Object.values(user).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  // Use class names from the managed classes for dropdowns
   const availableClassNames = managedClasses.map(cls => cls.name).filter(Boolean) as string[];
 
   if (!authUser && !isLoadingData) { 
@@ -291,17 +290,33 @@ export default function AdminUserManagementPage() {
                           </FormItem>
                       )}/>
                    )}
-                   {(editingUserRole === 'teacher' || editingUserRole === 'student') && availableClassNames.length > 0 && (
-                      <FormField control={editForm.control} name="classId" render={({ field }) => (
-                          <FormItem>
-                              <FormLabel>Assign to Class</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingEdit}>
-                                  <FormControl><SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger></FormControl>
-                                  <SelectContent>{availableClassNames.map((cn) => (<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}</SelectContent>
-                              </Select>
-                              <FormMessage />
-                          </FormItem>
-                      )}/>
+                   {(editingUserRole === 'teacher' || editingUserRole === 'student') && (
+                      <FormField 
+                        control={editForm.control} 
+                        name="classId" 
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Assign to Class</FormLabel>
+                                <Select 
+                                    onValueChange={field.onChange} 
+                                    value={field.value || ""} 
+                                    disabled={isSubmittingEdit || availableClassNames.length === 0}
+                                >
+                                    <FormControl><SelectTrigger>
+                                        <SelectValue placeholder={availableClassNames.length > 0 ? "Select class" : "No classes available"} />
+                                    </SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="">-- None --</SelectItem>
+                                        {availableClassNames.map((cn) => (
+                                            <SelectItem key={cn} value={cn}>{cn}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes available. Create them in Class Management.</FormDescription>}
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
                    )}
                 </div>
                 <div className="flex gap-2">
@@ -332,8 +347,22 @@ export default function AdminUserManagementPage() {
                         <FormField control={studentForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="student@example.com" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={studentForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={studentForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel><FormControl><Input placeholder="e.g., S1001" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
-                        {availableClassNames.length > 0 && <FormField control={studentForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Assign to Class (Optional)</FormLabel><Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingStudent}><FormControl><SelectTrigger><SelectValue placeholder="Select class"/></SelectTrigger></FormControl><SelectContent>{availableClassNames.map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}</SelectContent></Select><FormMessage/></FormItem>)}/>}
-                        {availableClassNames.length === 0 && <FormItem><FormLabel>Assign to Class</FormLabel><p className="text-sm text-muted-foreground pt-2">No classes created yet. Please create classes in Class Management first.</p></FormItem>}
+                        <FormField control={studentForm.control} name="classId" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Assign to Class (Optional)</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingStudent || availableClassNames.length === 0}>
+                                    <FormControl><SelectTrigger>
+                                        <SelectValue placeholder={availableClassNames.length > 0 ? "Select class" : "No classes available"} />
+                                    </SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="">-- None --</SelectItem>
+                                        {availableClassNames.map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
+                                    </SelectContent>
+                                </Select>
+                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes available. Create them in Class Management.</FormDescription>}
+                                <FormMessage/>
+                            </FormItem>
+                        )}/>
                     </div>
                     <Button type="submit" className="w-full md:w-auto" disabled={isSubmittingStudent || isLoadingData}>{isSubmittingStudent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Student</Button>
                   </form>
@@ -351,8 +380,23 @@ export default function AdminUserManagementPage() {
                         <FormField control={teacherForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Jane Teacher" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={teacherForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="teacher@example.com" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={teacherForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
-                        {availableClassNames.length > 0 && <FormField control={teacherForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Assign to Class (Optional)</FormLabel><Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingTeacher}><FormControl><SelectTrigger><SelectValue placeholder="Select class if class teacher"/></SelectTrigger></FormControl><SelectContent>{availableClassNames.map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}</SelectContent></Select><FormMessage/></FormItem>)}/>}
-                        {availableClassNames.length === 0 && <FormItem><FormLabel>Assign to Class</FormLabel><p className="text-sm text-muted-foreground pt-2">No classes created yet. Please create classes in Class Management first.</p></FormItem>}
+                        <FormField control={teacherForm.control} name="classId" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Assign as Class Teacher (Optional)</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingTeacher || availableClassNames.length === 0}>
+                                    <FormControl><SelectTrigger>
+                                        <SelectValue placeholder={availableClassNames.length > 0 ? "Select class if class teacher" : "No classes available"} />
+                                    </SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="">-- None --</SelectItem>
+                                        {availableClassNames.map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
+                                    </SelectContent>
+                                </Select>
+                                <FormDescription className="text-xs">Assigning here makes them the primary class teacher for attendance.</FormDescription>
+                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes available. Create them in Class Management.</FormDescription>}
+                                <FormMessage/>
+                            </FormItem>
+                        )}/>
                     </div>
                      <Button type="submit" className="w-full md:w-auto" disabled={isSubmittingTeacher || isLoadingData}>{isSubmittingTeacher ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Teacher</Button>
                   </form>
