@@ -7,14 +7,16 @@ export interface SchoolClassSubject {
   name: string;
 }
 
+// This type is for data passed to CLIENT components.
 export interface SchoolClass {
-  _id: ObjectId | string;
-  schoolId: ObjectId | string;
-  name: string; // e.g., "Grade 10 - Section A", "Class VI Blue"
-  classTeacherId?: ObjectId | string | null; // Reference to User._id of the class teacher
-  subjects: SchoolClassSubject[]; // List of subjects taught in this class
-  createdAt: Date;
-  updatedAt: Date;
+  _id: string;
+  schoolId: string;
+  name: string;
+  classTeacherId?: string | null;
+  classTeacherName?: string; // From aggregation
+  subjects: SchoolClassSubject[];
+  createdAt: string; // ISOString
+  updatedAt: string; // ISOString
 }
 
 // Schema for creating a new class
@@ -36,12 +38,12 @@ export interface SchoolClassResult {
   success: boolean;
   message: string;
   error?: string;
-  class?: SchoolClass;
+  class?: SchoolClass; // Use client-facing type
 }
 
 export interface SchoolClassesResult {
   success: boolean;
   message?: string;
   error?: string;
-  classes?: SchoolClass[];
+  classes?: SchoolClass[]; // Use client-facing type
 }

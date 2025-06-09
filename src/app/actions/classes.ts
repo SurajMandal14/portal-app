@@ -23,15 +23,6 @@ async function updateTeacherClassAssignment(db: any, teacherId: string | ObjectI
     return;
   }
 
-  // If this teacher was previously class teacher of another class (and that class still points to them), clear that old class's teacherId
-  // For simplicity, we'll assume a teacher can only be a class teacher of ONE class for attendance.
-  // This logic can be complex if a teacher can be primary for multiple. Current model is one primary class for attendance.
-  
-  // Clear classId for any other class that might currently list this teacher.
-  // This step ensures a teacher isn't assigned as primary for multiple classes if the UI/flow doesn't prevent it.
-  // However, the main update is to set the newClassIdForTeacher on the current teacher.
-  // This might also need to clear classId from teachers previously assigned to *this* newClassIdForTeacher if it's being reassigned.
-
   // 1. Clear `classId` for any teacher who was previously assigned to the class `newClassIdForTeacher` (if `newClassIdForTeacher` is not null).
   // This is important if a class is getting a *new* class teacher. The *old* class teacher of that class needs their `classId` cleared.
   // This situation is handled when updating a class below.
@@ -39,7 +30,7 @@ async function updateTeacherClassAssignment(db: any, teacherId: string | ObjectI
   // 2. Update the specified teacher's `classId`
   await usersCollection.updateOne(
     { _id: teacherObjectId, schoolId: new ObjectId(schoolId), role: 'teacher' },
-    { $set: { classId: newClassIdForTeacher ? newClassIdForTeacher.toString() : undefined, updatedAt: new Date() } }
+    { $set: { classId: newClassIdForTeacher ? newClassIdForTeacher.toString() : undefined, updatedAt: new Date().toISOString() } }
   );
   console.log(`Teacher ${teacherId} classId updated to ${newClassIdForTeacher}`);
 }
@@ -60,7 +51,7 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
     const { name, classTeacherId, subjects } = validatedFields.data;
 
     const { db } = await connectToDatabase();
-    const classesCollection = db.collection<Omit<SchoolClass, '_id'>>('school_classes');
+    const classesCollection = db.collection('school_classes'); // Use raw collection for insertion
     const usersCollection = db.collection<User>('users');
 
     // Check if class name already exists for this school
@@ -70,44 +61,54 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
     }
 
     // Validate classTeacherId if provided
-    let validTeacherId: ObjectId | undefined = undefined;
-    if (classTeacherId && classTeacherId.trim() !== "") {
+    let validTeacherObjectId: ObjectId | undefined = undefined;
+    if (classTeacherId && classTeacherId.trim() !== "" && classTeacherId !== "__NONE_TEACHER_OPTION__") {
       if (!ObjectId.isValid(classTeacherId)) {
         return { success: false, message: 'Invalid Class Teacher ID format.' };
       }
-      validTeacherId = new ObjectId(classTeacherId);
-      const teacherExists = await usersCollection.findOne({ _id: validTeacherId, schoolId: new ObjectId(schoolId), role: 'teacher' });
+      validTeacherObjectId = new ObjectId(classTeacherId);
+      const teacherExists = await usersCollection.findOne({ _id: validTeacherObjectId, schoolId: new ObjectId(schoolId), role: 'teacher' });
       if (!teacherExists) {
         return { success: false, message: 'Selected class teacher not found or is not a teacher in this school.' };
       }
     }
 
-    const newClassData: Omit<SchoolClass, '_id'> = {
+    const newClassDataForDb = {
       schoolId: new ObjectId(schoolId),
       name,
-      classTeacherId: validTeacherId,
-      subjects: subjects.map(s => ({ name: s.name.trim() })), // Trim subject names
+      classTeacherId: validTeacherObjectId, // Store as ObjectId in DB
+      subjects: subjects.map(s => ({ name: s.name.trim() })),
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    const result = await classesCollection.insertOne(newClassData);
+    const result = await classesCollection.insertOne(newClassDataForDb);
     if (!result.insertedId) {
       return { success: false, message: 'Failed to create class.', error: 'Database insertion failed.' };
     }
 
     const createdClassId = result.insertedId;
 
-    // If a class teacher was assigned, update that teacher's User.classId field
-    if (validTeacherId) {
-      await updateTeacherClassAssignment(db, validTeacherId, createdClassId.toString(), schoolId);
+    if (validTeacherObjectId) {
+      await updateTeacherClassAssignment(db, validTeacherObjectId, createdClassId.toString(), schoolId);
     }
     
     revalidatePath('/dashboard/admin/classes');
+    
+    const clientCreatedClass: SchoolClass = {
+        _id: createdClassId.toString(),
+        name: newClassDataForDb.name,
+        schoolId: newClassDataForDb.schoolId.toString(),
+        subjects: newClassDataForDb.subjects,
+        createdAt: newClassDataForDb.createdAt.toISOString(),
+        updatedAt: newClassDataForDb.updatedAt.toISOString(),
+        classTeacherId: newClassDataForDb.classTeacherId ? newClassDataForDb.classTeacherId.toString() : undefined,
+    };
+
     return {
       success: true,
       message: `Class "${name}" created successfully!`,
-      class: { ...newClassData, _id: createdClassId.toString() } as SchoolClass,
+      class: clientCreatedClass,
     };
 
   } catch (error) {
@@ -123,12 +124,12 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
     }
     const { db } = await connectToDatabase();
     
-    const classesWithTeacherDetails = await db.collection<SchoolClass>('school_classes').aggregate([
+    const classesWithTeacherDetails = await db.collection('school_classes').aggregate([ // Use raw collection
       { $match: { schoolId: new ObjectId(schoolId) } },
       {
         $lookup: {
           from: 'users',
-          localField: 'classTeacherId',
+          localField: 'classTeacherId', // This is ObjectId in DB
           foreignField: '_id',
           as: 'classTeacherInfo'
         }
@@ -136,7 +137,7 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
       {
         $unwind: {
           path: '$classTeacherInfo',
-          preserveNullAndEmptyArrays: true // Keep classes even if no teacher is assigned
+          preserveNullAndEmptyArrays: true 
         }
       },
       {
@@ -147,19 +148,23 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
           subjects: 1,
           createdAt: 1,
           updatedAt: 1,
-          classTeacherId: 1,
-          classTeacherName: '$classTeacherInfo.name' // Get teacher's name
+          classTeacherId: 1, // This is ObjectId
+          classTeacherName: '$classTeacherInfo.name'
         }
       },
-      { $sort: { name: 1 } } // Sort by class name
+      { $sort: { name: 1 } } 
     ]).toArray();
 
-    const classes = classesWithTeacherDetails.map(cls => ({
-      ...cls,
-      _id: cls._id.toString(),
-      schoolId: cls.schoolId.toString(),
-      classTeacherId: cls.classTeacherId?.toString(),
-    })) as SchoolClass[]; // Casting because aggregation might change type slightly
+    const classes: SchoolClass[] = classesWithTeacherDetails.map(cls => ({
+      _id: (cls._id as ObjectId).toString(),
+      name: cls.name || '',
+      schoolId: (cls.schoolId as ObjectId).toString(),
+      subjects: cls.subjects || [],
+      createdAt: cls.createdAt ? new Date(cls.createdAt).toISOString() : new Date().toISOString(),
+      updatedAt: cls.updatedAt ? new Date(cls.updatedAt).toISOString() : new Date().toISOString(),
+      classTeacherId: cls.classTeacherId ? (cls.classTeacherId as ObjectId).toString() : undefined,
+      classTeacherName: (cls as any).classTeacherName || undefined,
+    }));
 
     return { success: true, classes };
   } catch (error) {
@@ -174,7 +179,7 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
       return { success: false, message: 'Invalid Class or School ID format.' };
     }
 
-    const validatedFields = updateClassFormSchema.safeParse(values); // Using the same schema for update
+    const validatedFields = updateClassFormSchema.safeParse(values); 
     if (!validatedFields.success) {
       const errors = validatedFields.error.errors.map(e => e.message).join('; ');
       return { success: false, message: 'Validation failed', error: errors };
@@ -183,26 +188,23 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
     const { name, classTeacherId, subjects } = validatedFields.data;
 
     const { db } = await connectToDatabase();
-    const classesCollection = db.collection<SchoolClass>('school_classes');
+    const classesCollection = db.collection('school_classes'); // Use raw collection
     const usersCollection = db.collection<User>('users');
 
-    // Find the existing class
-    const existingClass = await classesCollection.findOne({ _id: new ObjectId(classId), schoolId: new ObjectId(schoolId) });
-    if (!existingClass) {
+    const existingClassDoc = await classesCollection.findOne({ _id: new ObjectId(classId), schoolId: new ObjectId(schoolId) });
+    if (!existingClassDoc) {
       return { success: false, message: 'Class not found or does not belong to this school.' };
     }
 
-    // Check if new class name conflicts with another class in the same school
-    if (name !== existingClass.name) {
+    if (name !== existingClassDoc.name) {
       const conflictingClass = await classesCollection.findOne({ name, schoolId: new ObjectId(schoolId), _id: { $ne: new ObjectId(classId) } });
       if (conflictingClass) {
         return { success: false, message: `Another class with name "${name}" already exists in this school.` };
       }
     }
 
-    // Validate new classTeacherId if provided
-    let newTeacherObjectId: ObjectId | null | undefined = undefined; // undefined means no change, null means unassign
-    if (classTeacherId === null || classTeacherId === '') { // Explicitly unassigning
+    let newTeacherObjectId: ObjectId | null | undefined = undefined; 
+    if (classTeacherId === null || classTeacherId === '' || classTeacherId === "__NONE_TEACHER_OPTION__") {
         newTeacherObjectId = null;
     } else if (classTeacherId && ObjectId.isValid(classTeacherId)) {
         newTeacherObjectId = new ObjectId(classTeacherId);
@@ -210,53 +212,62 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
         if (!teacherExists) {
             return { success: false, message: 'Selected new class teacher not found or is not a teacher in this school.' };
         }
-    } else if (classTeacherId) { // Invalid ID format
+    } else if (classTeacherId) { 
         return { success: false, message: 'Invalid New Class Teacher ID format.'};
     }
 
-
-    const updateData: Partial<Omit<SchoolClass, '_id' | 'schoolId' | 'createdAt'>> = {
+    const updateDataForDb: Partial<any> = { // Use any for DB update flexibility
       name,
       subjects: subjects.map(s => ({ name: s.name.trim() })),
       updatedAt: new Date(),
     };
 
-    if (newTeacherObjectId !== undefined) { // Only update if a new value (ObjectId or null) is determined
-        updateData.classTeacherId = newTeacherObjectId;
+    if (newTeacherObjectId !== undefined) { 
+        updateDataForDb.classTeacherId = newTeacherObjectId; // Store as ObjectId or null
     }
-
 
     const result = await classesCollection.updateOne(
       { _id: new ObjectId(classId) },
-      { $set: updateData }
+      { $set: updateDataForDb }
     );
 
     if (result.matchedCount === 0) {
       return { success: false, message: 'Class not found for update.' };
     }
 
-    // Handle teacher re-assignment logic
-    const oldTeacherId = existingClass.classTeacherId;
-    const newAssignedTeacherId = updateData.classTeacherId; // This will be ObjectId or null
+    const oldTeacherIdFromDb = existingClassDoc.classTeacherId; // This is an ObjectId from DB
+    const newAssignedTeacherIdFromInput = updateDataForDb.classTeacherId; // This is ObjectId or null
 
-    if (oldTeacherId?.toString() !== newAssignedTeacherId?.toString()) {
-        // If old teacher exists and is different from new, clear their classId for this class
-        if (oldTeacherId) {
-            const oldTeacherDoc = await usersCollection.findOne({ _id: new ObjectId(oldTeacherId) });
-            // Clear old teacher's classId only if they were assigned to THIS class
+    if (oldTeacherIdFromDb?.toString() !== newAssignedTeacherIdFromInput?.toString()) {
+        if (oldTeacherIdFromDb) {
+            const oldTeacherDoc = await usersCollection.findOne({ _id: oldTeacherIdFromDb });
             if (oldTeacherDoc && oldTeacherDoc.classId === classId) { 
-                 await updateTeacherClassAssignment(db, oldTeacherId, null, schoolId);
+                 await updateTeacherClassAssignment(db, oldTeacherIdFromDb, null, schoolId);
             }
         }
-        // If a new teacher is assigned (not null), update their classId
-        if (newAssignedTeacherId) {
-             await updateTeacherClassAssignment(db, newAssignedTeacherId, classId, schoolId);
+        if (newAssignedTeacherIdFromInput) { // if not null
+             await updateTeacherClassAssignment(db, newAssignedTeacherIdFromInput, classId, schoolId);
         }
     }
     
     revalidatePath('/dashboard/admin/classes');
-    const updatedClass = await classesCollection.findOne({ _id: new ObjectId(classId) });
-    return { success: true, message: 'Class updated successfully!', class: updatedClass as SchoolClass };
+    
+    const updatedClassDocAfterDb = await classesCollection.findOne({ _id: new ObjectId(classId) });
+     if (!updatedClassDocAfterDb) {
+        return { success: false, message: "Failed to retrieve class after update." };
+    }
+
+    const clientUpdatedClass: SchoolClass = {
+        _id: updatedClassDocAfterDb._id.toString(),
+        name: updatedClassDocAfterDb.name,
+        schoolId: (updatedClassDocAfterDb.schoolId as ObjectId).toString(),
+        subjects: updatedClassDocAfterDb.subjects,
+        createdAt: new Date(updatedClassDocAfterDb.createdAt).toISOString(),
+        updatedAt: new Date(updatedClassDocAfterDb.updatedAt).toISOString(),
+        classTeacherId: updatedClassDocAfterDb.classTeacherId ? (updatedClassDocAfterDb.classTeacherId as ObjectId).toString() : undefined,
+        classTeacherName: undefined, // Not easily available without another lookup; list view will have it.
+    };
+    return { success: true, message: 'Class updated successfully!', class: clientUpdatedClass };
 
   } catch (error) {
     console.error('Update school class server action error:', error);
@@ -271,7 +282,7 @@ export async function deleteSchoolClass(classId: string, schoolId: string): Prom
     }
 
     const { db } = await connectToDatabase();
-    const classesCollection = db.collection<SchoolClass>('school_classes');
+    const classesCollection = db.collection('school_classes'); // Raw collection
     const usersCollection = db.collection<User>('users');
 
     const classToDelete = await classesCollection.findOne({ _id: new ObjectId(classId), schoolId: new ObjectId(schoolId) });
@@ -279,24 +290,20 @@ export async function deleteSchoolClass(classId: string, schoolId: string): Prom
       return { success: false, message: 'Class not found or does not belong to this school.' };
     }
 
-    // Clear classId for students in this class
     await usersCollection.updateMany(
-      { schoolId: new ObjectId(schoolId), role: 'student', classId: classToDelete.name }, // Assuming student.classId stores class NAME
-      { $set: { classId: undefined, updatedAt: new Date() } }
+      { schoolId: new ObjectId(schoolId), role: 'student', classId: classToDelete.name },
+      { $set: { classId: undefined, updatedAt: new Date().toISOString() } }
     );
-    // Clear classId for the class teacher of this class
+    
     if (classToDelete.classTeacherId) {
-        const teacher = await usersCollection.findOne({_id: new ObjectId(classToDelete.classTeacherId), role: 'teacher'});
-        // Only clear classId if teacher was specifically assigned to this class via their User.classId
-        // User.classId should store the class ID not name for teachers if it's their primary attendance class
+        const teacher = await usersCollection.findOne({_id: classToDelete.classTeacherId as ObjectId, role: 'teacher'});
         if(teacher && teacher.classId === classToDelete._id.toString()){
             await usersCollection.updateOne(
-                { _id: new ObjectId(classToDelete.classTeacherId) },
-                { $set: { classId: undefined, updatedAt: new Date() } }
+                { _id: classToDelete.classTeacherId as ObjectId },
+                { $set: { classId: undefined, updatedAt: new Date().toISOString() } }
             );
         }
     }
-
 
     const result = await classesCollection.deleteOne({ _id: new ObjectId(classId) });
 
@@ -305,8 +312,8 @@ export async function deleteSchoolClass(classId: string, schoolId: string): Prom
     }
     
     revalidatePath('/dashboard/admin/classes');
-    revalidatePath('/dashboard/admin/users'); // Student class assignments might change
-    revalidatePath('/dashboard/teacher/attendance'); // Teacher class assignments might change
+    revalidatePath('/dashboard/admin/users'); 
+    revalidatePath('/dashboard/teacher/attendance'); 
 
     return { success: true, message: `Class "${classToDelete.name}" deleted successfully.` };
 
@@ -322,13 +329,13 @@ export async function getClassesForSchoolAsOptions(schoolId: string): Promise<{ 
   }
   try {
     const { db } = await connectToDatabase();
-    const classes = await db.collection<SchoolClass>('school_classes')
+    const classes = await db.collection('school_classes') // Raw collection
       .find({ schoolId: new ObjectId(schoolId) })
       .project({ _id: 1, name: 1 })
       .sort({ name: 1 })
       .toArray();
     
-    return classes.map(cls => ({ value: cls._id.toString(), label: cls.name }));
+    return classes.map(cls => ({ value: (cls._id as ObjectId).toString(), label: cls.name as string }));
   } catch (error) {
     console.error("Error fetching classes for options:", error);
     return [];
