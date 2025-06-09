@@ -49,11 +49,14 @@ import type { AuthUser } from "@/types/attendance";
 
 type SchoolUser = Partial<AppUser> & { className?: string };
 
+const NONE_CLASS_VALUE = "__NONE_CLASS__"; // Constant for "None" class option
+
 export default function AdminUserManagementPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null); 
   const [managedClasses, setManagedClasses] = useState<SchoolClass[]>([]); 
+  const [availableClassNames, setAvailableClassNames] = useState<string[]>([]);
   const [schoolUsers, setSchoolUsers] = useState<SchoolUser[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
@@ -122,9 +125,13 @@ export default function AdminUserManagementPage() {
 
       if (classesResult.success && classesResult.classes) {
         setManagedClasses(classesResult.classes);
+        // Filter out any potential null, undefined, or empty string class names
+        const classNamesFromManaged = classesResult.classes.map(cls => cls.name).filter(Boolean) as string[];
+        setAvailableClassNames(classNamesFromManaged);
       } else {
         toast({ variant: "warning", title: "Class List Error", description: classesResult.message || "Failed to load managed class list." });
         setManagedClasses([]);
+        setAvailableClassNames([]);
       }
 
     } catch (error) {
@@ -136,7 +143,7 @@ export default function AdminUserManagementPage() {
 
   useEffect(() => {
     if (authUser?.schoolId) fetchInitialData();
-    else { setIsLoadingData(false); setSchoolUsers([]); setSchoolDetails(null); setManagedClasses([]); }
+    else { setIsLoadingData(false); setSchoolUsers([]); setSchoolDetails(null); setManagedClasses([]); setAvailableClassNames([]); }
   }, [authUser, fetchInitialData]);
 
   useEffect(() => {
@@ -157,7 +164,7 @@ export default function AdminUserManagementPage() {
   async function handleStudentSubmit(values: CreateStudentFormData) {
     if (!authUser?.schoolId) return;
     setIsSubmittingStudent(true);
-    const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'student' };
+    const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'student', classId: values.classId === NONE_CLASS_VALUE ? undefined : values.classId };
     const result = await createSchoolUser(payload, authUser.schoolId.toString());
     setIsSubmittingStudent(false);
     if (result.success) {
@@ -172,7 +179,7 @@ export default function AdminUserManagementPage() {
   async function handleTeacherSubmit(values: CreateTeacherFormData) {
     if (!authUser?.schoolId) return;
     setIsSubmittingTeacher(true);
-    const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'teacher' };
+    const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'teacher', classId: values.classId === NONE_CLASS_VALUE ? undefined : values.classId };
     const result = await createSchoolUser(payload, authUser.schoolId.toString());
     setIsSubmittingTeacher(false);
     if (result.success) {
@@ -187,7 +194,8 @@ export default function AdminUserManagementPage() {
   async function handleEditSubmit(values: UpdateSchoolUserFormData) {
     if (!authUser?.schoolId || !editingUser?._id) return;
     setIsSubmittingEdit(true);
-    const result = await updateSchoolUser(editingUser._id.toString(), authUser.schoolId.toString(), values);
+    const payload = { ...values, classId: values.classId === NONE_CLASS_VALUE ? "" : values.classId };
+    const result = await updateSchoolUser(editingUser._id.toString(), authUser.schoolId.toString(), payload);
     setIsSubmittingEdit(false);
     if (result.success) {
       toast({ title: "User Updated", description: result.message });
@@ -219,8 +227,6 @@ export default function AdminUserManagementPage() {
   const filteredUsers = schoolUsers.filter(user => 
     Object.values(user).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
   );
-
-  const availableClassNames = managedClasses.map(cls => cls.name).filter(Boolean) as string[];
 
   if (!authUser && !isLoadingData) { 
     return (
@@ -298,7 +304,7 @@ export default function AdminUserManagementPage() {
                             <FormItem>
                                 <FormLabel>Assign to Class</FormLabel>
                                 <Select 
-                                    onValueChange={field.onChange} 
+                                    onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)}
                                     value={field.value || ""} 
                                     disabled={isSubmittingEdit || availableClassNames.length === 0}
                                 >
@@ -306,8 +312,8 @@ export default function AdminUserManagementPage() {
                                         <SelectValue placeholder={availableClassNames.length > 0 ? "Select class" : "No classes available"} />
                                     </SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value="">-- None --</SelectItem>
-                                        {availableClassNames.map((cn) => (
+                                        <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
+                                        {availableClassNames.filter(Boolean).map((cn) => (
                                             <SelectItem key={cn} value={cn}>{cn}</SelectItem>
                                         ))}
                                     </SelectContent>
@@ -350,13 +356,17 @@ export default function AdminUserManagementPage() {
                         <FormField control={studentForm.control} name="classId" render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Assign to Class (Optional)</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingStudent || availableClassNames.length === 0}>
+                                <Select 
+                                    onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)} 
+                                    value={field.value || ""} 
+                                    disabled={isSubmittingStudent || availableClassNames.length === 0}
+                                >
                                     <FormControl><SelectTrigger>
                                         <SelectValue placeholder={availableClassNames.length > 0 ? "Select class" : "No classes available"} />
                                     </SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value="">-- None --</SelectItem>
-                                        {availableClassNames.map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
+                                        <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
+                                        {availableClassNames.filter(Boolean).map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
                                     </SelectContent>
                                 </Select>
                                 {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes available. Create them in Class Management.</FormDescription>}
@@ -383,13 +393,17 @@ export default function AdminUserManagementPage() {
                         <FormField control={teacherForm.control} name="classId" render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Assign as Class Teacher (Optional)</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmittingTeacher || availableClassNames.length === 0}>
+                                <Select 
+                                    onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)} 
+                                    value={field.value || ""} 
+                                    disabled={isSubmittingTeacher || availableClassNames.length === 0}
+                                >
                                     <FormControl><SelectTrigger>
                                         <SelectValue placeholder={availableClassNames.length > 0 ? "Select class if class teacher" : "No classes available"} />
                                     </SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value="">-- None --</SelectItem>
-                                        {availableClassNames.map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
+                                        <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
+                                        {availableClassNames.filter(Boolean).map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
                                     </SelectContent>
                                 </Select>
                                 <FormDescription className="text-xs">Assigning here makes them the primary class teacher for attendance.</FormDescription>
