@@ -29,6 +29,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser } from "@/app/actions/schoolUsers";
@@ -173,8 +174,8 @@ export default function AdminUserManagementPage() {
       if (feeConfig?.terms) {
         setCalculatedTuitionFee(calculateAnnualFeeFromTerms(feeConfig.terms));
       } else {
-        setCalculatedTuitionFee(0); // Default to 0 if no config found
-        setNoTuitionFeeStructureFound(true); // Set flag
+        setCalculatedTuitionFee(0); 
+        setNoTuitionFeeStructureFound(true);
       }
     } else {
       setCalculatedTuitionFee(null);
@@ -213,8 +214,8 @@ export default function AdminUserManagementPage() {
       if (feeConfig?.terms) {
         setCalculatedBusFee(calculateAnnualFeeFromTerms(feeConfig.terms));
       } else {
-        setCalculatedBusFee(0); // Default to 0 if no config found
-        setNoBusFeeStructureFound(true); // Set flag
+        setCalculatedBusFee(0);
+        setNoBusFeeStructureFound(true);
       }
     } else {
       setCalculatedBusFee(null);
