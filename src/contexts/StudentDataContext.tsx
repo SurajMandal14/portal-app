@@ -6,11 +6,27 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import type { AuthUser } from '@/types/user';
 import type { AttendanceRecord } from '@/types/attendance';
 import type { FeePayment } from '@/types/fees';
-import type { School, TermFee } from '@/types/school'; // Import TermFee
+import type { School, TermFee } from '@/types/school';
+import type { FeeConcession } from '@/types/concessions'; // Import FeeConcession
 import { getStudentAttendanceRecords } from '@/app/actions/attendance';
 import { getFeePaymentsByStudent } from '@/app/actions/fees';
 import { getSchoolById } from '@/app/actions/schools';
+import { getFeeConcessionsForStudent } from '@/app/actions/concessions'; // Import action
 import { useToast } from '@/hooks/use-toast';
+
+// Helper to determine current academic year string (e.g., "2023-2024")
+const getCurrentAcademicYear = (): string => {
+  const today = new Date();
+  const currentMonth = today.getMonth(); // 0 (Jan) to 11 (Dec)
+  const currentYear = today.getFullYear();
+  // Assuming academic year starts in June
+  if (currentMonth >= 5) { // June or later
+    return `${currentYear}-${currentYear + 1}`;
+  } else { // Before June
+    return `${currentYear - 1}-${currentYear}`;
+  }
+};
+
 
 interface AttendanceSummary {
   present: number;
@@ -21,8 +37,9 @@ interface AttendanceSummary {
 }
 
 interface FeeSummary {
-  totalFee: number; // This will now be annual tuition fee
+  totalFee: number;
   totalPaid: number;
+  totalConcessions: number; // Added
   totalDue: number;
   percentagePaid: number;
 }
@@ -31,6 +48,7 @@ interface StudentDataContextType {
   authUser: AuthUser | null;
   attendanceSummary: AttendanceSummary;
   feeSummary: FeeSummary | null;
+  appliedConcessions: FeeConcession[]; // Added to store individual concessions
   isLoading: boolean;
   error: string | null;
   refreshData: () => void;
@@ -57,6 +75,7 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
     present: 0, absent: 0, late: 0, percentage: 0, total: 0
   });
   const [feeSummary, setFeeSummary] = useState<FeeSummary | null>(null);
+  const [appliedConcessions, setAppliedConcessions] = useState<FeeConcession[]>([]); // State for concessions
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +107,6 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
     if (!className || !schoolConfig || !schoolConfig.tuitionFees) return 0;
     const classFeeConfig = schoolConfig.tuitionFees.find(cf => cf.className === className);
     if (!classFeeConfig || !classFeeConfig.terms) return 0;
-    // Sum up all term amounts for the annual fee
     return classFeeConfig.terms.reduce((sum, term) => sum + (term.amount || 0), 0);
   }, []);
 
@@ -98,20 +116,23 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
       setError(authUser ? "Missing student ID or School ID." : "User not authenticated for student data.");
       setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
       setFeeSummary(null);
+      setAppliedConcessions([]);
       setSchoolDetails(null);
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    const currentAcademicYearStr = getCurrentAcademicYear();
+
     try {
-      const [attendanceResult, feePaymentsResult, schoolResult] = await Promise.all([
+      const [attendanceResult, feePaymentsResult, schoolResult, concessionsResult] = await Promise.all([
         getStudentAttendanceRecords(authUser._id.toString(), authUser.schoolId.toString()),
         getFeePaymentsByStudent(authUser._id.toString(), authUser.schoolId.toString()),
-        getSchoolById(authUser.schoolId.toString())
+        getSchoolById(authUser.schoolId.toString()),
+        getFeeConcessionsForStudent(authUser._id.toString(), authUser.schoolId.toString(), currentAcademicYearStr)
       ]);
 
-      // Process School Details
       if (schoolResult.success && schoolResult.school) {
         setSchoolDetails(schoolResult.school);
       } else {
@@ -119,7 +140,6 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
         setSchoolDetails(null);
       }
       
-      // Process Attendance
       if (attendanceResult.success && attendanceResult.records) {
         const records = attendanceResult.records;
         const totalDays = records.length;
@@ -138,23 +158,30 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
         setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
       }
 
-      // Process Fees (dependent on schoolDetails being set first)
+      if (concessionsResult.success && concessionsResult.concessions) {
+        setAppliedConcessions(concessionsResult.concessions);
+      } else {
+        toast({ variant: "info", title: "Concessions", description: concessionsResult.message || "No concessions found or could not load them." });
+        setAppliedConcessions([]);
+      }
+
       if (schoolResult.success && schoolResult.school) {
         const currentSchoolDetails = schoolResult.school;
         const studentPayments = feePaymentsResult.success && feePaymentsResult.payments ? feePaymentsResult.payments : [];
+        const studentConcessions = concessionsResult.success && concessionsResult.concessions ? concessionsResult.concessions : [];
         
         if (authUser.classId) {
             const totalAnnualTuitionFee = calculateAnnualTuitionFee(authUser.classId as string, currentSchoolDetails);
             const totalPaid = studentPayments.reduce((sum, payment) => sum + payment.amountPaid, 0);
-            const totalDue = totalAnnualTuitionFee - totalPaid;
+            const totalConcessionsAmount = studentConcessions.reduce((sum, concession) => sum + concession.amount, 0);
+            const totalDue = totalAnnualTuitionFee - totalPaid - totalConcessionsAmount;
             const percentagePaid = totalAnnualTuitionFee > 0 ? Math.round((totalPaid / totalAnnualTuitionFee) * 100) : 0;
-            setFeeSummary({ totalFee: totalAnnualTuitionFee, totalPaid, totalDue, percentagePaid });
+            setFeeSummary({ totalFee: totalAnnualTuitionFee, totalPaid, totalConcessions: totalConcessionsAmount, totalDue, percentagePaid });
         } else {
-            setFeeSummary({ totalFee: 0, totalPaid: 0, totalDue: 0, percentagePaid: 0 });
+            setFeeSummary({ totalFee: 0, totalPaid: 0, totalConcessions: 0, totalDue: 0, percentagePaid: 0 });
             toast({ variant: "info", title: "Fee Info", description: "You are not assigned to a class, so fee details cannot be calculated." });
         }
       } else {
-        // If school details failed, fee calculation cannot proceed accurately
         setFeeSummary(null);
       }
 
@@ -164,6 +191,7 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
       toast({ variant: "destructive", title: "Dashboard Error", description: "Could not load your information." });
       setAttendanceSummary({ present: 0, absent: 0, late: 0, percentage: 0, total: 0 });
       setFeeSummary(null);
+      setAppliedConcessions([]);
       setSchoolDetails(null);
     } finally {
       setIsLoading(false);
@@ -178,7 +206,6 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
     }
   }, [authUser, fetchAllStudentData]);
 
-
   const refreshData = useCallback(() => {
     if (authUser?._id && authUser?.schoolId) {
       fetchAllStudentData();
@@ -190,6 +217,7 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
         authUser, 
         attendanceSummary, 
         feeSummary, 
+        appliedConcessions, // Provide concessions
         isLoading, 
         error, 
         refreshData,
