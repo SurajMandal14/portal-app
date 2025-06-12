@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2 } from "lucide-react";
+import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2, Bus } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import * as z from "zod";
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { createSchool, getSchools, updateSchool } from "@/app/actions/schools";
-import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey, type TermFee } from '@/types/school'; 
+import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey, type TermFee, type BusFeeLocationCategory } from '@/types/school'; 
 import type { School as SchoolType } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
 
@@ -41,14 +41,20 @@ export default function SchoolManagementPage() {
     defaultValues: {
       schoolName: "",
       tuitionFees: [{ className: "", terms: [...DEFAULT_TERMS] }],
+      busFeeStructures: [{ location: "", classCategory: "", terms: [...DEFAULT_TERMS] }],
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
     },
   });
 
-  const { fields, append, remove, update } = useFieldArray({
+  const { fields: tuitionFeeFields, append: appendTuitionFee, remove: removeTuitionFee, update: updateTuitionFee } = useFieldArray({
     control: form.control,
     name: "tuitionFees",
+  });
+
+  const { fields: busFeeFields, append: appendBusFee, remove: removeBusFee, update: updateBusFee } = useFieldArray({
+    control: form.control,
+    name: "busFeeStructures",
   });
 
   const fetchSchools = useCallback(async () => {
@@ -74,11 +80,15 @@ export default function SchoolManagementPage() {
     schoolName: school.schoolName,
     schoolLogoUrl: school.schoolLogoUrl || "", 
     reportCardTemplate: school.reportCardTemplate || 'none',
-    tuitionFees: school.tuitionFees.map(tf => ({ 
+    tuitionFees: school.tuitionFees?.length > 0 ? school.tuitionFees.map(tf => ({ 
       className: tf.className,
-      // Ensure terms are always present, even if empty from DB (though schema should prevent this)
       terms: tf.terms && tf.terms.length === 3 ? tf.terms.map(t => ({term: t.term, amount: t.amount || 0})) : [...DEFAULT_TERMS],
-    })),
+    })) : [{ className: "", terms: [...DEFAULT_TERMS] }],
+    busFeeStructures: school.busFeeStructures?.length > 0 ? school.busFeeStructures.map(bfs => ({
+      location: bfs.location,
+      classCategory: bfs.classCategory,
+      terms: bfs.terms && bfs.terms.length === 3 ? bfs.terms.map(t => ({term: t.term, amount: t.amount || 0})) : [...DEFAULT_TERMS],
+    })) : [{ location: "", classCategory: "", terms: [...DEFAULT_TERMS] }],
   });
 
   const handleEdit = (school: SchoolType) => {
@@ -92,6 +102,7 @@ export default function SchoolManagementPage() {
     form.reset({
       schoolName: "",
       tuitionFees: [{ className: "", terms: [...DEFAULT_TERMS] }],
+      busFeeStructures: [{ location: "", classCategory: "", terms: [...DEFAULT_TERMS] }],
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
     });
@@ -135,7 +146,7 @@ export default function SchoolManagementPage() {
             <SchoolIconUI className="mr-2 h-6 w-6" /> School Management 
           </CardTitle>
           <CardDescription>
-            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create schools, configure term-wise tuition fees, logos, and report card templates."}
+            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create schools, configure term-wise tuition fees, bus fees, logos, and report card templates."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -209,10 +220,10 @@ export default function SchoolManagementPage() {
                 />
               </div>
 
-
-              <div className="space-y-4">
-                <FormLabel className="text-lg font-semibold">Tuition Fees Configuration</FormLabel>
-                {fields.map((field, classIndex) => (
+              {/* Tuition Fees Configuration */}
+              <div className="space-y-4 border-t pt-6">
+                <FormLabel className="text-lg font-semibold flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary" />Tuition Fees Configuration</FormLabel>
+                {tuitionFeeFields.map((field, classIndex) => (
                   <Card key={field.id} className="p-4 border shadow-sm">
                     <div className="flex justify-between items-start mb-3">
                         <FormField
@@ -228,8 +239,8 @@ export default function SchoolManagementPage() {
                             </FormItem>
                             )}
                         />
-                        {fields.length > 1 && (
-                            <Button type="button" variant="ghost" size="icon" onClick={() => remove(classIndex)} className="mt-6 text-destructive hover:bg-destructive/10" disabled={isSubmitting}>
+                        {tuitionFeeFields.length > 1 && (
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeTuitionFee(classIndex)} className="mt-6 text-destructive hover:bg-destructive/10" disabled={isSubmitting}>
                                 <Trash2 className="h-5 w-5" />
                             </Button>
                         )}
@@ -238,7 +249,7 @@ export default function SchoolManagementPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {termNames.map((termName, termIndex) => (
                         <FormField
-                          key={`${field.id}-term-${termIndex}`}
+                          key={`${field.id}-tuition-term-${termIndex}`}
                           control={form.control}
                           name={`tuitionFees.${classIndex}.terms.${termIndex}.amount`}
                           render={({ field: amountField }) => (
@@ -254,11 +265,10 @@ export default function SchoolManagementPage() {
                                   value={amountField.value || ""}
                                   onChange={e => {
                                     const val = parseFloat(e.target.value);
-                                    amountField.onChange(isNaN(val) ? "" : val); // Store as number or empty string for optional
-                                    // Ensure term name is correctly set (it should be by default if structure is right)
+                                    amountField.onChange(isNaN(val) ? "" : val);
                                     const currentTerms = form.getValues(`tuitionFees.${classIndex}.terms`);
                                     if (currentTerms[termIndex] && currentTerms[termIndex].term !== termName) {
-                                       update(classIndex, {
+                                       updateTuitionFee(classIndex, {
                                           ...form.getValues(`tuitionFees.${classIndex}`),
                                           terms: currentTerms.map((t, i) => i === termIndex ? {...t, term: termName} : t)
                                        });
@@ -279,14 +289,105 @@ export default function SchoolManagementPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => append({ className: "", terms: [...DEFAULT_TERMS] })}
+                  onClick={() => appendTuitionFee({ className: "", terms: [...DEFAULT_TERMS] })}
                   disabled={isSubmitting}
                 >
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Class Tuition Configuration
                 </Button>
               </div>
+
+              {/* Bus Fees Configuration */}
+              <div className="space-y-4 border-t pt-6">
+                <FormLabel className="text-lg font-semibold flex items-center"><Bus className="mr-2 h-5 w-5 text-primary"/>Bus Fees Configuration</FormLabel>
+                {busFeeFields.map((field, busIndex) => (
+                  <Card key={field.id} className="p-4 border shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 mr-2">
+                            <FormField
+                                control={form.control}
+                                name={`busFeeStructures.${busIndex}.location`}
+                                render={({ field: locationField }) => (
+                                <FormItem>
+                                    <FormLabel>Location/Route</FormLabel>
+                                    <FormControl>
+                                    <Input placeholder="e.g., Downtown Route A" {...locationField} disabled={isSubmitting} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name={`busFeeStructures.${busIndex}.classCategory`}
+                                render={({ field: categoryField }) => (
+                                <FormItem>
+                                    <FormLabel>Class Category</FormLabel>
+                                    <FormControl>
+                                    <Input placeholder="e.g., Nursery-UKG, I-V, VI-X" {...categoryField} disabled={isSubmitting} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                        </div>
+                        {busFeeFields.length > 1 && (
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeBusFee(busIndex)} className="mt-6 text-destructive hover:bg-destructive/10" disabled={isSubmitting}>
+                                <Trash2 className="h-5 w-5" />
+                            </Button>
+                        )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {termNames.map((termName, termIndex) => (
+                        <FormField
+                          key={`${field.id}-bus-term-${termIndex}`}
+                          control={form.control}
+                          name={`busFeeStructures.${busIndex}.terms.${termIndex}.amount`}
+                          render={({ field: amountField }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center">
+                                <span className="font-sans mr-1">₹</span>{termName} Bus Fee
+                              </FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  placeholder="Amount" 
+                                  {...amountField}
+                                  value={amountField.value || ""}
+                                  onChange={e => {
+                                    const val = parseFloat(e.target.value);
+                                    amountField.onChange(isNaN(val) ? "" : val);
+                                    const currentTerms = form.getValues(`busFeeStructures.${busIndex}.terms`);
+                                    if (currentTerms[termIndex] && currentTerms[termIndex].term !== termName) {
+                                       updateBusFee(busIndex, {
+                                          ...form.getValues(`busFeeStructures.${busIndex}`),
+                                          terms: currentTerms.map((t, i) => i === termIndex ? {...t, term: termName} : t)
+                                       });
+                                    }
+                                  }}
+                                  disabled={isSubmitting} 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </Card>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendBusFee({ location: "", classCategory: "", terms: [...DEFAULT_TERMS] })}
+                  disabled={isSubmitting}
+                >
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add Bus Fee Configuration
+                </Button>
+              </div>
               
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-6">
                 <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {isSubmitting ? (editingSchool ? "Updating..." : "Creating...") : (editingSchool ? "Update School Profile" : "Create School Profile")}
@@ -327,7 +428,7 @@ export default function SchoolManagementPage() {
                 <div className="flex-grow">
                   <h3 className="font-semibold">{school.schoolName}</h3>
                   <p className="text-sm text-muted-foreground">
-                    {school.tuitionFees?.length || 0} class tuition configuration(s)
+                    {school.tuitionFees?.length || 0} tuition config(s), {school.busFeeStructures?.length || 0} bus fee config(s)
                   </p>
                   <p className="text-xs text-muted-foreground">Report Card: <span className="font-medium">{REPORT_CARD_TEMPLATES[school.reportCardTemplate || 'none']}</span></p>
                   <p className="text-xs text-muted-foreground">Created: {new Date(school.createdAt).toLocaleDateString()}</p>

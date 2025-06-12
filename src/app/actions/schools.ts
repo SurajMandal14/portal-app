@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { School, SchoolFormData, ReportCardTemplateKey, ClassTuitionFeeConfig, TermFee } from '@/types/school';
+import type { School, SchoolFormData, ReportCardTemplateKey, ClassTuitionFeeConfig, TermFee, BusFeeLocationCategory } from '@/types/school';
 import { schoolFormSchema } from '@/types/school';
 import { revalidatePath } from 'next/cache';
 import { ObjectId } from 'mongodb';
@@ -23,7 +23,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate } = validatedFields.data;
+    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate, busFeeStructures } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<Omit<School, '_id'>>('schools');
@@ -37,6 +37,14 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
           amount: termFee.amount,
         })),
       })),
+      busFeeStructures: busFeeStructures ? busFeeStructures.map(bfs => ({ // Handle optional busFeeStructures
+        location: bfs.location,
+        classCategory: bfs.classCategory,
+        terms: bfs.terms.map(termFee => ({
+          term: termFee.term,
+          amount: termFee.amount,
+        })),
+      })) : [], // Default to empty array if not provided
       schoolLogoUrl: schoolLogoUrl || undefined,
       reportCardTemplate: reportCardTemplate || 'none',
     };
@@ -58,7 +66,12 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
     return {
       success: true,
       message: 'School profile created successfully!',
-      school: { ...schoolToInsert, _id: result.insertedId.toString() } as School,
+      school: { 
+        ...schoolToInsert, 
+        _id: result.insertedId.toString(),
+        createdAt: schoolToInsert.createdAt.toISOString(), // Serialize dates
+        updatedAt: schoolToInsert.updatedAt.toISOString(),
+      } as School,
     };
 
   } catch (error) {
@@ -87,7 +100,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl } = validatedFields.data;
+    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl, busFeeStructures } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<School>('schools');
@@ -101,6 +114,14 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
           amount: termFee.amount,
         })),
       })),
+      busFeeStructures: busFeeStructures ? busFeeStructures.map(bfs => ({
+        location: bfs.location,
+        classCategory: bfs.classCategory,
+        terms: bfs.terms.map(termFee => ({
+          term: termFee.term,
+          amount: termFee.amount,
+        })),
+      })) : [],
       reportCardTemplate: reportCardTemplate || 'none',
       updatedAt: new Date(),
     };
@@ -128,8 +149,8 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
      const clientSchool: School = {
         ...updatedSchoolDoc,
         _id: updatedSchoolDoc._id.toString(),
-        createdAt: new Date(updatedSchoolDoc.createdAt), // Ensure Date type
-        updatedAt: new Date(updatedSchoolDoc.updatedAt), // Ensure Date type
+        createdAt: new Date(updatedSchoolDoc.createdAt).toISOString(), 
+        updatedAt: new Date(updatedSchoolDoc.updatedAt).toISOString(),
      };
 
     return {
@@ -156,7 +177,7 @@ export interface GetSchoolsResult {
 export async function getSchools(): Promise<GetSchoolsResult> {
   try {
     const { db } = await connectToDatabase();
-    const schoolsCollection = db.collection('schools'); // Use raw collection type
+    const schoolsCollection = db.collection('schools'); 
     
     const schoolsDocs = await schoolsCollection.find({}).sort({ createdAt: -1 }).toArray();
     
@@ -164,13 +185,18 @@ export async function getSchools(): Promise<GetSchoolsResult> {
       _id: doc._id.toString(),
       schoolName: doc.schoolName,
       schoolLogoUrl: doc.schoolLogoUrl,
-      tuitionFees: (doc.tuitionFees || []).map((tf: any) => ({ // Use any for raw doc field
+      tuitionFees: (doc.tuitionFees || []).map((tf: any) => ({ 
         className: tf.className,
         terms: (tf.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
+      busFeeStructures: (doc.busFeeStructures || []).map((bfs: any) => ({ // map busFeeStructures
+        location: bfs.location,
+        classCategory: bfs.classCategory,
+        terms: (bfs.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
+      })),
       reportCardTemplate: doc.reportCardTemplate,
-      createdAt: new Date(doc.createdAt),
-      updatedAt: new Date(doc.updatedAt),
+      createdAt: new Date(doc.createdAt).toISOString(),
+      updatedAt: new Date(doc.updatedAt).toISOString(),
     }));
 
     return { success: true, schools };
@@ -195,7 +221,7 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
     }
 
     const { db } = await connectToDatabase();
-    const schoolsCollection = db.collection('schools'); // Use raw collection type
+    const schoolsCollection = db.collection('schools'); 
     
     const schoolDoc = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
 
@@ -211,9 +237,14 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
         className: tf.className,
         terms: (tf.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
+      busFeeStructures: (schoolDoc.busFeeStructures || []).map((bfs: any) => ({ // map busFeeStructures
+        location: bfs.location,
+        classCategory: bfs.classCategory,
+        terms: (bfs.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
+      })),
       reportCardTemplate: schoolDoc.reportCardTemplate,
-      createdAt: new Date(schoolDoc.createdAt),
-      updatedAt: new Date(schoolDoc.updatedAt),
+      createdAt: new Date(schoolDoc.createdAt).toISOString(),
+      updatedAt: new Date(schoolDoc.updatedAt).toISOString(),
     };
     
     return { success: true, school };

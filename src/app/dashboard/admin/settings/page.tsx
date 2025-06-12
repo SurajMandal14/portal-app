@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"; 
-import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info, Image as ImageIcon, Settings as SettingsIcon, CalendarCog } from "lucide-react";
+import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info, Image as ImageIcon, Settings as SettingsIcon, CalendarCog, Bus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user";
-import type { School, TermFee } from "@/types/school";
+import type { School, TermFee, BusFeeLocationCategory } from "@/types/school";
 import { getSchoolById } from "@/app/actions/schools";
 
 export default function AdminSchoolSettingsPage() {
@@ -62,7 +62,7 @@ export default function AdminSchoolSettingsPage() {
     }
   }, [authUser, fetchSchoolDetails]);
 
-  const calculateAnnualTuition = (terms: TermFee[]): number => {
+  const calculateAnnualTotal = (terms: TermFee[]): number => {
     return terms.reduce((sum, term) => sum + (term.amount || 0), 0);
   };
 
@@ -170,7 +170,7 @@ export default function AdminSchoolSettingsPage() {
                     <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.terms.find(t => t.term === 'Term 2')?.amount || 0).toLocaleString()}</TableCell>
                     <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.terms.find(t => t.term === 'Term 3')?.amount || 0).toLocaleString()}</TableCell>
                     <TableCell className="text-right font-semibold">
-                        <span className="font-sans">₹</span>{calculateAnnualTuition(cf.terms).toLocaleString()}
+                        <span className="font-sans">₹</span>{calculateAnnualTotal(cf.terms).toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -185,6 +185,50 @@ export default function AdminSchoolSettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center"><Bus className="mr-2 h-5 w-5 text-primary" /> Bus Fee Structure</CardTitle>
+          <CardDescription>Configured bus fees per location and class category (Managed by Super Admin).</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {schoolDetails.busFeeStructures && schoolDetails.busFeeStructures.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Location/Route</TableHead>
+                  <TableHead>Class Category</TableHead>
+                  <TableHead className="text-right">Term 1 (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Term 2 (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Term 3 (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Annual Total (<span className="font-sans">₹</span>)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {schoolDetails.busFeeStructures.map((bfs, index) => (
+                  <TableRow key={`${bfs.location}-${bfs.classCategory}-${index}`}>
+                    <TableCell className="font-medium">{bfs.location}</TableCell>
+                    <TableCell>{bfs.classCategory}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(bfs.terms.find(t => t.term === 'Term 1')?.amount || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(bfs.terms.find(t => t.term === 'Term 2')?.amount || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(bfs.terms.find(t => t.term === 'Term 3')?.amount || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                        <span className="font-sans">₹</span>{calculateAnnualTotal(bfs.terms).toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-6">
+                <Info className="mx-auto h-10 w-10 text-muted-foreground" />
+                <p className="mt-3 text-muted-foreground">No bus fee structures have been configured for this school.</p>
+                <p className="text-xs text-muted-foreground">Please contact a Super Administrator to set up bus fees.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
 
        <Card>
         <CardHeader>
