@@ -18,10 +18,12 @@ export interface User {
   admissionId?: string; 
   avatarUrl?: string;
   phone?: string;
+  busRouteLocation?: string; // For students using bus transport
+  busClassCategory?: string; // For students using bus transport, to match specific bus fee tier
   // classTeacherOfClassId?: string | ObjectId; // ID of the class this teacher is a class teacher for (DEPRECATED - logic moved to SchoolClass.classTeacherId and User.classId for attendance focus)
   subjectsTaught?: string[]; // For teachers, list of subject names or IDs they teach (Future use)
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | string; // Allow string for client-side
+  updatedAt: Date | string; // Allow string for client-side
 }
 
 // Centralized AuthUser type
@@ -44,7 +46,18 @@ export const createStudentFormSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
   admissionId: z.string().min(1, { message: "Admission ID is required for students."}),
-  classId: z.string().optional(), // Optional class assignment at creation
+  classId: z.string().min(1, { message: "Class assignment is required." }), // Made classId required for fee calculation
+  enableBusTransport: z.boolean().default(false).optional(),
+  busRouteLocation: z.string().optional(),
+  busClassCategory: z.string().optional(),
+}).refine(data => {
+  if (data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Bus Location and Class Category are required if bus transport is enabled.",
+  path: ["busRouteLocation"], // Or path: ["enableBusTransport"] to show error near switch
 });
 export type CreateStudentFormData = z.infer<typeof createStudentFormSchema>;
 
@@ -66,6 +79,8 @@ export const createSchoolUserFormSchema = z.object({
   role: z.enum(['teacher', 'student'], { required_error: "Role is required." }),
   classId: z.string().optional(),
   admissionId: z.string().optional(),
+  busRouteLocation: z.string().optional(),
+  busClassCategory: z.string().optional(),
 }).refine(data => {
   if (data.role === 'student' && (!data.admissionId || data.admissionId.trim() === "")) {
     return false;
@@ -86,6 +101,17 @@ export const updateSchoolUserFormSchema = z.object({
   role: z.enum(['teacher', 'student'], { required_error: "Role is required." }), // Role might be non-editable in UI, but schema needs it
   classId: z.string().optional(), // For students: their class. For teachers: their primary attendance class.
   admissionId: z.string().optional(), 
+  enableBusTransport: z.boolean().default(false).optional(),
+  busRouteLocation: z.string().optional(),
+  busClassCategory: z.string().optional(),
+}).refine(data => {
+  if (data.role === 'student' && data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Bus Location and Class Category are required if bus transport is enabled for student.",
+  path: ["busRouteLocation"],
 });
 export type UpdateSchoolUserFormData = z.infer<typeof updateSchoolUserFormSchema>;
 
@@ -98,6 +124,8 @@ export interface CreateSchoolUserServerActionFormData {
   role: 'teacher' | 'student';
   classId?: string;
   admissionId?: string;
+  busRouteLocation?: string;
+  busClassCategory?: string;
 }
 
 

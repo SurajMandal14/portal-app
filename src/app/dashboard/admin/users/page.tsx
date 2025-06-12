@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen, DollarSign, Bus } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import {
   Form,
   FormControl,
@@ -41,13 +42,13 @@ import {
 import { getSchoolById } from "@/app/actions/schools";
 import { getSchoolClasses } from "@/app/actions/classes"; 
 import type { User as AppUser } from "@/types/user";
-import type { School } from "@/types/school";
+import type { School, ClassTuitionFeeConfig, BusFeeLocationCategory, TermFee } from "@/types/school";
 import type { SchoolClass } from "@/types/classes"; 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { format } from 'date-fns';
 import type { AuthUser } from "@/types/attendance";
 
-type SchoolUser = Partial<AppUser>; // User object from server action will have string IDs/dates
+type SchoolUser = Partial<AppUser>; 
 
 const NONE_CLASS_VALUE = "__NONE_CLASS__"; 
 
@@ -68,10 +69,16 @@ export default function AdminUserManagementPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState("addStudent");
 
+  // Fee calculation states for Add Student form
+  const [calculatedTuitionFee, setCalculatedTuitionFee] = useState<number | null>(null);
+  const [calculatedBusFee, setCalculatedBusFee] = useState<number | null>(null);
+  const [selectedBusLocations, setSelectedBusLocations] = useState<string[]>([]);
+  const [availableBusClassCategories, setAvailableBusClassCategories] = useState<string[]>([]);
+
 
   const studentForm = useForm<CreateStudentFormData>({
     resolver: zodResolver(createStudentFormSchema),
-    defaultValues: { name: "", email: "", password: "", admissionId: "", classId: "" },
+    defaultValues: { name: "", email: "", password: "", admissionId: "", classId: "", enableBusTransport: false, busRouteLocation: "", busClassCategory: "" },
   });
 
   const teacherForm = useForm<CreateTeacherFormData>({
@@ -81,9 +88,10 @@ export default function AdminUserManagementPage() {
 
   const editForm = useForm<UpdateSchoolUserFormData>({
     resolver: zodResolver(updateSchoolUserFormSchema),
-    defaultValues: { name: "", email: "", password: "", role: undefined, classId: "", admissionId: "" },
+    defaultValues: { name: "", email: "", password: "", role: undefined, classId: "", admissionId: "", enableBusTransport: false, busRouteLocation: "", busClassCategory: "" },
   });
   const editingUserRole = editForm.watch("role");
+  const editEnableBusTransport = editForm.watch("enableBusTransport");
 
 
   useEffect(() => {
@@ -114,11 +122,19 @@ export default function AdminUserManagementPage() {
         getSchoolClasses(authUser.schoolId.toString()) 
       ]);
 
-      if (schoolResult.success && schoolResult.school) setSchoolDetails(schoolResult.school);
-      else toast({ variant: "destructive", title: "Error", description: schoolResult.message || "Failed to load school details." });
+      if (schoolResult.success && schoolResult.school) {
+        setSchoolDetails(schoolResult.school);
+        const uniqueLocations = Array.from(new Set(schoolResult.school.busFeeStructures?.map(bfs => bfs.location) || []));
+        setSelectedBusLocations(uniqueLocations.filter(Boolean));
+      } else {
+        toast({ variant: "destructive", title: "Error", description: schoolResult.message || "Failed to load school details." });
+        setSchoolDetails(null);
+        setSelectedBusLocations([]);
+      }
+      
 
       if (usersResult.success && usersResult.users) {
-        setSchoolUsers(usersResult.users); // Directly set, as users are already mapped in action
+        setSchoolUsers(usersResult.users);
       } else {
         toast({ variant: "destructive", title: "Error", description: usersResult.message || "Failed to load users." });
       }
@@ -145,6 +161,61 @@ export default function AdminUserManagementPage() {
     else { setIsLoadingData(false); setSchoolUsers([]); setSchoolDetails(null); setManagedClasses([]); setAvailableClassNames([]); }
   }, [authUser, fetchInitialData]);
 
+  const calculateAnnualFeeFromTerms = (terms: TermFee[]): number => {
+    return terms.reduce((sum, term) => sum + (term.amount || 0), 0);
+  };
+  
+  // Calculate Tuition Fee for Add Student Form
+  const selectedClassForTuition = studentForm.watch("classId");
+  useEffect(() => {
+    if (selectedClassForTuition && schoolDetails?.tuitionFees) {
+      const feeConfig = schoolDetails.tuitionFees.find(tf => tf.className === selectedClassForTuition);
+      if (feeConfig?.terms) {
+        setCalculatedTuitionFee(calculateAnnualFeeFromTerms(feeConfig.terms));
+      } else {
+        setCalculatedTuitionFee(null);
+      }
+    } else {
+      setCalculatedTuitionFee(null);
+    }
+  }, [selectedClassForTuition, schoolDetails]);
+
+  // Calculate Bus Fee for Add Student Form
+  const studentFormEnableBus = studentForm.watch("enableBusTransport");
+  const studentFormBusLocation = studentForm.watch("busRouteLocation");
+  const studentFormBusCategory = studentForm.watch("busClassCategory");
+
+  useEffect(() => {
+    if (studentFormEnableBus && studentFormBusLocation && schoolDetails?.busFeeStructures) {
+      const categories = schoolDetails.busFeeStructures
+        .filter(bfs => bfs.location === studentFormBusLocation)
+        .map(bfs => bfs.classCategory)
+        .filter(Boolean);
+      setAvailableBusClassCategories(Array.from(new Set(categories)));
+      if (!categories.includes(studentForm.getValues("busClassCategory"))) {
+        studentForm.setValue("busClassCategory", ""); // Reset if current category not valid for new location
+      }
+    } else {
+      setAvailableBusClassCategories([]);
+    }
+  }, [studentFormEnableBus, studentFormBusLocation, schoolDetails, studentForm]);
+
+  useEffect(() => {
+    if (studentFormEnableBus && studentFormBusLocation && studentFormBusCategory && schoolDetails?.busFeeStructures) {
+      const feeConfig = schoolDetails.busFeeStructures.find(
+        bfs => bfs.location === studentFormBusLocation && bfs.classCategory === studentFormBusCategory
+      );
+      if (feeConfig?.terms) {
+        setCalculatedBusFee(calculateAnnualFeeFromTerms(feeConfig.terms));
+      } else {
+        setCalculatedBusFee(null);
+      }
+    } else {
+      setCalculatedBusFee(null);
+    }
+  }, [studentFormEnableBus, studentFormBusLocation, studentFormBusCategory, schoolDetails]);
+
+
   useEffect(() => {
     if (editingUser) {
       editForm.reset({
@@ -152,23 +223,34 @@ export default function AdminUserManagementPage() {
         email: editingUser.email || "",
         password: "", 
         role: editingUser.role as 'teacher' | 'student' | undefined,
-        classId: editingUser.classId || "", 
+        classId: editingUser.classId || NONE_CLASS_VALUE, 
         admissionId: editingUser.admissionId || "",
+        enableBusTransport: !!editingUser.busRouteLocation,
+        busRouteLocation: editingUser.busRouteLocation || "",
+        busClassCategory: editingUser.busClassCategory || "",
       });
     } else {
-      editForm.reset({ name: "", email: "", password: "", role: undefined, classId: "", admissionId: "" });
+      editForm.reset({ name: "", email: "", password: "", role: undefined, classId: NONE_CLASS_VALUE, admissionId: "", enableBusTransport: false, busRouteLocation: "", busClassCategory:"" });
     }
   }, [editingUser, editForm]);
 
   async function handleStudentSubmit(values: CreateStudentFormData) {
     if (!authUser?.schoolId) return;
     setIsSubmittingStudent(true);
-    const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'student', classId: values.classId === NONE_CLASS_VALUE ? undefined : values.classId };
+    const payload: CreateSchoolUserServerActionFormData = { 
+        ...values, 
+        role: 'student', 
+        classId: values.classId === NONE_CLASS_VALUE ? undefined : values.classId,
+        busRouteLocation: values.enableBusTransport ? values.busRouteLocation : undefined,
+        busClassCategory: values.enableBusTransport ? values.busClassCategory : undefined,
+    };
     const result = await createSchoolUser(payload, authUser.schoolId.toString());
     setIsSubmittingStudent(false);
     if (result.success) {
       toast({ title: "Student Created", description: result.message });
       studentForm.reset();
+      setCalculatedTuitionFee(null);
+      setCalculatedBusFee(null);
       fetchInitialData(); 
     } else {
       toast({ variant: "destructive", title: "Creation Failed", description: result.error || result.message });
@@ -193,7 +275,12 @@ export default function AdminUserManagementPage() {
   async function handleEditSubmit(values: UpdateSchoolUserFormData) {
     if (!authUser?.schoolId || !editingUser?._id) return;
     setIsSubmittingEdit(true);
-    const payload = { ...values, classId: values.classId === NONE_CLASS_VALUE ? "" : values.classId };
+    const payload = { 
+      ...values, 
+      classId: values.classId === NONE_CLASS_VALUE ? "" : values.classId,
+      busRouteLocation: values.enableBusTransport && values.role === 'student' ? values.busRouteLocation : undefined,
+      busClassCategory: values.enableBusTransport && values.role === 'student' ? values.busClassCategory : undefined,
+    };
     const result = await updateSchoolUser(editingUser._id.toString(), authUser.schoolId.toString(), payload);
     setIsSubmittingEdit(false);
     if (result.success) {
@@ -226,6 +313,9 @@ export default function AdminUserManagementPage() {
   const filteredUsers = schoolUsers.filter(user => 
     Object.values(user).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const totalAnnualFee = (calculatedTuitionFee || 0) + (studentForm.getValues("enableBusTransport") ? (calculatedBusFee || 0) : 0);
+
 
   if (!authUser && !isLoadingData) { 
     return (
@@ -295,8 +385,8 @@ export default function AdminUserManagementPage() {
                           </FormItem>
                       )}/>
                    )}
-                   {(editingUserRole === 'teacher' || editingUserRole === 'student') && (
-                      <FormField 
+                   {/* Class Assignment for Edit */}
+                    <FormField 
                         control={editForm.control} 
                         name="classId" 
                         render={({ field }) => (
@@ -322,7 +412,52 @@ export default function AdminUserManagementPage() {
                             </FormItem>
                         )}
                     />
-                   )}
+                    {/* Bus Transport for Edit Student */}
+                    {editingUserRole === 'student' && (
+                        <>
+                            <FormField
+                                control={editForm.control}
+                                name="enableBusTransport"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm md:col-span-2">
+                                        <div className="space-y-0.5">
+                                            <FormLabel>Enable Bus Transportation</FormLabel>
+                                            <FormDescription>Assign bus fees based on location and category.</FormDescription>
+                                        </div>
+                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={isSubmittingEdit} /></FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                            {editEnableBusTransport && (
+                                <>
+                                    <FormField control={editForm.control} name="busRouteLocation" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Bus Location/Route</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={isSubmittingEdit || selectedBusLocations.length === 0}>
+                                                <FormControl><SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger></FormControl>
+                                                <SelectContent>
+                                                    {selectedBusLocations.map(loc => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                    <FormField control={editForm.control} name="busClassCategory" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Bus Class Category</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={isSubmittingEdit || availableBusClassCategories.length === 0}>
+                                                <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
+                                                <SelectContent>
+                                                     {schoolDetails?.busFeeStructures?.filter(bfs => bfs.location === editForm.getValues("busRouteLocation")).map(bfs => bfs.classCategory).filter((value, index, self) => self.indexOf(value) === index).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                </>
+                            )}
+                        </>
+                    )}
                 </div>
                 <div className="flex gap-2">
                   <Button type="submit" disabled={isSubmittingEdit || isLoadingData}>
@@ -354,7 +489,7 @@ export default function AdminUserManagementPage() {
                         <FormField control={studentForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel><FormControl><Input placeholder="e.g., S1001" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={studentForm.control} name="classId" render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Assign to Class (Optional)</FormLabel>
+                                <FormLabel>Assign to Class</FormLabel>
                                 <Select 
                                     onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)} 
                                     value={field.value || ""} 
@@ -369,9 +504,75 @@ export default function AdminUserManagementPage() {
                                     </SelectContent>
                                 </Select>
                                 {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
+                                {calculatedTuitionFee !== null && (
+                                    <FormDescription className="text-xs pt-1">
+                                        Annual Tuition Fee: <span className="font-sans">₹</span>{calculatedTuitionFee.toLocaleString()}
+                                    </FormDescription>
+                                )}
                                 <FormMessage/>
                             </FormItem>
                         )}/>
+                        <div /> {/* Placeholder for grid alignment */}
+
+                        <FormField
+                            control={studentForm.control}
+                            name="enableBusTransport"
+                            render={({ field }) => (
+                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm md:col-span-2">
+                                    <div className="space-y-0.5">
+                                        <FormLabel>Enable Bus Transportation</FormLabel>
+                                        <FormDescription>Assign bus fees based on location and category.</FormDescription>
+                                    </div>
+                                    <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={isSubmittingStudent} /></FormControl>
+                                </FormItem>
+                            )}
+                        />
+                        {studentForm.watch("enableBusTransport") && (
+                            <>
+                                <FormField control={studentForm.control} name="busRouteLocation" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Bus Location/Route</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={isSubmittingStudent || selectedBusLocations.length === 0}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger></FormControl>
+                                            <SelectContent>
+                                                {selectedBusLocations.map(loc => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}/>
+                                <FormField control={studentForm.control} name="busClassCategory" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Bus Class Category</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={isSubmittingStudent || availableBusClassCategories.length === 0}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
+                                            <SelectContent>
+                                                {availableBusClassCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                        {calculatedBusFee !== null && (
+                                            <FormDescription className="text-xs pt-1">
+                                                Annual Bus Fee: <span className="font-sans">₹</span>{calculatedBusFee.toLocaleString()}
+                                            </FormDescription>
+                                        )}
+                                        <FormMessage />
+                                    </FormItem>
+                                )}/>
+                            </>
+                        )}
+                         {(calculatedTuitionFee !== null || (studentForm.watch("enableBusTransport") && calculatedBusFee !== null)) && (
+                            <div className="md:col-span-2 mt-2 p-3 border rounded-md bg-muted/50">
+                                <h4 className="font-medium text-sm mb-1">Estimated Total Annual Fee:</h4>
+                                <p className="text-lg font-semibold">
+                                    <span className="font-sans">₹</span>{totalAnnualFee.toLocaleString()}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    (Tuition: <span className="font-sans">₹</span>{(calculatedTuitionFee || 0).toLocaleString()})
+                                    {studentForm.watch("enableBusTransport") && calculatedBusFee !== null && 
+                                     ` + (Bus: ₹${(calculatedBusFee || 0).toLocaleString()})`}
+                                </p>
+                            </div>
+                        )}
                     </div>
                     <Button type="submit" className="w-full md:w-auto" disabled={isSubmittingStudent || isLoadingData}>{isSubmittingStudent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Student</Button>
                   </form>
@@ -435,7 +636,7 @@ export default function AdminUserManagementPage() {
              <div className="flex items-center justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading users...</p></div>
           ) : filteredUsers.length > 0 ? (
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Admission ID</TableHead><TableHead>Role</TableHead><TableHead>Class Assigned</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Admission ID</TableHead><TableHead>Role</TableHead><TableHead>Class Assigned</TableHead><TableHead>Bus Route</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredUsers.map((user) => (
                 <TableRow key={user._id?.toString()}>
@@ -448,6 +649,7 @@ export default function AdminUserManagementPage() {
                     </span>
                   </TableCell>
                   <TableCell>{user.classId || 'N/A'}</TableCell>
+                  <TableCell>{user.busRouteLocation ? `${user.busRouteLocation} (${user.busClassCategory || 'N/A'})` : 'N/A'}</TableCell>
                   <TableCell>{user.createdAt ? format(new Date(user.createdAt as string), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(user)} disabled={isSubmittingStudent || isSubmittingTeacher || isSubmittingEdit || isDeleting}><Edit3 className="h-4 w-4" /></Button>
@@ -480,4 +682,3 @@ export default function AdminUserManagementPage() {
     </div>
   );
 }
-

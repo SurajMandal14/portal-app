@@ -29,7 +29,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
         return { success: false, message: 'Invalid School ID provided for user creation.', error: 'Invalid School ID.'};
     }
 
-    const { name, email, password, role, classId, admissionId } = validatedFields.data;
+    const { name, email, password, role, classId, admissionId, busRouteLocation, busClassCategory } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<Omit<User, '_id'>>('users');
@@ -57,6 +57,8 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
       schoolId: userSchoolId,
       classId: (classId && classId.trim() !== "") ? classId.trim() : undefined,
       admissionId: role === 'student' ? (admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined) : undefined,
+      busRouteLocation: role === 'student' ? (busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined) : undefined,
+      busClassCategory: role === 'student' ? (busClassCategory && busClassCategory.trim() !== "" ? busClassCategory.trim() : undefined) : undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -119,6 +121,8 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         schoolId: user.schoolId?.toString(),
         classId: user.classId || undefined,
         admissionId: user.admissionId || undefined,
+        busRouteLocation: user.busRouteLocation || undefined,
+        busClassCategory: user.busClassCategory || undefined,
         createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
         updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : undefined,
       };
@@ -152,7 +156,7 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { name, email, password, role, classId, admissionId } = validatedFields.data;
+    const { name, email, password, role, classId, admissionId, enableBusTransport, busRouteLocation, busClassCategory } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
@@ -190,8 +194,16 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         updateData.role = role;
         if (role === 'student') {
             updateData.admissionId = admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined;
-        } else {
+            updateData.busRouteLocation = enableBusTransport && busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined;
+            updateData.busClassCategory = enableBusTransport && busClassCategory && busClassCategory.trim() !== "" ? busClassCategory.trim() : undefined;
+             if (!enableBusTransport) { // Explicitly clear bus info if transport is disabled
+                updateData.busRouteLocation = undefined;
+                updateData.busClassCategory = undefined;
+            }
+        } else { // For teacher
             updateData.admissionId = undefined;
+            updateData.busRouteLocation = undefined;
+            updateData.busClassCategory = undefined;
         }
     }
 
@@ -230,6 +242,8 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         schoolId: updatedUserDoc.schoolId?.toString(),
         classId: updatedUserDoc.classId || undefined,
         admissionId: updatedUserDoc.admissionId || undefined,
+        busRouteLocation: updatedUserDoc.busRouteLocation || undefined,
+        busClassCategory: updatedUserDoc.busClassCategory || undefined,
         createdAt: updatedUserDoc.createdAt ? new Date(updatedUserDoc.createdAt).toISOString() : undefined,
         updatedAt: updatedUserDoc.updatedAt ? new Date(updatedUserDoc.updatedAt).toISOString() : undefined,
       }
@@ -295,7 +309,7 @@ export async function getStudentsByClass(schoolId: string, className: string): P
       role: 'student'
     }).project({ password: 0 }).sort({ name: 1 }).toArray();
 
-    const students = studentsFromDb.map(studentDoc => {
+    const users = studentsFromDb.map(studentDoc => {
       const student = studentDoc as unknown as User;
       return {
         _id: student._id.toString(),
@@ -305,12 +319,14 @@ export async function getStudentsByClass(schoolId: string, className: string): P
         schoolId: student.schoolId?.toString(),
         classId: student.classId || undefined,
         admissionId: student.admissionId || undefined,
+        busRouteLocation: student.busRouteLocation || undefined,
+        busClassCategory: student.busClassCategory || undefined,
         createdAt: student.createdAt ? new Date(student.createdAt).toISOString() : undefined,
         updatedAt: student.updatedAt ? new Date(student.updatedAt).toISOString() : undefined,
       };
     });
 
-    return { success: true, users: students };
+    return { success: true, users: users };
   } catch (error) {
     console.error('Get students by class server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
