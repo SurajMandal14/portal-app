@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy } from "lucide-react"; // Renamed User to UserIcon, Added BookCopy
+import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent } from "lucide-react"; // Added TicketPercent
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +24,7 @@ const navLinksBase = {
     { href: "/dashboard/super-admin", label: "SA Dashboard", icon: ShieldAlert },
     { href: "/dashboard/super-admin/schools", label: "Schools", icon: School },
     { href: "/dashboard/super-admin/users", label: "School Admins", icon: Users },
+    { href: "/dashboard/super-admin/concessions", label: "Concessions", icon: TicketPercent },
   ],
   admin: [
     { href: "/dashboard/admin", label: "Admin Dashboard", icon: LayoutDashboard },
@@ -35,6 +36,7 @@ const navLinksBase = {
   teacher: [
     { href: "/dashboard/teacher", label: "Teacher Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/teacher/attendance", label: "Mark Attendance", icon: CheckSquare },
+    { href: "/dashboard/teacher/marks", label: "Enter Marks", icon: BookCopy }, // Using BookCopy as placeholder
     { href: "/dashboard/teacher/profile", label: "My Profile", icon: UserIcon },
   ],
   student: [
@@ -234,4 +236,3 @@ export function Header() {
     </header>
   );
 }
-

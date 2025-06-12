@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { School, Users, Settings, BarChart3, Loader2 } from "lucide-react";
+import { School, Users, Settings, BarChart3, Loader2, TicketPercent } from "lucide-react"; // Added TicketPercent
 import { useState, useEffect } from "react";
 import { getSchoolsCount } from "@/app/actions/schools";
 import { getSchoolAdminsCount } from "@/app/actions/adminUsers";
@@ -124,6 +124,19 @@ export default function SuperAdminDashboardPage() {
           </CardContent>
         </Card>
 
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <TicketPercent className="h-10 w-10 text-primary mb-2" />
+            <CardTitle>Fee Concessions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription>Apply and manage fee concessions for students across schools.</CardDescription>
+            <Button asChild className="mt-4" variant="outline">
+              <Link href="/dashboard/super-admin/concessions">Manage Concessions</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <Settings className="h-10 w-10 text-primary mb-2" />
