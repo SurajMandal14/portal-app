@@ -29,7 +29,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser } from "@/app/actions/schoolUsers";
@@ -42,9 +41,9 @@ import {
 import { getSchoolById } from "@/app/actions/schools";
 import { getSchoolClasses } from "@/app/actions/classes"; 
 import type { User as AppUser } from "@/types/user";
-import type { School, ClassTuitionFeeConfig, BusFeeLocationCategory, TermFee } from "@/types/school";
+import type { School, TermFee } from "@/types/school";
 import type { SchoolClass } from "@/types/classes"; 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 import type { AuthUser } from "@/types/attendance";
 
@@ -69,7 +68,6 @@ export default function AdminUserManagementPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState("addStudent");
 
-  // Fee calculation states for Add Student form
   const [calculatedTuitionFee, setCalculatedTuitionFee] = useState<number | null>(null);
   const [calculatedBusFee, setCalculatedBusFee] = useState<number | null>(null);
   const [selectedBusLocations, setSelectedBusLocations] = useState<string[]>([]);
@@ -161,14 +159,13 @@ export default function AdminUserManagementPage() {
     else { setIsLoadingData(false); setSchoolUsers([]); setSchoolDetails(null); setManagedClasses([]); setAvailableClassNames([]); }
   }, [authUser, fetchInitialData]);
 
-  const calculateAnnualFeeFromTerms = (terms: TermFee[]): number => {
+  const calculateAnnualFeeFromTerms = useCallback((terms: TermFee[]): number => {
     return terms.reduce((sum, term) => sum + (term.amount || 0), 0);
-  };
+  }, []);
   
-  // Calculate Tuition Fee for Add Student Form
   const selectedClassForTuition = studentForm.watch("classId");
   useEffect(() => {
-    if (selectedClassForTuition && schoolDetails?.tuitionFees) {
+    if (selectedClassForTuition && selectedClassForTuition !== NONE_CLASS_VALUE && schoolDetails?.tuitionFees) {
       const feeConfig = schoolDetails.tuitionFees.find(tf => tf.className === selectedClassForTuition);
       if (feeConfig?.terms) {
         setCalculatedTuitionFee(calculateAnnualFeeFromTerms(feeConfig.terms));
@@ -178,9 +175,8 @@ export default function AdminUserManagementPage() {
     } else {
       setCalculatedTuitionFee(null);
     }
-  }, [selectedClassForTuition, schoolDetails]);
+  }, [selectedClassForTuition, schoolDetails, calculateAnnualFeeFromTerms]);
 
-  // Calculate Bus Fee for Add Student Form
   const studentFormEnableBus = studentForm.watch("enableBusTransport");
   const studentFormBusLocation = studentForm.watch("busRouteLocation");
   const studentFormBusCategory = studentForm.watch("busClassCategory");
@@ -193,10 +189,14 @@ export default function AdminUserManagementPage() {
         .filter(Boolean);
       setAvailableBusClassCategories(Array.from(new Set(categories)));
       if (!categories.includes(studentForm.getValues("busClassCategory"))) {
-        studentForm.setValue("busClassCategory", ""); // Reset if current category not valid for new location
+        studentForm.setValue("busClassCategory", ""); 
       }
     } else {
       setAvailableBusClassCategories([]);
+      if (!studentFormEnableBus) { // If bus is disabled, clear location and category
+         studentForm.setValue("busRouteLocation", "");
+      }
+      studentForm.setValue("busClassCategory", "");
     }
   }, [studentFormEnableBus, studentFormBusLocation, schoolDetails, studentForm]);
 
@@ -213,7 +213,7 @@ export default function AdminUserManagementPage() {
     } else {
       setCalculatedBusFee(null);
     }
-  }, [studentFormEnableBus, studentFormBusLocation, studentFormBusCategory, schoolDetails]);
+  }, [studentFormEnableBus, studentFormBusLocation, studentFormBusCategory, schoolDetails, calculateAnnualFeeFromTerms]);
 
 
   useEffect(() => {
@@ -223,14 +223,14 @@ export default function AdminUserManagementPage() {
         email: editingUser.email || "",
         password: "", 
         role: editingUser.role as 'teacher' | 'student' | undefined,
-        classId: editingUser.classId || NONE_CLASS_VALUE, 
+        classId: editingUser.classId || "", 
         admissionId: editingUser.admissionId || "",
         enableBusTransport: !!editingUser.busRouteLocation,
         busRouteLocation: editingUser.busRouteLocation || "",
         busClassCategory: editingUser.busClassCategory || "",
       });
     } else {
-      editForm.reset({ name: "", email: "", password: "", role: undefined, classId: NONE_CLASS_VALUE, admissionId: "", enableBusTransport: false, busRouteLocation: "", busClassCategory:"" });
+      editForm.reset({ name: "", email: "", password: "", role: undefined, classId: "", admissionId: "", enableBusTransport: false, busRouteLocation: "", busClassCategory:"" });
     }
   }, [editingUser, editForm]);
 
@@ -314,7 +314,7 @@ export default function AdminUserManagementPage() {
     Object.values(user).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const totalAnnualFee = (calculatedTuitionFee || 0) + (studentForm.getValues("enableBusTransport") ? (calculatedBusFee || 0) : 0);
+  const totalAnnualFee = (calculatedTuitionFee || 0) + (studentForm.getValues("enableBusTransport") && calculatedBusFee ? (calculatedBusFee || 0) : 0);
 
 
   if (!authUser && !isLoadingData) { 
@@ -385,7 +385,6 @@ export default function AdminUserManagementPage() {
                           </FormItem>
                       )}/>
                    )}
-                   {/* Class Assignment for Edit */}
                     <FormField 
                         control={editForm.control} 
                         name="classId" 
@@ -412,7 +411,6 @@ export default function AdminUserManagementPage() {
                             </FormItem>
                         )}
                     />
-                    {/* Bus Transport for Edit Student */}
                     {editingUserRole === 'student' && (
                         <>
                             <FormField
@@ -448,7 +446,7 @@ export default function AdminUserManagementPage() {
                                             <Select onValueChange={field.onChange} value={field.value} disabled={isSubmittingEdit || availableBusClassCategories.length === 0}>
                                                 <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
                                                 <SelectContent>
-                                                     {schoolDetails?.busFeeStructures?.filter(bfs => bfs.location === editForm.getValues("busRouteLocation")).map(bfs => bfs.classCategory).filter((value, index, self) => self.indexOf(value) === index).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                                     {schoolDetails?.busFeeStructures?.filter(bfs => bfs.location === editForm.getValues("busRouteLocation")).map(bfs => bfs.classCategory).filter((value, index, self) => self.indexOf(value) === index && value).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                             <FormMessage />
@@ -512,7 +510,7 @@ export default function AdminUserManagementPage() {
                                 <FormMessage/>
                             </FormItem>
                         )}/>
-                        <div /> {/* Placeholder for grid alignment */}
+                        <div /> 
 
                         <FormField
                             control={studentForm.control}
@@ -567,9 +565,9 @@ export default function AdminUserManagementPage() {
                                     <span className="font-sans">₹</span>{totalAnnualFee.toLocaleString()}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    (Tuition: <span className="font-sans">₹</span>{(calculatedTuitionFee || 0).toLocaleString()})
+                                    (Annual Tuition: <span className="font-sans">₹</span>{(calculatedTuitionFee || 0).toLocaleString()})
                                     {studentForm.watch("enableBusTransport") && calculatedBusFee !== null && 
-                                     ` + (Bus: ₹${(calculatedBusFee || 0).toLocaleString()})`}
+                                     ` + (Annual Bus Fee: ₹${(calculatedBusFee || 0).toLocaleString()})`}
                                 </p>
                             </div>
                         )}
@@ -682,3 +680,4 @@ export default function AdminUserManagementPage() {
     </div>
   );
 }
+
