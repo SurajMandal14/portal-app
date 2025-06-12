@@ -11,11 +11,11 @@ import { useToast } from "@/hooks/use-toast";
 import { getFeePaymentsByStudent } from "@/app/actions/fees";
 import { getSchoolById } from "@/app/actions/schools";
 import type { FeePayment } from "@/types/fees";
-import type { School } from "@/types/school";
+import type { School, TermFee } from "@/types/school"; // Import TermFee
 import type { AuthUser } from "@/types/attendance"; 
 
 interface FeeSummary {
-  totalFee: number;
+  totalFee: number; // Represents annual tuition fee
   totalPaid: number;
   totalDue: number;
   percentagePaid: number;
@@ -50,11 +50,11 @@ export default function StudentFeesPage() {
     }
   }, [toast]);
 
-  const calculateTotalFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
-    if (!className || !schoolConfig) return 0;
-    const classFeeConfig = schoolConfig.classFees.find(cf => cf.className === className);
-    if (!classFeeConfig) return 0;
-    return (classFeeConfig.tuitionFee || 0) + (classFeeConfig.busFee || 0) + (classFeeConfig.canteenFee || 0);
+  const calculateAnnualTuitionFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
+    if (!className || !schoolConfig || !schoolConfig.tuitionFees) return 0;
+    const classFeeConfig = schoolConfig.tuitionFees.find(cf => cf.className === className);
+    if (!classFeeConfig || !classFeeConfig.terms) return 0;
+    return classFeeConfig.terms.reduce((sum, term) => sum + (term.amount || 0), 0);
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -106,15 +106,15 @@ export default function StudentFeesPage() {
 
   useEffect(() => {
     if (schoolDetails && authUser?.classId) {
-      const totalFee = calculateTotalFee(authUser.classId as string, schoolDetails);
+      const totalAnnualTuitionFee = calculateAnnualTuitionFee(authUser.classId as string, schoolDetails);
       const totalPaid = feePayments.reduce((sum, payment) => sum + payment.amountPaid, 0);
-      const totalDue = totalFee - totalPaid;
-      const percentagePaid = totalFee > 0 ? Math.round((totalPaid / totalFee) * 100) : 0;
-      setFeeSummary({ totalFee, totalPaid, totalDue, percentagePaid });
+      const totalDue = totalAnnualTuitionFee - totalPaid;
+      const percentagePaid = totalAnnualTuitionFee > 0 ? Math.round((totalPaid / totalAnnualTuitionFee) * 100) : 0;
+      setFeeSummary({ totalFee: totalAnnualTuitionFee, totalPaid, totalDue, percentagePaid });
     } else {
       setFeeSummary(null);
     }
-  }, [schoolDetails, feePayments, authUser, calculateTotalFee]);
+  }, [schoolDetails, feePayments, authUser, calculateAnnualTuitionFee]);
 
   if (isLoading) {
     return (
@@ -167,7 +167,7 @@ export default function StudentFeesPage() {
       {feeSummary ? (
         <Card>
           <CardHeader>
-            <CardTitle>Fee Summary</CardTitle>
+            <CardTitle>Fee Summary (Annual Tuition)</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-6 md:grid-cols-3">
             <div className="flex flex-col space-y-1 rounded-lg border p-4 shadow-sm">

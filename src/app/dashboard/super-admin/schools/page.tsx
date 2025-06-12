@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, School as SchoolIconUI, Upload, DollarSign, Bus, Utensils, Loader2, Edit, XCircle, FileText, Image as ImageIcon } from "lucide-react";
+import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2 } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import * as z from "zod";
 import {
   Form,
@@ -19,9 +19,15 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { createSchool, getSchools, updateSchool } from "@/app/actions/schools";
-import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey } from '@/types/school'; 
+import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey, type TermFee } from '@/types/school'; 
 import type { School as SchoolType } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
+
+const DEFAULT_TERMS: TermFee[] = [
+  { term: 'Term 1', amount: 0 },
+  { term: 'Term 2', amount: 0 },
+  { term: 'Term 3', amount: 0 },
+];
 
 export default function SchoolManagementPage() {
   const { toast } = useToast();
@@ -34,15 +40,15 @@ export default function SchoolManagementPage() {
     resolver: zodResolver(schoolFormSchema),
     defaultValues: {
       schoolName: "",
-      classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
+      tuitionFees: [{ className: "", terms: [...DEFAULT_TERMS] }],
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, update } = useFieldArray({
     control: form.control,
-    name: "classFees",
+    name: "tuitionFees",
   });
 
   const fetchSchools = useCallback(async () => {
@@ -68,11 +74,10 @@ export default function SchoolManagementPage() {
     schoolName: school.schoolName,
     schoolLogoUrl: school.schoolLogoUrl || "", 
     reportCardTemplate: school.reportCardTemplate || 'none',
-    classFees: school.classFees.map(cf => ({ 
-      className: cf.className,
-      tuitionFee: cf.tuitionFee,
-      busFee: cf.busFee || 0,
-      canteenFee: cf.canteenFee || 0,
+    tuitionFees: school.tuitionFees.map(tf => ({ 
+      className: tf.className,
+      // Ensure terms are always present, even if empty from DB (though schema should prevent this)
+      terms: tf.terms && tf.terms.length === 3 ? tf.terms.map(t => ({term: t.term, amount: t.amount || 0})) : [...DEFAULT_TERMS],
     })),
   });
 
@@ -86,7 +91,7 @@ export default function SchoolManagementPage() {
     setEditingSchool(null);
     form.reset({
       schoolName: "",
-      classFees: [{ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 }],
+      tuitionFees: [{ className: "", terms: [...DEFAULT_TERMS] }],
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
     });
@@ -119,6 +124,8 @@ export default function SchoolManagementPage() {
       });
     }
   }
+  
+  const termNames: TermFee['term'][] = ['Term 1', 'Term 2', 'Term 3'];
 
   return (
     <div className="space-y-6">
@@ -128,7 +135,7 @@ export default function SchoolManagementPage() {
             <SchoolIconUI className="mr-2 h-6 w-6" /> School Management 
           </CardTitle>
           <CardDescription>
-            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create new schools, configure class-wise fees, logos (via URL), and report card templates."}
+            {editingSchool ? `Editing: ${editingSchool.schoolName}` : "Create schools, configure term-wise tuition fees, logos, and report card templates."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -172,7 +179,6 @@ export default function SchoolManagementPage() {
                     <FormMessage />
                      <p className="text-xs text-muted-foreground pt-1">
                        Enter the full URL of the school's logo. Leave blank to remove logo during update.
-                       Ensure the URL is publicly accessible.
                      </p>
                   </FormItem>
                 )}
@@ -205,78 +211,78 @@ export default function SchoolManagementPage() {
 
 
               <div className="space-y-4">
-                <FormLabel>Class-wise Fees Configuration</FormLabel>
-                {fields.map((field, index) => (
-                  <Card key={field.id} className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                      <FormField
-                        control={form.control}
-                        name={`classFees.${index}.className`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Class Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="e.g., Grade 10A" {...field} disabled={isSubmitting} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
+                <FormLabel className="text-lg font-semibold">Tuition Fees Configuration</FormLabel>
+                {fields.map((field, classIndex) => (
+                  <Card key={field.id} className="p-4 border shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                        <FormField
+                            control={form.control}
+                            name={`tuitionFees.${classIndex}.className`}
+                            render={({ field: classNameField }) => (
+                            <FormItem className="flex-grow mr-2">
+                                <FormLabel>Class Name</FormLabel>
+                                <FormControl>
+                                <Input placeholder="e.g., Grade 10" {...classNameField} disabled={isSubmitting} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        {fields.length > 1 && (
+                            <Button type="button" variant="ghost" size="icon" onClick={() => remove(classIndex)} className="mt-6 text-destructive hover:bg-destructive/10" disabled={isSubmitting}>
+                                <Trash2 className="h-5 w-5" />
+                            </Button>
                         )}
-                      />
-                       <FormField
-                        control={form.control}
-                        name={`classFees.${index}.tuitionFee`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="flex items-center"><span className="font-sans mr-1">₹</span>Tuition Fee</FormLabel>
-                            <FormControl>
-                              <Input type="number" placeholder="e.g., 5000" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`classFees.${index}.busFee`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="flex items-center"><Bus className="h-4 w-4 mr-1 text-muted-foreground"/><span className="font-sans mr-1">₹</span>Bus Fee (Optional)</FormLabel>
-                            <FormControl>
-                              <Input type="number" placeholder="e.g., 500" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting}/>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`classFees.${index}.canteenFee`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="flex items-center"><Utensils className="h-4 w-4 mr-1 text-muted-foreground"/><span className="font-sans mr-1">₹</span>Canteen Fee (Optional)</FormLabel>
-                            <FormControl>
-                              <Input type="number" placeholder="e.g., 300" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} disabled={isSubmitting}/>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
                     </div>
-                     {fields.length > 1 && (
-                        <Button type="button" variant="destructive" size="sm" onClick={() => remove(index)} className="mt-2" disabled={isSubmitting}>
-                          Remove Class
-                        </Button>
-                      )}
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {termNames.map((termName, termIndex) => (
+                        <FormField
+                          key={`${field.id}-term-${termIndex}`}
+                          control={form.control}
+                          name={`tuitionFees.${classIndex}.terms.${termIndex}.amount`}
+                          render={({ field: amountField }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center">
+                                <span className="font-sans mr-1">₹</span>{termName} Fee
+                              </FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  placeholder="Amount" 
+                                  {...amountField}
+                                  value={amountField.value || ""}
+                                  onChange={e => {
+                                    const val = parseFloat(e.target.value);
+                                    amountField.onChange(isNaN(val) ? "" : val); // Store as number or empty string for optional
+                                    // Ensure term name is correctly set (it should be by default if structure is right)
+                                    const currentTerms = form.getValues(`tuitionFees.${classIndex}.terms`);
+                                    if (currentTerms[termIndex] && currentTerms[termIndex].term !== termName) {
+                                       update(classIndex, {
+                                          ...form.getValues(`tuitionFees.${classIndex}`),
+                                          terms: currentTerms.map((t, i) => i === termIndex ? {...t, term: termName} : t)
+                                       });
+                                    }
+                                  }}
+                                  disabled={isSubmitting} 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
                   </Card>
                 ))}
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => append({ className: "", tuitionFee: 0, busFee: 0, canteenFee: 0 })}
+                  onClick={() => append({ className: "", terms: [...DEFAULT_TERMS] })}
                   disabled={isSubmitting}
                 >
-                  <PlusCircle className="mr-2 h-4 w-4" /> Add Class Configuration
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add Class Tuition Configuration
                 </Button>
               </div>
               
@@ -320,10 +326,11 @@ export default function SchoolManagementPage() {
                 />
                 <div className="flex-grow">
                   <h3 className="font-semibold">{school.schoolName}</h3>
-                  <p className="text-sm text-muted-foreground">{school.classFees.length} class configuration(s)</p>
+                  <p className="text-sm text-muted-foreground">
+                    {school.tuitionFees?.length || 0} class tuition configuration(s)
+                  </p>
                   <p className="text-xs text-muted-foreground">Report Card: <span className="font-medium">{REPORT_CARD_TEMPLATES[school.reportCardTemplate || 'none']}</span></p>
                   <p className="text-xs text-muted-foreground">Created: {new Date(school.createdAt).toLocaleDateString()}</p>
-                  <p className="text-xs text-muted-foreground">Last Updated: {new Date(school.updatedAt).toLocaleDateString()}</p>
                 </div>
               </div>
               <Button variant="outline" size="sm" onClick={() => handleEdit(school)} className="w-full sm:w-auto flex-shrink-0">

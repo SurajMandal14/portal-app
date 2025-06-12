@@ -6,7 +6,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import type { AuthUser } from '@/types/user';
 import type { AttendanceRecord } from '@/types/attendance';
 import type { FeePayment } from '@/types/fees';
-import type { School } from '@/types/school';
+import type { School, TermFee } from '@/types/school'; // Import TermFee
 import { getStudentAttendanceRecords } from '@/app/actions/attendance';
 import { getFeePaymentsByStudent } from '@/app/actions/fees';
 import { getSchoolById } from '@/app/actions/schools';
@@ -21,7 +21,7 @@ interface AttendanceSummary {
 }
 
 interface FeeSummary {
-  totalFee: number;
+  totalFee: number; // This will now be annual tuition fee
   totalPaid: number;
   totalDue: number;
   percentagePaid: number;
@@ -84,11 +84,12 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
     }
   }, []);
 
-  const calculateTotalFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
-    if (!className || !schoolConfig) return 0;
-    const classFeeConfig = schoolConfig.classFees.find(cf => cf.className === className);
-    if (!classFeeConfig) return 0;
-    return (classFeeConfig.tuitionFee || 0) + (classFeeConfig.busFee || 0) + (classFeeConfig.canteenFee || 0);
+  const calculateAnnualTuitionFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
+    if (!className || !schoolConfig || !schoolConfig.tuitionFees) return 0;
+    const classFeeConfig = schoolConfig.tuitionFees.find(cf => cf.className === className);
+    if (!classFeeConfig || !classFeeConfig.terms) return 0;
+    // Sum up all term amounts for the annual fee
+    return classFeeConfig.terms.reduce((sum, term) => sum + (term.amount || 0), 0);
   }, []);
 
   const fetchAllStudentData = useCallback(async () => {
@@ -143,11 +144,11 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
         const studentPayments = feePaymentsResult.success && feePaymentsResult.payments ? feePaymentsResult.payments : [];
         
         if (authUser.classId) {
-            const totalFee = calculateTotalFee(authUser.classId as string, currentSchoolDetails);
+            const totalAnnualTuitionFee = calculateAnnualTuitionFee(authUser.classId as string, currentSchoolDetails);
             const totalPaid = studentPayments.reduce((sum, payment) => sum + payment.amountPaid, 0);
-            const totalDue = totalFee - totalPaid;
-            const percentagePaid = totalFee > 0 ? Math.round((totalPaid / totalFee) * 100) : 0;
-            setFeeSummary({ totalFee, totalPaid, totalDue, percentagePaid });
+            const totalDue = totalAnnualTuitionFee - totalPaid;
+            const percentagePaid = totalAnnualTuitionFee > 0 ? Math.round((totalPaid / totalAnnualTuitionFee) * 100) : 0;
+            setFeeSummary({ totalFee: totalAnnualTuitionFee, totalPaid, totalDue, percentagePaid });
         } else {
             setFeeSummary({ totalFee: 0, totalPaid: 0, totalDue: 0, percentagePaid: 0 });
             toast({ variant: "info", title: "Fee Info", description: "You are not assigned to a class, so fee details cannot be calculated." });
@@ -167,17 +168,15 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
     } finally {
       setIsLoading(false);
     }
-  }, [authUser, toast, calculateTotalFee]);
+  }, [authUser, toast, calculateAnnualTuitionFee]);
   
   useEffect(() => {
     if (authUser?._id && authUser?.schoolId) {
       fetchAllStudentData();
     } else if (!authUser && localStorage.getItem('loggedInUser') === null) { 
-      // Only set loading to false if we are sure there's no user and not just waiting for authUser state to update
       setIsLoading(false);
     }
-    // No explicit dependency on fetchAllStudentData to prevent re-runs if its identity changes too often initially
-  }, [authUser]);
+  }, [authUser, fetchAllStudentData]);
 
 
   const refreshData = useCallback(() => {

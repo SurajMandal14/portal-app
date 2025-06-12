@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/types/attendance";
 import type { User as AppUser } from "@/types/user";
-import type { School } from "@/types/school";
+import type { School, TermFee } from "@/types/school"; // Import TermFee
 import type { FeePayment, FeePaymentPayload } from "@/types/fees";
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
@@ -23,7 +23,7 @@ import { recordFeePayment, getFeePaymentsBySchool } from "@/app/actions/fees";
 import { format } from "date-fns";
 
 interface StudentFeeDetailsProcessed extends AppUser {
-  totalFee: number;
+  totalAnnualTuitionFee: number; // Updated to reflect annual tuition
   paidAmount: number;
   dueAmount: number;
   className?: string; 
@@ -67,11 +67,11 @@ export default function FeeManagementPage() {
     }
   }, [toast]);
 
-  const calculateTotalFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
-    if (!className || !schoolConfig) return 0;
-    const classFeeConfig = schoolConfig.classFees.find(cf => cf.className === className);
-    if (!classFeeConfig) return 0;
-    return (classFeeConfig.tuitionFee || 0) + (classFeeConfig.busFee || 0) + (classFeeConfig.canteenFee || 0);
+  const calculateAnnualTuitionFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
+    if (!className || !schoolConfig || !schoolConfig.tuitionFees) return 0;
+    const classFeeConfig = schoolConfig.tuitionFees.find(cf => cf.className === className);
+    if (!classFeeConfig || !classFeeConfig.terms) return 0;
+    return classFeeConfig.terms.reduce((sum, term) => sum + (term.amount || 0), 0);
   }, []);
 
 
@@ -81,7 +81,6 @@ export default function FeeManagementPage() {
       return;
     }
     setIsLoading(true);
-    console.log("FeeManagementPage: fetchSchoolDataAndPayments called for schoolId:", authUser.schoolId);
     try {
       const [schoolResult, usersResult, paymentsResult] = await Promise.all([
         getSchoolById(authUser.schoolId.toString()),
@@ -105,19 +104,16 @@ export default function FeeManagementPage() {
       }
 
       if (paymentsResult.success && paymentsResult.payments) {
-        console.log("FeeManagementPage: fetchSchoolDataAndPayments - Received payments:", JSON.stringify(paymentsResult.payments, null, 2));
         setAllSchoolPayments(paymentsResult.payments);
       } else {
         toast({ variant: "warning", title: "Payment Info", description: paymentsResult.message || "Could not load payment history or none found." });
         setAllSchoolPayments([]);
-        console.warn("FeeManagementPage: Initial payments fetch failed or returned no payments. paymentsResult:", paymentsResult);
       }
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred fetching school data." });
       setSchoolDetails(null);
       setAllStudents([]);
       setAllSchoolPayments([]);
-      console.error("FeeManagementPage: Error in fetchSchoolDataAndPayments:", error);
     } finally {
       setIsLoading(false);
     }
@@ -140,25 +136,24 @@ export default function FeeManagementPage() {
       setStudentFeeList([]);
       return;
     }
-    console.log("FeeManagementPage: processStudentFeeDetails - Recalculating with allSchoolPayments:", JSON.stringify(allSchoolPayments, null, 2));
 
     const processedList = allStudents.map(student => {
-      const totalFee = calculateTotalFee(student.classId as string, schoolDetails);
+      const totalAnnualTuitionFee = calculateAnnualTuitionFee(student.classId as string, schoolDetails);
       const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id.toString());
       const paidAmount = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
-      const dueAmount = totalFee - paidAmount;
+      const dueAmount = totalAnnualTuitionFee - paidAmount;
 
       return {
         ...student,
         className: student.classId as string,
-        totalFee,
+        totalAnnualTuitionFee,
         paidAmount,
         dueAmount,
       };
     }) as StudentFeeDetailsProcessed[];
     setStudentFeeList(processedList);
 
-  }, [allStudents, schoolDetails, allSchoolPayments, calculateTotalFee]);
+  }, [allStudents, schoolDetails, allSchoolPayments, calculateAnnualTuitionFee]);
 
   useEffect(() => {
      processStudentFeeDetails();
@@ -218,18 +213,12 @@ export default function FeeManagementPage() {
   const handleGenerateReceipt = (studentId: string) => {
     const student = studentFeeList.find(s => s._id.toString() === studentId);
     
-    console.log("handleGenerateReceipt: studentId to find:", studentId);
-    console.log("handleGenerateReceipt: found student object from studentFeeList:", student ? JSON.stringify(student, null, 2) : "Not found");
-    console.log("handleGenerateReceipt: current allSchoolPayments state for receipt generation:", JSON.stringify(allSchoolPayments, null, 2));
-
     if (!student || !schoolDetails) {
         toast({variant: "destructive", title: "Error", description: "Student or school details not found."});
         return;
     }
 
     const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === studentId.toString());
-    console.log("handleGenerateReceipt: filtered studentPayments for receipt:", JSON.stringify(studentPayments, null, 2));
-
 
     if (studentPayments.length === 0) {
         toast({title: "No Payments", description: `No payments found for ${student.name || 'this student'} to generate a receipt.`});
@@ -332,7 +321,7 @@ export default function FeeManagementPage() {
             {selectedStudentFullData && (
               <>
                 <p className="text-sm">Class: {selectedStudentFullData.className || 'N/A'}</p>
-                <p className="text-sm">Total Fee: <span className="font-sans">₹</span>{selectedStudentFullData.totalFee.toLocaleString()}</p>
+                <p className="text-sm">Total Annual Tuition Fee: <span className="font-sans">₹</span>{selectedStudentFullData.totalAnnualTuitionFee.toLocaleString()}</p>
                 <p className="text-sm">Amount Paid: <span className="font-sans">₹</span>{selectedStudentFullData.paidAmount.toLocaleString()}</p>
                 <p className="text-sm font-semibold">Amount Due: <span className="font-sans">₹</span>{selectedStudentFullData.dueAmount.toLocaleString()}</p>
                 
@@ -413,8 +402,8 @@ export default function FeeManagementPage() {
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Student Fee Status</CardTitle>
-            <CardDescription>Overview of student fees, payments, and dues.</CardDescription>
+            <CardTitle>Student Fee Status (Annual Tuition)</CardTitle>
+            <CardDescription>Overview of student tuition fees, payments, and dues.</CardDescription>
           </CardHeader>
           <CardContent>
             {studentFeeList.length > 0 ? (
@@ -434,7 +423,7 @@ export default function FeeManagementPage() {
                     <TableRow key={student._id.toString()}>
                       <TableCell>{student.name}</TableCell>
                       <TableCell>{student.className || 'N/A'}</TableCell>
-                      <TableCell className="text-right"><span className="font-sans">₹</span>{student.totalFee.toLocaleString()}</TableCell>
+                      <TableCell className="text-right"><span className="font-sans">₹</span>{student.totalAnnualTuitionFee.toLocaleString()}</TableCell>
                       <TableCell className="text-right"><span className="font-sans">₹</span>{student.paidAmount.toLocaleString()}</TableCell>
                       <TableCell className={`text-right font-semibold ${student.dueAmount > 0 ? "text-destructive" : "text-green-600"}`}>
                         <span className="font-sans">₹</span>{student.dueAmount.toLocaleString()}

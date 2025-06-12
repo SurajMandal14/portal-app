@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { School, SchoolFormData, ReportCardTemplateKey } from '@/types/school';
+import type { School, SchoolFormData, ReportCardTemplateKey, ClassTuitionFeeConfig, TermFee } from '@/types/school';
 import { schoolFormSchema } from '@/types/school';
 import { revalidatePath } from 'next/cache';
 import { ObjectId } from 'mongodb';
@@ -19,30 +19,35 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
   try {
     const validatedFields = schoolFormSchema.safeParse(values);
     if (!validatedFields.success) {
-      const errors = validatedFields.error.errors.map(e => e.message).join(' ');
+      const errors = validatedFields.error.errors.map(e => `${e.path.join('.')} - ${e.message}`).join('; ');
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, classFees, schoolLogoUrl, reportCardTemplate } = validatedFields.data;
+    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<Omit<School, '_id'>>('schools');
 
-    const newSchoolData: Omit<School, '_id'> = {
+    const newSchoolData: Omit<School, '_id' | 'createdAt' | 'updatedAt'> = {
       schoolName,
-      classFees: classFees.map(cf => ({
-        className: cf.className,
-        tuitionFee: cf.tuitionFee,
-        busFee: cf.busFee || 0,
-        canteenFee: cf.canteenFee || 0,
+      tuitionFees: tuitionFees.map(tf => ({
+        className: tf.className,
+        terms: tf.terms.map(termFee => ({
+          term: termFee.term,
+          amount: termFee.amount,
+        })),
       })),
-      schoolLogoUrl: schoolLogoUrl || undefined, // Store as undefined if empty string
+      schoolLogoUrl: schoolLogoUrl || undefined,
       reportCardTemplate: reportCardTemplate || 'none',
-      createdAt: new Date(),
-      updatedAt: new Date(),
     };
 
-    const result = await schoolsCollection.insertOne(newSchoolData);
+    const schoolToInsert = {
+      ...newSchoolData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    const result = await schoolsCollection.insertOne(schoolToInsert);
 
     if (!result.insertedId) {
       return { success: false, message: 'Failed to create school profile.', error: 'Database insertion failed.' };
@@ -53,7 +58,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
     return {
       success: true,
       message: 'School profile created successfully!',
-      school: { ...newSchoolData, _id: result.insertedId.toString() } as School,
+      school: { ...schoolToInsert, _id: result.insertedId.toString() } as School,
     };
 
   } catch (error) {
@@ -78,31 +83,30 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
 
     const validatedFields = schoolFormSchema.safeParse(values);
     if (!validatedFields.success) {
-      const errors = validatedFields.error.errors.map(e => e.message).join(' ');
+      const errors = validatedFields.error.errors.map(e => `${e.path.join('.')} - ${e.message}`).join('; ');
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, classFees, reportCardTemplate, schoolLogoUrl } = validatedFields.data;
+    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<School>('schools');
 
     const updateData: Partial<Omit<School, '_id' | 'createdAt'>> = {
       schoolName,
-      classFees: classFees.map(cf => ({
-        className: cf.className,
-        tuitionFee: cf.tuitionFee,
-        busFee: cf.busFee || 0,
-        canteenFee: cf.canteenFee || 0,
+      tuitionFees: tuitionFees.map(tf => ({
+        className: tf.className,
+        terms: tf.terms.map(termFee => ({
+          term: termFee.term,
+          amount: termFee.amount,
+        })),
       })),
       reportCardTemplate: reportCardTemplate || 'none',
       updatedAt: new Date(),
     };
     
-    // Only update schoolLogoUrl if it's explicitly provided in the form data
-    // An empty string means clear the logo, undefined means no change intended to logo
     if (typeof schoolLogoUrl === 'string') {
-      updateData.schoolLogoUrl = schoolLogoUrl || undefined; // Set to undefined if empty string to remove
+      updateData.schoolLogoUrl = schoolLogoUrl || undefined; 
     }
 
 
@@ -116,15 +120,22 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
     }
     
     revalidatePath('/dashboard/super-admin/schools');
-    revalidatePath(`/dashboard/admin/settings`); // Revalidate admin settings if school name/logo changes
+    revalidatePath(`/dashboard/admin/settings`); 
     
-    const updatedSchool = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
-     if (!updatedSchool) return { success: false, message: 'Failed to retrieve school after update.'};
+    const updatedSchoolDoc = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
+     if (!updatedSchoolDoc) return { success: false, message: 'Failed to retrieve school after update.'};
+     
+     const clientSchool: School = {
+        ...updatedSchoolDoc,
+        _id: updatedSchoolDoc._id.toString(),
+        createdAt: new Date(updatedSchoolDoc.createdAt), // Ensure Date type
+        updatedAt: new Date(updatedSchoolDoc.updatedAt), // Ensure Date type
+     };
 
     return {
       success: true,
       message: 'School profile updated successfully!',
-      school: { ...updatedSchool, _id: updatedSchool._id.toString() }
+      school: clientSchool
     };
 
   } catch (error) {
@@ -145,16 +156,24 @@ export interface GetSchoolsResult {
 export async function getSchools(): Promise<GetSchoolsResult> {
   try {
     const { db } = await connectToDatabase();
-    const schoolsCollection = db.collection<School>('schools');
+    const schoolsCollection = db.collection('schools'); // Use raw collection type
     
-    const schools = await schoolsCollection.find({}).sort({ createdAt: -1 }).toArray();
+    const schoolsDocs = await schoolsCollection.find({}).sort({ createdAt: -1 }).toArray();
     
-    const schoolsWithStrId = schools.map(school => ({
-      ...school,
-      _id: school._id.toString(),
+    const schools: School[] = schoolsDocs.map(doc => ({
+      _id: doc._id.toString(),
+      schoolName: doc.schoolName,
+      schoolLogoUrl: doc.schoolLogoUrl,
+      tuitionFees: (doc.tuitionFees || []).map((tf: any) => ({ // Use any for raw doc field
+        className: tf.className,
+        terms: (tf.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
+      })),
+      reportCardTemplate: doc.reportCardTemplate,
+      createdAt: new Date(doc.createdAt),
+      updatedAt: new Date(doc.updatedAt),
     }));
 
-    return { success: true, schools: schoolsWithStrId };
+    return { success: true, schools };
   } catch (error) {
     console.error('Get schools server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -176,15 +195,28 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
     }
 
     const { db } = await connectToDatabase();
-    const schoolsCollection = db.collection<School>('schools');
+    const schoolsCollection = db.collection('schools'); // Use raw collection type
     
-    const school = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
+    const schoolDoc = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
 
-    if (!school) {
+    if (!schoolDoc) {
       return { success: false, message: 'School not found.' };
     }
     
-    return { success: true, school: { ...school, _id: school._id.toString() } };
+    const school: School = {
+      _id: schoolDoc._id.toString(),
+      schoolName: schoolDoc.schoolName,
+      schoolLogoUrl: schoolDoc.schoolLogoUrl,
+      tuitionFees: (schoolDoc.tuitionFees || []).map((tf: any) => ({
+        className: tf.className,
+        terms: (tf.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
+      })),
+      reportCardTemplate: schoolDoc.reportCardTemplate,
+      createdAt: new Date(schoolDoc.createdAt),
+      updatedAt: new Date(schoolDoc.updatedAt),
+    };
+    
+    return { success: true, school };
   } catch (error) {
     console.error('Get school by ID server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -202,7 +234,7 @@ export interface GetSchoolsCountResult {
 export async function getSchoolsCount(): Promise<GetSchoolsCountResult> {
   try {
     const { db } = await connectToDatabase();
-    const schoolsCollection = db.collection<School>('schools');
+    const schoolsCollection = db.collection('schools');
     const count = await schoolsCollection.countDocuments();
     return { success: true, count };
   } catch (error) {

@@ -9,7 +9,7 @@ import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info, Image as Imag
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user";
-import type { School } from "@/types/school";
+import type { School, TermFee } from "@/types/school";
 import { getSchoolById } from "@/app/actions/schools";
 
 export default function AdminSchoolSettingsPage() {
@@ -61,6 +61,10 @@ export default function AdminSchoolSettingsPage() {
       setIsLoading(false); 
     }
   }, [authUser, fetchSchoolDetails]);
+
+  const calculateAnnualTuition = (terms: TermFee[]): number => {
+    return terms.reduce((sum, term) => sum + (term.amount || 0), 0);
+  };
 
   if (isLoading) {
     return (
@@ -143,30 +147,30 @@ export default function AdminSchoolSettingsPage() {
       
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary" /> Class Fee Structure</CardTitle>
-          <CardDescription>Configured fees for different classes (Managed by Super Admin).</CardDescription>
+          <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary" /> Class Tuition Fee Structure</CardTitle>
+          <CardDescription>Configured tuition fees for different classes (Managed by Super Admin).</CardDescription>
         </CardHeader>
         <CardContent>
-          {schoolDetails.classFees && schoolDetails.classFees.length > 0 ? (
+          {schoolDetails.tuitionFees && schoolDetails.tuitionFees.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Class Name</TableHead>
-                  <TableHead className="text-right">Tuition Fee (<span className="font-sans">₹</span>)</TableHead>
-                  <TableHead className="text-right">Bus Fee (<span className="font-sans">₹</span>)</TableHead>
-                  <TableHead className="text-right">Canteen Fee (<span className="font-sans">₹</span>)</TableHead>
-                  <TableHead className="text-right">Total Fee (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Term 1 (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Term 2 (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Term 3 (<span className="font-sans">₹</span>)</TableHead>
+                  <TableHead className="text-right">Annual Total (<span className="font-sans">₹</span>)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {schoolDetails.classFees.map((cf) => (
+                {schoolDetails.tuitionFees.map((cf) => (
                   <TableRow key={cf.className}>
                     <TableCell className="font-medium">{cf.className}</TableCell>
-                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.tuitionFee || 0).toLocaleString()}</TableCell>
-                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.busFee || 0).toLocaleString()}</TableCell>
-                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.canteenFee || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.terms.find(t => t.term === 'Term 1')?.amount || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.terms.find(t => t.term === 'Term 2')?.amount || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right"><span className="font-sans">₹</span>{(cf.terms.find(t => t.term === 'Term 3')?.amount || 0).toLocaleString()}</TableCell>
                     <TableCell className="text-right font-semibold">
-                        <span className="font-sans">₹</span>{((cf.tuitionFee || 0) + (cf.busFee || 0) + (cf.canteenFee || 0)).toLocaleString()}
+                        <span className="font-sans">₹</span>{calculateAnnualTuition(cf.terms).toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -175,7 +179,7 @@ export default function AdminSchoolSettingsPage() {
           ) : (
             <div className="text-center py-6">
                 <Info className="mx-auto h-10 w-10 text-muted-foreground" />
-                <p className="mt-3 text-muted-foreground">No class fee structures have been configured for this school.</p>
+                <p className="mt-3 text-muted-foreground">No class tuition fee structures have been configured for this school.</p>
                 <p className="text-xs text-muted-foreground">Please contact a Super Administrator to set up class fees.</p>
             </div>
           )}

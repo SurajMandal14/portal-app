@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getDailyAttendanceForSchool } from "@/app/actions/attendance";
 import type { AttendanceRecord, AuthUser } from "@/types/attendance";
 import type { User as AppUser } from "@/types/user";
-import type { School } from "@/types/school";
+import type { School, TermFee } from "@/types/school"; // Import TermFee
 import type { FeePayment } from "@/types/fees";
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
@@ -44,14 +44,14 @@ interface OverallAttendanceSummary {
 
 interface ClassFeeSummary {
   className: string;
-  totalExpected: number;
+  totalExpected: number; // Annual tuition
   totalCollected: number;
   totalDue: number;
   collectionPercentage: number;
 }
 
 interface OverallFeeSummary {
-  grandTotalExpected: number;
+  grandTotalExpected: number; // Annual tuition
   grandTotalCollected: number;
   grandTotalDue: number;
   overallCollectionPercentage: number;
@@ -101,11 +101,11 @@ export default function AdminReportsPage() {
     }
   }, [toast]);
 
-  const calculateTotalFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
-    if (!className || !schoolConfig) return 0;
-    const classFeeConfig = schoolConfig.classFees.find(cf => cf.className === className);
-    if (!classFeeConfig) return 0;
-    return (classFeeConfig.tuitionFee || 0) + (classFeeConfig.busFee || 0) + (classFeeConfig.canteenFee || 0);
+  const calculateAnnualTuitionFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
+    if (!className || !schoolConfig || !schoolConfig.tuitionFees) return 0;
+    const classFeeConfig = schoolConfig.tuitionFees.find(cf => cf.className === className);
+    if (!classFeeConfig || !classFeeConfig.terms) return 0;
+    return classFeeConfig.terms.reduce((sum, term) => sum + (term.amount || 0), 0);
   }, []);
 
   const processAttendanceData = useCallback(() => {
@@ -231,18 +231,18 @@ export default function AdminReportsPage() {
 
     allSchoolStudents.forEach(student => {
       if (student.classId) {
-        const studentTotalFee = calculateTotalFee(student.classId, schoolDetails);
+        const studentTotalAnnualTuitionFee = calculateAnnualTuitionFee(student.classId, schoolDetails);
         const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id.toString());
         const studentTotalPaid = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
 
-        grandTotalExpected += studentTotalFee;
+        grandTotalExpected += studentTotalAnnualTuitionFee;
         grandTotalCollected += studentTotalPaid;
 
         if (!classFeeMap.has(student.classId)) {
           classFeeMap.set(student.classId, { totalExpected: 0, totalCollected: 0, studentCount: 0 });
         }
         const classData = classFeeMap.get(student.classId)!;
-        classData.totalExpected += studentTotalFee;
+        classData.totalExpected += studentTotalAnnualTuitionFee;
         classData.totalCollected += studentTotalPaid;
         classData.studentCount++;
       }
@@ -272,7 +272,7 @@ export default function AdminReportsPage() {
     });
     setFeeClassSummaries(feeSummaries.sort((a,b) => a.className.localeCompare(b.className)));
 
-  }, [allSchoolStudents, schoolDetails, allSchoolPayments, calculateTotalFee]);
+  }, [allSchoolStudents, schoolDetails, allSchoolPayments, calculateAnnualTuitionFee]);
 
 
   useEffect(() => {
@@ -635,7 +635,7 @@ export default function AdminReportsPage() {
       <Card>
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-                 <CardTitle>Fee Collection Summary Report (All Time)</CardTitle>
+                 <CardTitle>Fee Collection Summary Report (Annual Tuition)</CardTitle>
                  <Button 
                     variant="outline" 
                     onClick={handleDownloadFeePdf} 
@@ -656,7 +656,7 @@ export default function AdminReportsPage() {
                 </div>
              ) : !authUser ? (
                 <p className="text-center text-muted-foreground py-4">Please log in as a school admin to view reports.</p>
-             ) : feeClassSummaries.length > 0 && feeOverallSummary ? (
+             ) : feeClassSummaries.length > 0 && feeOverallSummary && schoolDetails ? (
                 <div id="feeReportContent" className="p-4 bg-card rounded-md">
                 <Card className="mb-6 bg-secondary/30">
                     <CardHeader>
