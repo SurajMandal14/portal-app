@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChartBig, CalendarDays, Loader2, Info, Download, DollarSign, FileText } from "lucide-react";
+import { BarChartBig, CalendarDays, Loader2, Info, Download, DollarSign, FileText, BadgePercent } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -15,15 +15,31 @@ import { useToast } from "@/hooks/use-toast";
 import { getDailyAttendanceForSchool } from "@/app/actions/attendance";
 import type { AttendanceRecord, AuthUser } from "@/types/attendance";
 import type { User as AppUser } from "@/types/user";
-import type { School, TermFee } from "@/types/school"; // Import TermFee
+import type { School, TermFee } from "@/types/school"; 
 import type { FeePayment } from "@/types/fees";
+import type { FeeConcession } from "@/types/concessions"; // Import FeeConcession
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
 import { getFeePaymentsBySchool } from "@/app/actions/fees";
+import { getFeeConcessionsForSchool } from "@/app/actions/concessions"; // Import action for concessions
 import Link from "next/link";
 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+
+// Helper to determine current academic year string (e.g., "2023-2024")
+const getCurrentAcademicYear = (): string => {
+  const today = new Date();
+  const currentMonth = today.getMonth(); // 0 (Jan) to 11 (Dec)
+  const currentYear = today.getFullYear();
+  // Assuming academic year starts in June (month 5)
+  if (currentMonth >= 5) { 
+    return `${currentYear}-${currentYear + 1}`;
+  } else { 
+    return `${currentYear - 1}-${currentYear}`;
+  }
+};
+
 
 interface ClassAttendanceSummary {
   className: string;
@@ -46,6 +62,7 @@ interface ClassFeeSummary {
   className: string;
   totalExpected: number; // Annual tuition
   totalCollected: number;
+  totalConcessions: number; // Added
   totalDue: number;
   collectionPercentage: number;
 }
@@ -53,6 +70,7 @@ interface ClassFeeSummary {
 interface OverallFeeSummary {
   grandTotalExpected: number; // Annual tuition
   grandTotalCollected: number;
+  grandTotalConcessions: number; // Added
   grandTotalDue: number;
   overallCollectionPercentage: number;
 }
@@ -67,6 +85,7 @@ export default function AdminReportsPage() {
   const [allSchoolStudents, setAllSchoolStudents] = useState<AppUser[]>([]);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [allSchoolPayments, setAllSchoolPayments] = useState<FeePayment[]>([]);
+  const [allSchoolConcessions, setAllSchoolConcessions] = useState<FeeConcession[]>([]); // State for concessions
   const [feeClassSummaries, setFeeClassSummaries] = useState<ClassFeeSummary[]>([]);
   const [feeOverallSummary, setFeeOverallSummary] = useState<OverallFeeSummary | null>(null);
 
@@ -76,6 +95,7 @@ export default function AdminReportsPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [lastFetchedSchoolId, setLastFetchedSchoolId] = useState<string | null>(null);
+  const currentAcademicYear = getCurrentAcademicYear();
 
 
   useEffect(() => {
@@ -226,53 +246,66 @@ export default function AdminReportsPage() {
 
     let grandTotalExpected = 0;
     let grandTotalCollected = 0;
+    let grandTotalConcessions = 0; // For overall summary
 
-    const classFeeMap = new Map<string, { totalExpected: number, totalCollected: number, studentCount: number }>();
+    const classFeeMap = new Map<string, { totalExpected: number, totalCollected: number, totalConcessions: number, studentCount: number }>();
 
     allSchoolStudents.forEach(student => {
       if (student.classId) {
         const studentTotalAnnualTuitionFee = calculateAnnualTuitionFee(student.classId, schoolDetails);
         const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id.toString());
         const studentTotalPaid = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
+        
+        const studentConcessionsForYear = allSchoolConcessions.filter(
+            c => c.studentId.toString() === student._id.toString() && c.academicYear === currentAcademicYear
+        );
+        const studentTotalConcessions = studentConcessionsForYear.reduce((sum, c) => sum + c.amount, 0);
 
         grandTotalExpected += studentTotalAnnualTuitionFee;
         grandTotalCollected += studentTotalPaid;
+        grandTotalConcessions += studentTotalConcessions;
 
         if (!classFeeMap.has(student.classId)) {
-          classFeeMap.set(student.classId, { totalExpected: 0, totalCollected: 0, studentCount: 0 });
+          classFeeMap.set(student.classId, { totalExpected: 0, totalCollected: 0, totalConcessions: 0, studentCount: 0 });
         }
         const classData = classFeeMap.get(student.classId)!;
         classData.totalExpected += studentTotalAnnualTuitionFee;
         classData.totalCollected += studentTotalPaid;
+        classData.totalConcessions += studentTotalConcessions;
         classData.studentCount++;
       }
     });
 
     const feeSummaries: ClassFeeSummary[] = [];
     for (const [className, data] of classFeeMap.entries()) {
-      const totalDue = data.totalExpected - data.totalCollected;
-      const collectionPercentage = data.totalExpected > 0 ? Math.round((data.totalCollected / data.totalExpected) * 100) : 0;
+      const netExpectedForClass = data.totalExpected - data.totalConcessions;
+      const totalDue = netExpectedForClass - data.totalCollected;
+      const collectionPercentage = netExpectedForClass > 0 ? Math.round((data.totalCollected / netExpectedForClass) * 100) : (data.totalCollected > 0 ? 100 : 0);
+      
       feeSummaries.push({
         className,
-        totalExpected: data.totalExpected,
+        totalExpected: data.totalExpected, // Gross expected before concessions
         totalCollected: data.totalCollected,
+        totalConcessions: data.totalConcessions, // Class total concessions
         totalDue,
         collectionPercentage,
       });
     }
 
-    const grandTotalDue = grandTotalExpected - grandTotalCollected;
-    const overallCollectionPercentage = grandTotalExpected > 0 ? Math.round((grandTotalCollected / grandTotalExpected) * 100) : 0;
+    const grandNetExpected = grandTotalExpected - grandTotalConcessions;
+    const grandTotalDue = grandNetExpected - grandTotalCollected;
+    const overallCollectionPercentage = grandNetExpected > 0 ? Math.round((grandTotalCollected / grandNetExpected) * 100) : (grandTotalCollected > 0 ? 100 : 0);
 
     setFeeOverallSummary({
       grandTotalExpected,
       grandTotalCollected,
+      grandTotalConcessions,
       grandTotalDue,
       overallCollectionPercentage,
     });
     setFeeClassSummaries(feeSummaries.sort((a,b) => a.className.localeCompare(b.className)));
 
-  }, [allSchoolStudents, schoolDetails, allSchoolPayments, calculateAnnualTuitionFee]);
+  }, [allSchoolStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, calculateAnnualTuitionFee, currentAcademicYear]);
 
 
   useEffect(() => {
@@ -281,7 +314,7 @@ export default function AdminReportsPage() {
 
   useEffect(() => {
     processFeeData();
-  }, [allSchoolStudents, schoolDetails, allSchoolPayments, processFeeData]);
+  }, [allSchoolStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, processFeeData]);
 
 
   const loadReportData = useCallback(async (isManualRefresh = false) => {
@@ -295,10 +328,11 @@ export default function AdminReportsPage() {
 
     if (isManualRefresh || lastFetchedSchoolId !== authUser.schoolId.toString()) {
       try {
-        const [studentsResult, schoolRes, paymentsResult] = await Promise.all([
+        const [studentsResult, schoolRes, paymentsResult, concessionsResult] = await Promise.all([
           getSchoolUsers(authUser.schoolId.toString()),
           getSchoolById(authUser.schoolId.toString()),
-          getFeePaymentsBySchool(authUser.schoolId.toString())
+          getFeePaymentsBySchool(authUser.schoolId.toString()),
+          getFeeConcessionsForSchool(authUser.schoolId.toString(), currentAcademicYear) // Fetch concessions for current year
         ]);
 
         if (studentsResult.success && studentsResult.users) {
@@ -321,6 +355,14 @@ export default function AdminReportsPage() {
           toast({ variant: "warning", title: "Fee Payment Data", description: paymentsResult.message || "Could not fetch fee payments." });
           setAllSchoolPayments([]);
         }
+        
+        if (concessionsResult.success && concessionsResult.concessions) {
+            setAllSchoolConcessions(concessionsResult.concessions);
+        } else {
+            toast({ variant: "warning", title: "Concession Data", description: concessionsResult.message || "Could not fetch concession data." });
+            setAllSchoolConcessions([]);
+        }
+
         setLastFetchedSchoolId(authUser.schoolId.toString());
         schoolDataFetchedThisRun = true;
       } catch (error) {
@@ -351,7 +393,7 @@ export default function AdminReportsPage() {
     }
     
     setIsLoading(false);
-  }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length]);
+  }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length, currentAcademicYear]);
 
   useEffect(() => {
     if (authUser && authUser.schoolId) {
@@ -457,7 +499,7 @@ export default function AdminReportsPage() {
       const y = (pdfHeight - newImgHeight) / 2;
       
       pdf.addImage(imgData, 'PNG', x, y, newImgWidth, newImgHeight);
-      pdf.save(`Fee_Collection_Report_${schoolDetails.schoolName.replace(/\s+/g, '_')}.pdf`);
+      pdf.save(`Fee_Collection_Report_${schoolDetails.schoolName.replace(/\s+/g, '_')}_${currentAcademicYear}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast({ variant: "destructive", title: "PDF Error", description: "Could not generate fee report PDF. See console for details."});
@@ -474,7 +516,7 @@ export default function AdminReportsPage() {
           <CardTitle className="text-2xl font-headline flex items-center">
             <BarChartBig className="mr-2 h-6 w-6" /> School Reports
           </CardTitle>
-          <CardDescription>View summaries and reports for school operations. Access report card generation tools.</CardDescription>
+          <CardDescription>View summaries and reports for school operations. Access report card generation tools. Fee reports are for academic year: {currentAcademicYear}.</CardDescription>
         </CardHeader>
       </Card>
 
@@ -635,7 +677,7 @@ export default function AdminReportsPage() {
       <Card>
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-                 <CardTitle>Fee Collection Summary Report (Annual Tuition)</CardTitle>
+                 <CardTitle>Fee Collection Summary Report (Annual Tuition - {currentAcademicYear})</CardTitle>
                  <Button 
                     variant="outline" 
                     onClick={handleDownloadFeePdf} 
@@ -660,23 +702,27 @@ export default function AdminReportsPage() {
                 <div id="feeReportContent" className="p-4 bg-card rounded-md">
                 <Card className="mb-6 bg-secondary/30">
                     <CardHeader>
-                        <CardTitle className="text-lg">Overall School Fee Summary - {schoolDetails?.schoolName || 'School'}</CardTitle>
+                        <CardTitle className="text-lg">Overall School Fee Summary - {schoolDetails?.schoolName || 'School'} ({currentAcademicYear})</CardTitle>
                     </CardHeader>
-                    <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                         <div>
-                            <p className="text-sm text-muted-foreground">Total Expected</p>
+                            <p className="text-sm text-muted-foreground">Total Expected (Gross)</p>
                             <p className="text-2xl font-bold"><span className="font-sans">₹</span>{feeOverallSummary.grandTotalExpected.toLocaleString()}</p>
+                        </div>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Total Concessions</p>
+                            <p className="text-2xl font-bold text-blue-600"><span className="font-sans">₹</span>{feeOverallSummary.grandTotalConcessions.toLocaleString()}</p>
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Total Collected</p>
                             <p className="text-2xl font-bold text-green-600"><span className="font-sans">₹</span>{feeOverallSummary.grandTotalCollected.toLocaleString()}</p>
                         </div>
                         <div>
-                            <p className="text-sm text-muted-foreground">Total Due</p>
+                            <p className="text-sm text-muted-foreground">Total Due (Net)</p>
                             <p className="text-2xl font-bold text-red-600"><span className="font-sans">₹</span>{feeOverallSummary.grandTotalDue.toLocaleString()}</p>
                         </div>
                         <div>
-                            <p className="text-sm text-muted-foreground">Collection %</p>
+                            <p className="text-sm text-muted-foreground">Collection % (of Net Payable)</p>
                             <p className="text-2xl font-bold text-blue-600">{feeOverallSummary.overallCollectionPercentage}%</p>
                             <Progress value={feeOverallSummary.overallCollectionPercentage} className="h-2 mt-1" />
                         </div>
@@ -687,9 +733,10 @@ export default function AdminReportsPage() {
                 <TableHeader>
                     <TableRow>
                     <TableHead>Class Name</TableHead>
-                    <TableHead className="text-right">Expected Fees (<span className="font-sans">₹</span>)</TableHead>
-                    <TableHead className="text-right">Collected Fees (<span className="font-sans">₹</span>)</TableHead>
-                    <TableHead className="text-right">Dues (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Expected (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Concessions (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Collected (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Net Due (<span className="font-sans">₹</span>)</TableHead>
                     <TableHead className="text-center">Collection %</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -698,6 +745,7 @@ export default function AdminReportsPage() {
                     <TableRow key={summary.className}>
                         <TableCell className="font-medium">{summary.className}</TableCell>
                         <TableCell className="text-right"><span className="font-sans">₹</span>{summary.totalExpected.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-blue-600"><span className="font-sans">₹</span>{summary.totalConcessions.toLocaleString()}</TableCell>
                         <TableCell className="text-right text-green-600 font-medium"><span className="font-sans">₹</span>{summary.totalCollected.toLocaleString()}</TableCell>
                         <TableCell className="text-right text-red-600 font-medium"><span className="font-sans">₹</span>{summary.totalDue.toLocaleString()}</TableCell>
                         <TableCell className="text-center">
@@ -720,7 +768,7 @@ export default function AdminReportsPage() {
                     <p className="text-muted-foreground">
                         {(!allSchoolStudents.length) ? "No students found for this school. Please add students." : 
                          (!schoolDetails) ? "School fee structure not loaded. Cannot calculate fee summaries." : 
-                         (!allSchoolPayments.length && schoolDetails && allSchoolStudents.length > 0) ? "No fee payments have been recorded for this school yet." :
+                         (!allSchoolPayments.length && !allSchoolConcessions.length && schoolDetails && allSchoolStudents.length > 0) ? "No fee payments or concessions have been recorded for this school year yet." :
                          "Fee data is currently unavailable."
                         }
                     </p>
@@ -731,3 +779,4 @@ export default function AdminReportsPage() {
     </div>
   );
 }
+

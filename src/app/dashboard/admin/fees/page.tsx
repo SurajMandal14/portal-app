@@ -10,21 +10,37 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DollarSign, Printer, Loader2, Info, CalendarDays } from "lucide-react";
+import { DollarSign, Printer, Loader2, Info, CalendarDays, BadgePercent } from "lucide-react"; // Added BadgePercent
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/types/attendance";
 import type { User as AppUser } from "@/types/user";
-import type { School, TermFee } from "@/types/school"; // Import TermFee
+import type { School, TermFee } from "@/types/school";
 import type { FeePayment, FeePaymentPayload } from "@/types/fees";
+import type { FeeConcession } from "@/types/concessions"; // Import FeeConcession
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
 import { recordFeePayment, getFeePaymentsBySchool } from "@/app/actions/fees";
+import { getFeeConcessionsForSchool } from "@/app/actions/concessions"; // Import action for concessions
 import { format } from "date-fns";
 
+// Helper to determine current academic year string (e.g., "2023-2024")
+const getCurrentAcademicYear = (): string => {
+  const today = new Date();
+  const currentMonth = today.getMonth(); // 0 (Jan) to 11 (Dec)
+  const currentYear = today.getFullYear();
+  // Assuming academic year starts in June (month 5)
+  if (currentMonth >= 5) { 
+    return `${currentYear}-${currentYear + 1}`;
+  } else { 
+    return `${currentYear - 1}-${currentYear}`;
+  }
+};
+
 interface StudentFeeDetailsProcessed extends AppUser {
-  totalAnnualTuitionFee: number; // Updated to reflect annual tuition
+  totalAnnualTuitionFee: number;
   paidAmount: number;
+  totalConcessions: number; // Added
   dueAmount: number;
   className?: string; 
 }
@@ -34,6 +50,7 @@ export default function FeeManagementPage() {
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [allStudents, setAllStudents] = useState<AppUser[]>([]);
   const [allSchoolPayments, setAllSchoolPayments] = useState<FeePayment[]>([]);
+  const [allSchoolConcessions, setAllSchoolConcessions] = useState<FeeConcession[]>([]); // State for concessions
   
   const [studentFeeList, setStudentFeeList] = useState<StudentFeeDetailsProcessed[]>([]);
   
@@ -46,6 +63,7 @@ export default function FeeManagementPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const { toast } = useToast();
+  const currentAcademicYear = getCurrentAcademicYear(); // Get current academic year
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -75,17 +93,18 @@ export default function FeeManagementPage() {
   }, []);
 
 
-  const fetchSchoolDataAndPayments = useCallback(async () => {
+  const fetchSchoolDataAndRelated = useCallback(async () => {
     if (!authUser || !authUser.schoolId) {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      const [schoolResult, usersResult, paymentsResult] = await Promise.all([
+      const [schoolResult, usersResult, paymentsResult, concessionsResult] = await Promise.all([
         getSchoolById(authUser.schoolId.toString()),
         getSchoolUsers(authUser.schoolId.toString()),
-        getFeePaymentsBySchool(authUser.schoolId.toString())
+        getFeePaymentsBySchool(authUser.schoolId.toString()),
+        getFeeConcessionsForSchool(authUser.schoolId.toString(), currentAcademicYear) // Fetch concessions
       ]);
 
       if (schoolResult.success && schoolResult.school) {
@@ -109,26 +128,36 @@ export default function FeeManagementPage() {
         toast({ variant: "warning", title: "Payment Info", description: paymentsResult.message || "Could not load payment history or none found." });
         setAllSchoolPayments([]);
       }
+
+      if (concessionsResult.success && concessionsResult.concessions) {
+        setAllSchoolConcessions(concessionsResult.concessions);
+      } else {
+        toast({ variant: "warning", title: "Concession Info", description: concessionsResult.message || "Could not load concession data or none found." });
+        setAllSchoolConcessions([]);
+      }
+
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred fetching school data." });
       setSchoolDetails(null);
       setAllStudents([]);
       setAllSchoolPayments([]);
+      setAllSchoolConcessions([]);
     } finally {
       setIsLoading(false);
     }
-  }, [authUser, toast]);
+  }, [authUser, toast, currentAcademicYear]);
   
   useEffect(() => {
     if (authUser && authUser.schoolId) {
-      fetchSchoolDataAndPayments();
+      fetchSchoolDataAndRelated();
     } else if (!authUser) {
       setIsLoading(false);
       setSchoolDetails(null);
       setAllStudents([]);
       setAllSchoolPayments([]);
+      setAllSchoolConcessions([]);
     }
-  }, [authUser, fetchSchoolDataAndPayments]);
+  }, [authUser, fetchSchoolDataAndRelated]);
 
 
   const processStudentFeeDetails = useCallback(() => {
@@ -141,23 +170,30 @@ export default function FeeManagementPage() {
       const totalAnnualTuitionFee = calculateAnnualTuitionFee(student.classId as string, schoolDetails);
       const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id.toString());
       const paidAmount = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
-      const dueAmount = totalAnnualTuitionFee - paidAmount;
+      
+      const studentConcessions = allSchoolConcessions.filter(
+        c => c.studentId.toString() === student._id.toString() && c.academicYear === currentAcademicYear
+      );
+      const totalConcessions = studentConcessions.reduce((sum, c) => sum + c.amount, 0);
+      
+      const dueAmount = totalAnnualTuitionFee - paidAmount - totalConcessions;
 
       return {
         ...student,
         className: student.classId as string,
         totalAnnualTuitionFee,
         paidAmount,
+        totalConcessions, // Add total concessions
         dueAmount,
       };
     }) as StudentFeeDetailsProcessed[];
     setStudentFeeList(processedList);
 
-  }, [allStudents, schoolDetails, allSchoolPayments, calculateAnnualTuitionFee]);
+  }, [allStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, calculateAnnualTuitionFee, currentAcademicYear]);
 
   useEffect(() => {
      processStudentFeeDetails();
-  }, [allStudents, schoolDetails, allSchoolPayments, processStudentFeeDetails]);
+  }, [allStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, processStudentFeeDetails]);
 
 
   const selectedStudentFullData = selectedStudentId ? studentFeeList.find(s => s._id.toString() === selectedStudentId) : null;
@@ -201,7 +237,7 @@ export default function FeeManagementPage() {
     if (result.success) {
       toast({ title: "Payment Recorded", description: result.message });
       if (authUser?.schoolId) {
-        await fetchSchoolDataAndPayments(); 
+        await fetchSchoolDataAndRelated(); 
       }
       setSelectedStudentId(null); 
     } else {
@@ -277,7 +313,7 @@ export default function FeeManagementPage() {
         <CardContent>
           <p className="text-destructive">School details could not be loaded. Fee management requires school fee structures to be configured.</p>
           <p className="mt-2 text-sm text-muted-foreground">Please ensure the school profile is correctly set up by a Super Admin, including class fee configurations, or try refreshing.</p>
-          <Button onClick={fetchSchoolDataAndPayments} className="mt-4" variant="outline" disabled={isLoading}>Refresh Data</Button>
+          <Button onClick={fetchSchoolDataAndRelated} className="mt-4" variant="outline" disabled={isLoading}>Refresh Data</Button>
         </CardContent>
       </Card>
     );
@@ -289,7 +325,7 @@ export default function FeeManagementPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline flex items-center"><DollarSign className="mr-2 h-6 w-6" /> Fee Management</CardTitle>
-          <CardDescription>Manage student fees for {schoolDetails?.schoolName || "your school"}, record payments, and generate receipts.</CardDescription>
+          <CardDescription>Manage student fees for {schoolDetails?.schoolName || "your school"}, record payments, and generate receipts. Fees shown are for academic year: {currentAcademicYear}.</CardDescription>
         </CardHeader>
       </Card>
 
@@ -323,6 +359,7 @@ export default function FeeManagementPage() {
                 <p className="text-sm">Class: {selectedStudentFullData.className || 'N/A'}</p>
                 <p className="text-sm">Total Annual Tuition Fee: <span className="font-sans">₹</span>{selectedStudentFullData.totalAnnualTuitionFee.toLocaleString()}</p>
                 <p className="text-sm">Amount Paid: <span className="font-sans">₹</span>{selectedStudentFullData.paidAmount.toLocaleString()}</p>
+                <p className="text-sm text-blue-600">Total Concessions ({currentAcademicYear}): <span className="font-sans">₹</span>{selectedStudentFullData.totalConcessions.toLocaleString()}</p>
                 <p className="text-sm font-semibold">Amount Due: <span className="font-sans">₹</span>{selectedStudentFullData.dueAmount.toLocaleString()}</p>
                 
                 <div className="pt-2 space-y-3">
@@ -402,8 +439,8 @@ export default function FeeManagementPage() {
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Student Fee Status (Annual Tuition)</CardTitle>
-            <CardDescription>Overview of student tuition fees, payments, and dues.</CardDescription>
+            <CardTitle>Student Fee Status (Annual Tuition - {currentAcademicYear})</CardTitle>
+            <CardDescription>Overview of student tuition fees, payments, concessions, and dues.</CardDescription>
           </CardHeader>
           <CardContent>
             {studentFeeList.length > 0 ? (
@@ -414,6 +451,7 @@ export default function FeeManagementPage() {
                     <TableHead>Class</TableHead>
                     <TableHead className="text-right">Total Fee (<span className="font-sans">₹</span>)</TableHead>
                     <TableHead className="text-right">Paid (<span className="font-sans">₹</span>)</TableHead>
+                    <TableHead className="text-right">Concessions (<span className="font-sans">₹</span>)</TableHead>
                     <TableHead className="text-right">Due (<span className="font-sans">₹</span>)</TableHead>
                     <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
@@ -425,6 +463,7 @@ export default function FeeManagementPage() {
                       <TableCell>{student.className || 'N/A'}</TableCell>
                       <TableCell className="text-right"><span className="font-sans">₹</span>{student.totalAnnualTuitionFee.toLocaleString()}</TableCell>
                       <TableCell className="text-right"><span className="font-sans">₹</span>{student.paidAmount.toLocaleString()}</TableCell>
+                      <TableCell className="text-right text-blue-600"><span className="font-sans">₹</span>{student.totalConcessions.toLocaleString()}</TableCell>
                       <TableCell className={`text-right font-semibold ${student.dueAmount > 0 ? "text-destructive" : "text-green-600"}`}>
                         <span className="font-sans">₹</span>{student.dueAmount.toLocaleString()}
                       </TableCell>
@@ -454,3 +493,4 @@ export default function FeeManagementPage() {
     </div>
   );
 }
+
