@@ -69,7 +69,9 @@ export default function AdminUserManagementPage() {
   const [activeTab, setActiveTab] = useState("addStudent");
 
   const [calculatedTuitionFee, setCalculatedTuitionFee] = useState<number | null>(null);
+  const [noTuitionFeeStructureFound, setNoTuitionFeeStructureFound] = useState(false);
   const [calculatedBusFee, setCalculatedBusFee] = useState<number | null>(null);
+  const [noBusFeeStructureFound, setNoBusFeeStructureFound] = useState(false);
   const [selectedBusLocations, setSelectedBusLocations] = useState<string[]>([]);
   const [availableBusClassCategories, setAvailableBusClassCategories] = useState<string[]>([]);
 
@@ -165,12 +167,14 @@ export default function AdminUserManagementPage() {
   
   const selectedClassForTuition = studentForm.watch("classId");
   useEffect(() => {
+    setNoTuitionFeeStructureFound(false);
     if (selectedClassForTuition && selectedClassForTuition !== NONE_CLASS_VALUE && schoolDetails?.tuitionFees) {
       const feeConfig = schoolDetails.tuitionFees.find(tf => tf.className === selectedClassForTuition);
       if (feeConfig?.terms) {
         setCalculatedTuitionFee(calculateAnnualFeeFromTerms(feeConfig.terms));
       } else {
-        setCalculatedTuitionFee(null);
+        setCalculatedTuitionFee(0); // Default to 0 if no config found
+        setNoTuitionFeeStructureFound(true); // Set flag
       }
     } else {
       setCalculatedTuitionFee(null);
@@ -193,7 +197,7 @@ export default function AdminUserManagementPage() {
       }
     } else {
       setAvailableBusClassCategories([]);
-      if (!studentFormEnableBus) { // If bus is disabled, clear location and category
+      if (!studentFormEnableBus) { 
          studentForm.setValue("busRouteLocation", "");
       }
       studentForm.setValue("busClassCategory", "");
@@ -201,6 +205,7 @@ export default function AdminUserManagementPage() {
   }, [studentFormEnableBus, studentFormBusLocation, schoolDetails, studentForm]);
 
   useEffect(() => {
+    setNoBusFeeStructureFound(false);
     if (studentFormEnableBus && studentFormBusLocation && studentFormBusCategory && schoolDetails?.busFeeStructures) {
       const feeConfig = schoolDetails.busFeeStructures.find(
         bfs => bfs.location === studentFormBusLocation && bfs.classCategory === studentFormBusCategory
@@ -208,7 +213,8 @@ export default function AdminUserManagementPage() {
       if (feeConfig?.terms) {
         setCalculatedBusFee(calculateAnnualFeeFromTerms(feeConfig.terms));
       } else {
-        setCalculatedBusFee(null);
+        setCalculatedBusFee(0); // Default to 0 if no config found
+        setNoBusFeeStructureFound(true); // Set flag
       }
     } else {
       setCalculatedBusFee(null);
@@ -250,7 +256,9 @@ export default function AdminUserManagementPage() {
       toast({ title: "Student Created", description: result.message });
       studentForm.reset();
       setCalculatedTuitionFee(null);
+      setNoTuitionFeeStructureFound(false);
       setCalculatedBusFee(null);
+      setNoBusFeeStructureFound(false);
       fetchInitialData(); 
     } else {
       toast({ variant: "destructive", title: "Creation Failed", description: result.error || result.message });
@@ -505,6 +513,7 @@ export default function AdminUserManagementPage() {
                                 {calculatedTuitionFee !== null && (
                                     <FormDescription className="text-xs pt-1">
                                         Annual Tuition Fee: <span className="font-sans">₹</span>{calculatedTuitionFee.toLocaleString()}
+                                        {noTuitionFeeStructureFound && <span className="text-destructive"> (No fee structure found for this class)</span>}
                                     </FormDescription>
                                 )}
                                 <FormMessage/>
@@ -551,6 +560,7 @@ export default function AdminUserManagementPage() {
                                         {calculatedBusFee !== null && (
                                             <FormDescription className="text-xs pt-1">
                                                 Annual Bus Fee: <span className="font-sans">₹</span>{calculatedBusFee.toLocaleString()}
+                                                {noBusFeeStructureFound && <span className="text-destructive"> (No fee structure found for this route/category)</span>}
                                             </FormDescription>
                                         )}
                                         <FormMessage />
@@ -569,6 +579,9 @@ export default function AdminUserManagementPage() {
                                     {studentForm.watch("enableBusTransport") && calculatedBusFee !== null && 
                                      ` + (Annual Bus Fee: ₹${(calculatedBusFee || 0).toLocaleString()})`}
                                 </p>
+                                {(noTuitionFeeStructureFound || (studentForm.watch("enableBusTransport") && noBusFeeStructureFound)) &&
+                                    <p className="text-xs text-destructive mt-1">Note: One or more fee structures were not found. The total fee may be incomplete.</p>
+                                }
                             </div>
                         )}
                     </div>
