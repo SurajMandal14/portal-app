@@ -126,11 +126,12 @@ export default function AdminSchoolSettingsPage() {
                     width={80} 
                     height={80} 
                     className="h-20 w-20 rounded-md object-contain border bg-muted"
+                    onError={(e) => (e.currentTarget.src = "https://placehold.co/80x80.png")}
                 />
             ) : (
                 <Avatar className="h-20 w-20">
                     <AvatarFallback className="text-2xl bg-muted border flex items-center justify-center">
-                        <ImageIcon className="h-10 w-10 text-muted-foreground" />
+                        <ImageIcon className="h-10 w-10 text-muted-foreground" data-ai-hint="school campus" />
                     </AvatarFallback>
                 </Avatar>
             )}

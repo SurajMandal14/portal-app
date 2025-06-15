@@ -23,7 +23,7 @@ import { useState } from "react";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(1, { message: "Password is required." }), // Updated min for password to allow 'password'
+  password: z.string().min(1, { message: "Password is required." }), 
 });
 
 export function LoginForm() {
@@ -49,10 +49,10 @@ export function LoginForm() {
           title: "Login Successful",
           description: result.message || "Redirecting to dashboard...",
         });
-        // Store user session
+        
         localStorage.setItem('loggedInUser', JSON.stringify(result.user));
         
-        // Redirect based on role
+        
         if (result.user.role === 'superadmin') {
           router.push("/dashboard/super-admin");
         } else if (result.user.role === 'admin') {
@@ -62,7 +62,7 @@ export function LoginForm() {
         } else if (result.user.role === 'student') {
           router.push("/dashboard/student");
         } else {
-          router.push("/dashboard"); // Default dashboard
+          router.push("/dashboard"); 
         }
       } else {
         toast({
@@ -89,7 +89,7 @@ export function LoginForm() {
         <div className="mx-auto mb-4 flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground">
           <School size={32} />
         </div>
-        <CardTitle className="text-3xl font-bold">CampusFlow</CardTitle>
+        <CardTitle className="text-3xl font-bold">Scholr</CardTitle>
         <CardDescription>Login to your account</CardDescription>
       </CardHeader>
       <CardContent>

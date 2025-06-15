@@ -4,10 +4,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, UserCog, ShieldAlert, BookUser, User as UserIcon, DollarSign, CheckSquare, Users, LayoutDashboard, Home, Loader2 } from "lucide-react"; // Renamed User
+import { ArrowRight, UserCog, ShieldAlert, BookUser, User as UserIcon, DollarSign, CheckSquare, Users, LayoutDashboard, Home, Loader2, School as ScholrIcon } from "lucide-react"; 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import type { AuthUser } from "@/types/user"; // Import central AuthUser
+import type { AuthUser } from "@/types/user"; 
 
 
 const roleSpecificLinks = {
@@ -104,7 +104,7 @@ export default function DashboardPage() {
       <Card className="mb-8 shadow-lg">
         <CardHeader>
           <CardTitle className="text-3xl font-headline flex items-center">
-            <Home className="mr-3 h-8 w-8 text-primary" /> Welcome to CampusFlow, {authUser.name}!
+            <Home className="mr-3 h-8 w-8 text-primary" /> Welcome to Scholr, {authUser.name}!
           </CardTitle>
           <CardDescription className="text-lg">Your central hub for campus management. You are logged in as a <span className="font-semibold capitalize">{authUser.role}</span>.
           {authUser.classId && (authUser.role === 'teacher' || authUser.role === 'student') && ` Assigned to: ${authUser.classId}`}

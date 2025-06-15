@@ -1,11 +1,11 @@
 
-# CampusFlow: Your All-in-One Campus Management Solution
+# Scholr: Your All-in-One Campus Management Solution
 
-Welcome to **CampusFlow**! This is a comprehensive, user-friendly platform designed to simplify the management of various aspects of an educational institution. It handles student information, attendance, fees, report card generation, and more, all in one place.
+Welcome to **Scholr**! This is a comprehensive, user-friendly platform designed to simplify the management of various aspects of an educational institution. It handles student information, attendance, fees, report card generation, and more, all in one place.
 
 ## Technology Stack
 
-CampusFlow is built with a modern and robust technology stack:
+Scholr is built with a modern and robust technology stack:
 
 - **Frontend:**
     - [Next.js](https://nextjs.org/) (with App Router)
@@ -20,22 +20,26 @@ CampusFlow is built with a modern and robust technology stack:
 - **Language:**
     - [TypeScript](https://www.typescriptlang.org/)
 
-## What Can CampusFlow Do?
+## What Can Scholr Do?
 
-CampusFlow is packed with features to make running your institution smoother:
+Scholr is packed with features to make running your institution smoother:
 
 - **Multi-Role User Management:**
-    - **Super Admins:** Manage schools and school administrator accounts.
-    - **School Admins:** Manage teachers, students, fee structures (view-only for now, managed by Super Admin), attendance overview, fee collection, and report generation for their assigned school.
-    - **Teachers:** Mark student attendance for their assigned classes, view their profile.
-    - **Students:** View their attendance records, fee status, and profile.
+    - **Super Admins:** Manage schools, school administrator accounts, define school-wide fee structures (tuition and bus fees, term-wise), and apply student fee concessions.
+    - **School Admins:** Manage teachers and students. Create students with automatic fee calculation based on class and optional bus transport. Manage attendance overview, fee collection (recording payments), and report generation for their assigned school. View school fee structures.
+    - **Teachers:** Mark student attendance for their assigned classes, view their profile. (Marks entry feature planned).
+    - **Students:** View their attendance records, fee status (including concessions), and profile.
 - **Streamlined Attendance Tracking:** Teachers can mark daily attendance (Present, Absent, Late). Admins and Students can view relevant attendance records and summaries.
-- **Simplified Fee Management:** Admins can record fee payments for students. Students can view their fee payment history and dues. School fee structures are set by Super Admins.
+- **Simplified Fee Management:**
+    - Super Admins define tuition fees (per class, term-wise) and bus fees (per location & class category, term-wise).
+    - Super Admins can apply individual student fee concessions.
+    - School Admins record fee payments for students.
+    - Students can view their fee payment history and dues, with concessions factored in.
 - **Comprehensive Reporting (In Progress):**
-    - Admins can view daily attendance summary reports (class-wise and overall) and fee collection summaries. PDF download available.
+    - Admins can view daily attendance summary reports (class-wise and overall) and fee collection summaries (reflecting concessions). PDF download available.
     - A flexible report card generation system is implemented, starting with a "CBSE State Pattern" template. Admins can input marks and save report cards.
 - **Personalized Profiles:** Users can view and update their basic profile information (name, phone, avatar).
-- **Role-Based Dashboards:** Each user role (Super Admin, Admin, Teacher, Student) gets a tailored dashboard with relevant information and quick links.
+- **Role-Based Dashboards:** Each user role (Super Admin, Admin, Teacher, Student) gets a tailored dashboard with relevant information and quick links. The header dynamically displays the school name for school-affiliated users.
 
 ## Project Structure Overview
 
@@ -55,7 +59,7 @@ The project follows a structure typical for Next.js applications using the App R
 -   **`/src/lib/`**: Utility functions and library initializations.
     -   **`/src/lib/mongodb.ts`**: Handles the MongoDB database connection.
     -   **`/src/lib/utils.ts`**: General utility functions (like `cn` for classnames).
--   **`/src/types/`**: TypeScript type definitions and Zod schemas for various data structures (User, School, Fees, Attendance, Reports).
+-   **`/src/types/`**: TypeScript type definitions and Zod schemas for various data structures (User, School, Fees, Attendance, Reports, Concessions).
 -   **`/src/hooks/`**: Custom React hooks (e.g., `useToast`, `useMobile`).
 -   **`/src/contexts/`**: React Context providers (e.g., `StudentDataContext`).
 -   **`/src/ai/`**: Contains Genkit setup (`genkit.ts`) and will house AI-related flows and logic. Currently, AI features are not deeply integrated but the foundation is present.
@@ -87,7 +91,7 @@ The project follows a structure typical for Next.js applications using the App R
     -   For cross-component state or more complex scenarios, React Context API is used (e.g., `StudentDataContext`).
     -   Data fetching from server actions is typically done via `async/await` calls within client components or passed as props from Server Components.
 -   **Forms:** React Hook Form (`react-hook-form`) is used for managing form state, validation (with Zod via `@hookform/resolvers/zod`), and submission.
--   **User Session on Client:** After login, user information (role, name, email, IDs) is stored in `localStorage`. The `Header` component and individual dashboard pages read this information to tailor the UI and navigation.
+-   **User Session on Client:** After login, user information (role, name, email, IDs) is stored in `localStorage`. The `Header` component and individual dashboard pages read this information to tailor the UI and navigation. The Header dynamically shows the school name for affiliated users or "Scholr" for Super Admins.
 
 ## Key Workflows (High-Level)
 
@@ -96,33 +100,42 @@ The project follows a structure typical for Next.js applications using the App R
     -   `loginUser` server action validates credentials against the MongoDB `users` collection.
     -   On success, user data is stored in `localStorage`, and the user is redirected to their role-specific dashboard.
 
-2.  **User Management:**
-    -   **Super Admin:** Manages school creation (`/super-admin/schools`) and assigns School Administrators (`/super-admin/users`). Data is saved via server actions to `schools` and `users` collections.
-    -   **School Admin:** Manages teachers and students for their assigned school (`/admin/users`). Data is saved via server actions, linking users to the admin's `schoolId`.
+2.  **School & Fee Structure Management (Super Admin):**
+    -   Super Admin creates/edits schools (`/super-admin/schools`).
+    -   Defines term-wise tuition fees per class.
+    -   Defines term-wise bus fees per location and class category.
+    -   Assigns School Administrators (`/super-admin/users`).
+    -   Applies student-specific fee concessions (`/super-admin/concessions`).
 
-3.  **Attendance:**
+3.  **User Management (School Admin):**
+    -   School Admin manages teachers and students for their assigned school (`/admin/users`).
+    -   When creating a student:
+        - Selects class; tuition fee is auto-calculated based on Super Admin's setup.
+        - Optionally enables bus transport, selects route/category; bus fee is auto-calculated.
+        - Student's `classId`, `busRouteLocation`, `busClassCategory` are stored.
+    -   Data is saved via server actions, linking users to the admin's `schoolId`.
+
+4.  **Attendance:**
     -   **Teacher:** Marks attendance (`/teacher/attendance`) for students in their assigned class. Data is submitted via `submitAttendance` server action to the `attendances` collection.
     -   **Admin/Student:** View attendance records/summaries fetched by relevant server actions.
 
-4.  **Fees:**
-    -   **Admin:** Records fee payments (`/admin/fees`) for students. Data is submitted via `recordFeePayment` server action to the `fee_payments` collection. Generates receipts.
-    -   **Student:** Views their fee payment history (`/student/fees`).
+5.  **Fees (Payment & Viewing):**
+    -   **Admin:** Records fee payments (`/admin/fees`) for students. System calculates due amount considering tuition, bus fees (from student's assigned class/route), and any concessions. Generates receipts.
+    -   **Student:** Views their fee payment history (`/student/fees`), total due, and applied concessions.
 
-5.  **Report Card Generation (CBSE State Pattern):**
+6.  **Report Card Generation (CBSE State Pattern):**
     -   **Admin:** Navigates to `/admin/reports/generate-cbse-state`.
-    -   Enters student details, Formative Assessment (FA) marks, Co-curricular marks, Summative Assessment (SA) marks, and attendance summary directly into the template.
-    -   The system uses React state to manage this input and performs real-time calculations for totals and grades within the component.
-    -   Admin enters a "Target Student ID" to link the report.
-    -   Clicks "Save Report Card," which calls the `saveReportCard` server action to store the entire report data snapshot in the `report_cards` MongoDB collection.
+    -   Enters student details, marks, and attendance.
+    -   Saves report card via `saveReportCard` server action to the `report_cards` collection.
 
 ## Getting Started
 
-Ready to dive in? Here's how to get CampusFlow up and running:
+Ready to dive in? Here's how to get Scholr up and running:
 
 1.  **Clone the Repository:** Get the project files onto your local machine.
     ```bash
     git clone <repository_url>
-    cd campusflow
+    cd scholr # Or your project directory name
     ```
 
 2.  **Install Dependencies:** Use npm (or yarn/pnpm) to install all the necessary libraries.
@@ -135,7 +148,7 @@ Ready to dive in? Here's how to get CampusFlow up and running:
     *   Add your MongoDB connection string and database name:
         ```env
         MONGODB_URI="your_mongodb_connection_string"
-        MONGODB_DB_NAME="campusflow_db_name" # Or your preferred database name
+        MONGODB_DB_NAME="scholr_db_name" # Or your preferred database name
 
         # Optional for Genkit (if you plan to use AI features with Google AI)
         # GOOGLE_API_KEY="your_google_ai_api_key"
@@ -176,4 +189,4 @@ Ready to dive in? Here's how to get CampusFlow up and running:
 
 ---
 
-We've built CampusFlow with simplicity and efficiency in mind. We hope you find it as helpful to use as we did to create! If you have any questions or need help, feel free to explore the documentation or reach out.
+We've built Scholr with simplicity and efficiency in mind. We hope you find it as helpful to use as we did to create! If you have any questions or need help, feel free to explore the documentation or reach out.

@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent } from "lucide-react"; // Added TicketPercent
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, Image as ImageIcon } from "lucide-react"; // Renamed School to ScholrIcon for generic app
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,31 +12,36 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"; // Added SheetTitle
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"; 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; 
 import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user"; 
+import { getSchoolById } from "@/app/actions/schools"; // For fetching school details
+import type { School } from "@/types/school";
 
 const navLinksBase = {
   superadmin: [
     { href: "/dashboard/super-admin", label: "SA Dashboard", icon: ShieldAlert },
-    { href: "/dashboard/super-admin/schools", label: "Schools", icon: School },
+    { href: "/dashboard/super-admin/schools", label: "Schools", icon: ScholrIcon },
     { href: "/dashboard/super-admin/users", label: "School Admins", icon: Users },
     { href: "/dashboard/super-admin/concessions", label: "Concessions", icon: TicketPercent },
   ],
   admin: [
     { href: "/dashboard/admin", label: "Admin Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/admin/users", label: "Users", icon: Users },
-    { href: "/dashboard/admin/classes", label: "Classes", icon: BookCopy }, // Added Classes link
+    { href: "/dashboard/admin/classes", label: "Classes", icon: BookCopy },
     { href: "/dashboard/admin/fees", label: "Fees", icon: DollarSign },
     { href: "/dashboard/admin/attendance", label: "Attendance", icon: CheckSquare },
+    { href: "/dashboard/admin/reports", label: "Reports", icon: CheckSquare },
+    { href: "/dashboard/admin/settings", label: "School Settings", icon: Settings },
+
   ],
   teacher: [
     { href: "/dashboard/teacher", label: "Teacher Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/teacher/attendance", label: "Mark Attendance", icon: CheckSquare },
-    { href: "/dashboard/teacher/marks", label: "Enter Marks", icon: BookCopy }, // Using BookCopy as placeholder
+    { href: "/dashboard/teacher/marks", label: "Enter Marks", icon: BookCopy }, 
     { href: "/dashboard/teacher/profile", label: "My Profile", icon: UserIcon },
   ],
   student: [
@@ -56,7 +61,24 @@ export function Header() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [displaySchoolName, setDisplaySchoolName] = useState<string>("Scholr");
+  const [displaySchoolLogoUrl, setDisplaySchoolLogoUrl] = useState<string | null | undefined>(null);
+  const [isLoadingSchoolDetails, setIsLoadingSchoolDetails] = useState(false);
 
+
+  const fetchSchoolDetails = useCallback(async (schoolId: string) => {
+    setIsLoadingSchoolDetails(true);
+    const result = await getSchoolById(schoolId);
+    if (result.success && result.school) {
+      setDisplaySchoolName(result.school.schoolName);
+      setDisplaySchoolLogoUrl(result.school.schoolLogoUrl);
+    } else {
+      toast({ variant: "warning", title: "School Info", description: "Could not load school details for header."});
+      setDisplaySchoolName("Scholr"); // Fallback to app name
+      setDisplaySchoolLogoUrl(null);
+    }
+    setIsLoadingSchoolDetails(false);
+  }, [toast]);
 
   useEffect(() => {
     setIsLoadingUser(true);
@@ -67,9 +89,18 @@ export function Header() {
         const parsedUser: AuthUser = JSON.parse(storedUser); 
         if (parsedUser && parsedUser.role) { 
           setAuthUser(parsedUser);
+          if (parsedUser.schoolId && parsedUser.role !== 'superadmin') {
+            fetchSchoolDetails(parsedUser.schoolId.toString());
+          } else {
+            setDisplaySchoolName("Scholr");
+            setDisplaySchoolLogoUrl(null);
+            setIsLoadingSchoolDetails(false);
+          }
         } else {
           localStorage.removeItem('loggedInUser');
           setAuthUser(null);
+          setDisplaySchoolName("Scholr");
+          setDisplaySchoolLogoUrl(null);
           toast({
             variant: "destructive",
             title: "Session Error",
@@ -80,6 +111,8 @@ export function Header() {
         console.error("Failed to parse user from localStorage in Header:", e);
         localStorage.removeItem('loggedInUser');
         setAuthUser(null);
+        setDisplaySchoolName("Scholr");
+        setDisplaySchoolLogoUrl(null);
         toast({
           variant: "destructive",
           title: "Session Error",
@@ -95,15 +128,20 @@ export function Header() {
       if (authUser !== null) { 
         setAuthUser(null);
       }
+      setDisplaySchoolName("Scholr");
+      setDisplaySchoolLogoUrl(null);
       setIsLoadingUser(false);
+      setIsLoadingSchoolDetails(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, toast]); 
+  }, [pathname, toast, fetchSchoolDetails]); 
 
 
   const handleLogout = () => {
     localStorage.removeItem('loggedInUser');
     setAuthUser(null);
+    setDisplaySchoolName("Scholr");
+    setDisplaySchoolLogoUrl(null);
     toast({
       title: "Logged Out",
       description: "You have been successfully logged out.",
@@ -115,13 +153,13 @@ export function Header() {
   const currentRole = authUser?.role as Role | undefined;
   const currentNavLinks = currentRole ? navLinksBase[currentRole] || [] : [];
 
-  if (isLoadingUser) {
+  if (isLoadingUser || isLoadingSchoolDetails) {
     return (
       <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
         <div className="container flex h-16 items-center justify-between px-4 md:px-6">
           <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
-            <School className="h-7 w-7 text-primary" />
-            <span className="font-headline">CampusFlow</span>
+            <ScholrIcon className="h-7 w-7 text-primary" />
+            <span className="font-headline">Scholr</span>
           </Link>
           <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
         </div>
@@ -133,8 +171,12 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
       <div className="container flex h-16 items-center justify-between px-4 md:px-6">
         <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl" onClick={() => setIsSheetOpen(false)}>
-          <School className="h-7 w-7 text-primary" />
-          <span className="font-headline">CampusFlow</span>
+          {displaySchoolLogoUrl && authUser && authUser.role !== 'superadmin' ? (
+            <img src={displaySchoolLogoUrl} alt={`${displaySchoolName} Logo`} data-ai-hint="school logo" className="h-8 w-8 rounded-sm object-contain"/>
+          ) : (
+            <ScholrIcon className="h-7 w-7 text-primary" />
+          )}
+          <span className="font-headline">{displaySchoolName}</span>
         </Link>
 
         {authUser && (
@@ -205,8 +247,12 @@ export function Header() {
                   <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                   <nav className="grid gap-4 text-base font-medium">
                     <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold mb-4" onClick={() => setIsSheetOpen(false)}>
-                      <School className="h-7 w-7 text-primary" />
-                      <span className="font-headline">CampusFlow</span>
+                       {displaySchoolLogoUrl && authUser && authUser.role !== 'superadmin' ? (
+                        <img src={displaySchoolLogoUrl} alt={`${displaySchoolName} Logo`} data-ai-hint="school logo mobile" className="h-7 w-7 rounded-sm object-contain"/>
+                      ) : (
+                        <ScholrIcon className="h-7 w-7 text-primary" />
+                      )}
+                      <span className="font-headline">{displaySchoolName}</span>
                     </Link>
                     {currentNavLinks.map((link) => (
                       <Link
@@ -221,6 +267,32 @@ export function Header() {
                         {link.label}
                       </Link>
                     ))}
+                     {authUser.role === 'admin' && (
+                       <Link
+                          key="/dashboard/admin/reports"
+                          href="/dashboard/admin/reports"
+                          onClick={() => setIsSheetOpen(false)}
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
+                            pathname === "/dashboard/admin/reports" ? "text-primary bg-muted" : "text-muted-foreground"
+                          }`}
+                        >
+                          <CheckSquare className="h-5 w-5" /> 
+                          Reports
+                        </Link>
+                     )}
+                     {authUser.role === 'admin' && (
+                        <Link
+                          key="/dashboard/admin/settings"
+                          href="/dashboard/admin/settings"
+                          onClick={() => setIsSheetOpen(false)}
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
+                            pathname === "/dashboard/admin/settings" ? "text-primary bg-muted" : "text-muted-foreground"
+                          }`}
+                        >
+                          <Settings className="h-5 w-5" />
+                          School Settings
+                        </Link>
+                     )}
                   </nav>
                 </SheetContent>
               </Sheet>

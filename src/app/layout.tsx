@@ -1,10 +1,11 @@
+
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'CampusFlow',
-  description: 'Streamlined Campus Management',
+  title: 'Scholr',
+  description: 'Scholr - Smart School Management',
 };
 
 export default function RootLayout({

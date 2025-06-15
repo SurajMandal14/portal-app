@@ -418,12 +418,13 @@ export default function SchoolManagementPage() {
             <Card key={school._id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-4">
               <div className="flex items-center gap-4">
                 <img 
-                    src={school.schoolLogoUrl || "https://placehold.co/100x100.png"} 
+                    src={school.schoolLogoUrl || "https://placehold.co/48x48.png"} 
                     alt={`${school.schoolName} logo`} 
                     data-ai-hint="school logo"
                     width={48} 
                     height={48} 
-                    className="h-12 w-12 rounded-md object-cover flex-shrink-0 bg-muted border" 
+                    className="h-12 w-12 rounded-md object-cover flex-shrink-0 bg-muted border"
+                    onError={(e) => (e.currentTarget.src = "https://placehold.co/48x48.png")}
                 />
                 <div className="flex-grow">
                   <h3 className="font-semibold">{school.schoolName}</h3>
