@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, Image as ImageIcon, BarChart2 } from "lucide-react"; // Added BarChart2
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2 } from "lucide-react"; // Added BarChart2
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,7 +19,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user"; 
 import { getSchoolById } from "@/app/actions/schools";
-import type { School } from "@/types/school";
+// School type is not directly used in this component after changes, but action returns it.
+// import type { School } from "@/types/school"; 
 
 const navLinksBase = {
   superadmin: [
@@ -60,25 +61,26 @@ export function Header() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [displaySchoolName, setDisplaySchoolName] = useState<string>("Scholr");
+  // displaySchoolName state is no longer used for direct display in header text
+  // const [displaySchoolName, setDisplaySchoolName] = useState<string>("Scholr"); 
   const [displaySchoolLogoUrl, setDisplaySchoolLogoUrl] = useState<string | null | undefined>(null);
   const [isLoadingSchoolDetails, setIsLoadingSchoolDetails] = useState(false);
 
-  const getShortSchoolName = (fullName: string | undefined): string => {
-    if (!fullName) return "Scholr";
-    const words = fullName.split(" ");
-    return words[0] || "Scholr";
-  };
+  // const getShortSchoolName = (fullName: string | undefined): string => {
+  //   if (!fullName) return "Scholr";
+  //   const words = fullName.split(" ");
+  //   return words[0] || "Scholr";
+  // };
 
   const fetchSchoolDetails = useCallback(async (schoolId: string) => {
     setIsLoadingSchoolDetails(true);
     const result = await getSchoolById(schoolId);
     if (result.success && result.school) {
-      setDisplaySchoolName(getShortSchoolName(result.school.schoolName));
+      // setDisplaySchoolName(getShortSchoolName(result.school.schoolName)); // Name no longer displayed
       setDisplaySchoolLogoUrl(result.school.schoolLogoUrl);
     } else {
       toast({ variant: "warning", title: "School Info", description: "Could not load school details for header."});
-      setDisplaySchoolName("Scholr"); // Fallback to app name
+      // setDisplaySchoolName("Scholr"); 
       setDisplaySchoolLogoUrl(null);
     }
     setIsLoadingSchoolDetails(false);
@@ -96,14 +98,14 @@ export function Header() {
           if (parsedUser.schoolId && parsedUser.role !== 'superadmin') {
             fetchSchoolDetails(parsedUser.schoolId.toString());
           } else {
-            setDisplaySchoolName("Scholr");
+            // setDisplaySchoolName("Scholr"); // Default for superadmin or if no schoolId
             setDisplaySchoolLogoUrl(null);
             setIsLoadingSchoolDetails(false);
           }
         } else {
           localStorage.removeItem('loggedInUser');
           setAuthUser(null);
-          setDisplaySchoolName("Scholr");
+          // setDisplaySchoolName("Scholr");
           setDisplaySchoolLogoUrl(null);
           toast({
             variant: "destructive",
@@ -115,7 +117,7 @@ export function Header() {
         console.error("Failed to parse user from localStorage in Header:", e);
         localStorage.removeItem('loggedInUser');
         setAuthUser(null);
-        setDisplaySchoolName("Scholr");
+        // setDisplaySchoolName("Scholr");
         setDisplaySchoolLogoUrl(null);
         toast({
           variant: "destructive",
@@ -132,7 +134,7 @@ export function Header() {
       if (authUser !== null) { 
         setAuthUser(null);
       }
-      setDisplaySchoolName("Scholr");
+      // setDisplaySchoolName("Scholr");
       setDisplaySchoolLogoUrl(null);
       setIsLoadingUser(false);
       setIsLoadingSchoolDetails(false);
@@ -144,7 +146,7 @@ export function Header() {
   const handleLogout = () => {
     localStorage.removeItem('loggedInUser');
     setAuthUser(null);
-    setDisplaySchoolName("Scholr");
+    // setDisplaySchoolName("Scholr");
     setDisplaySchoolLogoUrl(null);
     toast({
       title: "Logged Out",
@@ -163,7 +165,7 @@ export function Header() {
         <div className="container flex h-16 items-center justify-between px-4 md:px-6">
           <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
             <ScholrIcon className="h-7 w-7 text-primary" />
-            <span className="font-headline">Scholr</span>
+            {/* Removed name span here for loading state too */}
           </Link>
           <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
         </div>
@@ -176,11 +178,11 @@ export function Header() {
       <div className="container flex h-16 items-center justify-between px-4 md:px-6">
         <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl" onClick={() => setIsSheetOpen(false)}>
           {displaySchoolLogoUrl && authUser && authUser.role !== 'superadmin' ? (
-            <img src={displaySchoolLogoUrl} alt={`${displaySchoolName} Logo`} data-ai-hint="school logo" className="h-8 w-8 rounded-sm object-contain"/>
+            <img src={displaySchoolLogoUrl} alt="School Logo" data-ai-hint="school logo" className="h-8 w-8 rounded-sm object-contain"/>
           ) : (
             <ScholrIcon className="h-7 w-7 text-primary" />
           )}
-          <span className="font-headline">{displaySchoolName}</span>
+          {/* Removed: <span className="font-headline">{displaySchoolName}</span> */}
         </Link>
 
         {authUser && (
@@ -252,11 +254,11 @@ export function Header() {
                   <nav className="grid gap-4 text-base font-medium">
                     <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold mb-4" onClick={() => setIsSheetOpen(false)}>
                        {displaySchoolLogoUrl && authUser && authUser.role !== 'superadmin' ? (
-                        <img src={displaySchoolLogoUrl} alt={`${displaySchoolName} Logo`} data-ai-hint="school logo mobile" className="h-7 w-7 rounded-sm object-contain"/>
+                        <img src={displaySchoolLogoUrl} alt="School Logo Mobile" data-ai-hint="school logo mobile" className="h-7 w-7 rounded-sm object-contain"/>
                       ) : (
                         <ScholrIcon className="h-7 w-7 text-primary" />
                       )}
-                      <span className="font-headline">{displaySchoolName}</span>
+                      {/* Removed: <span className="font-headline">{displaySchoolName}</span> */}
                     </Link>
                     {currentNavLinks.map((link) => (
                       <Link
@@ -286,3 +288,4 @@ export function Header() {
     </header>
   );
 }
+
