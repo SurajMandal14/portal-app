@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, Image as ImageIcon } from "lucide-react"; // Renamed School to ScholrIcon for generic app
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, Image as ImageIcon, BarChart2 } from "lucide-react"; // Added BarChart2
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,7 +18,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user"; 
-import { getSchoolById } from "@/app/actions/schools"; // For fetching school details
+import { getSchoolById } from "@/app/actions/schools";
 import type { School } from "@/types/school";
 
 const navLinksBase = {
@@ -34,9 +34,8 @@ const navLinksBase = {
     { href: "/dashboard/admin/classes", label: "Classes", icon: BookCopy },
     { href: "/dashboard/admin/fees", label: "Fees", icon: DollarSign },
     { href: "/dashboard/admin/attendance", label: "Attendance", icon: CheckSquare },
-    { href: "/dashboard/admin/reports", label: "Reports", icon: CheckSquare },
+    { href: "/dashboard/admin/reports", label: "Reports", icon: BarChart2 },
     { href: "/dashboard/admin/settings", label: "School Settings", icon: Settings },
-
   ],
   teacher: [
     { href: "/dashboard/teacher", label: "Teacher Dashboard", icon: LayoutDashboard },
@@ -65,12 +64,17 @@ export function Header() {
   const [displaySchoolLogoUrl, setDisplaySchoolLogoUrl] = useState<string | null | undefined>(null);
   const [isLoadingSchoolDetails, setIsLoadingSchoolDetails] = useState(false);
 
+  const getShortSchoolName = (fullName: string | undefined): string => {
+    if (!fullName) return "Scholr";
+    const words = fullName.split(" ");
+    return words[0] || "Scholr";
+  };
 
   const fetchSchoolDetails = useCallback(async (schoolId: string) => {
     setIsLoadingSchoolDetails(true);
     const result = await getSchoolById(schoolId);
     if (result.success && result.school) {
-      setDisplaySchoolName(result.school.schoolName);
+      setDisplaySchoolName(getShortSchoolName(result.school.schoolName));
       setDisplaySchoolLogoUrl(result.school.schoolLogoUrl);
     } else {
       toast({ variant: "warning", title: "School Info", description: "Could not load school details for header."});
@@ -267,32 +271,6 @@ export function Header() {
                         {link.label}
                       </Link>
                     ))}
-                     {authUser.role === 'admin' && (
-                       <Link
-                          key="/dashboard/admin/reports"
-                          href="/dashboard/admin/reports"
-                          onClick={() => setIsSheetOpen(false)}
-                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
-                            pathname === "/dashboard/admin/reports" ? "text-primary bg-muted" : "text-muted-foreground"
-                          }`}
-                        >
-                          <CheckSquare className="h-5 w-5" /> 
-                          Reports
-                        </Link>
-                     )}
-                     {authUser.role === 'admin' && (
-                        <Link
-                          key="/dashboard/admin/settings"
-                          href="/dashboard/admin/settings"
-                          onClick={() => setIsSheetOpen(false)}
-                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
-                            pathname === "/dashboard/admin/settings" ? "text-primary bg-muted" : "text-muted-foreground"
-                          }`}
-                        >
-                          <Settings className="h-5 w-5" />
-                          School Settings
-                        </Link>
-                     )}
                   </nav>
                 </SheetContent>
               </Sheet>
