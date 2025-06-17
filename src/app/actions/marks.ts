@@ -7,6 +7,7 @@ import type { MarkEntry, MarksSubmissionPayload, SubmitMarksResult, GetMarksResu
 import { marksSubmissionPayloadSchema } from '@/types/marks';
 import { ObjectId } from 'mongodb';
 import { revalidatePath } from 'next/cache';
+import type { SchoolClass, SchoolClassSubject } from '@/types/classes';
 
 export async function submitMarks(payload: MarksSubmissionPayload): Promise<SubmitMarksResult> {
   try {
@@ -24,12 +25,23 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
     const { db } = await connectToDatabase();
     const marksCollection = db.collection<Omit<MarkEntry, '_id'>>('marks');
 
+    // Validate ObjectIds
+    if (!ObjectId.isValid(classId) || !ObjectId.isValid(schoolId) || !ObjectId.isValid(markedByTeacherId)) {
+        return { success: false, message: 'Invalid ID format for class, school, or teacher.', error: 'Invalid ID format.' };
+    }
+    for (const sm of studentMarks) {
+        if(!ObjectId.isValid(sm.studentId)) {
+            return { success: false, message: `Invalid Student ID format: ${sm.studentId}`, error: 'Invalid Student ID.'}
+        }
+    }
+
+
     const marksToUpsert: Omit<MarkEntry, '_id'>[] = studentMarks.map(sm => ({
       studentId: new ObjectId(sm.studentId),
       studentName: sm.studentName,
-      classId: classId, // Assuming classId from payload is the ID
+      classId: classId, 
       className: className,
-      subjectId: subjectId,
+      subjectId: subjectId, // This is likely the subject name, used as an identifier
       subjectName: subjectName,
       assessmentName: assessmentName,
       term: term,
@@ -46,7 +58,7 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
       updateOne: {
         filter: {
           studentId: mark.studentId,
-          classId: mark.classId,
+          classId: mark.classId, // Match based on the classId (actual ID)
           subjectId: mark.subjectId,
           assessmentName: mark.assessmentName,
           term: mark.term,
@@ -84,25 +96,24 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
 
 export async function getMarksForAssessment(
   schoolId: string,
-  classId: string,
-  subjectId: string,
+  classId: string, // Expecting actual class _id string here
+  subjectId: string, // Expecting subject name as ID here
   assessmentName: string,
   term: string,
   academicYear: string
 ): Promise<GetMarksResult> {
   try {
-    if (!ObjectId.isValid(schoolId)) {
-      return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.' };
+    if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(classId)) {
+      return { success: false, message: 'Invalid School or Class ID format.', error: 'Invalid ID format.' };
     }
-    // Add more ID validations as needed for classId, subjectId etc. if they are ObjectIds
 
     const { db } = await connectToDatabase();
     const marksCollection = db.collection<MarkEntry>('marks');
 
     const marks = await marksCollection.find({
       schoolId: new ObjectId(schoolId),
-      classId: classId, // Assuming classId is stored as string if it's a name, or ObjectId if it's an ID
-      subjectId: subjectId,
+      classId: classId, 
+      subjectId: subjectId, // Match subject by its name (or formal ID if that's what subjectId stores)
       assessmentName: assessmentName,
       term: term,
       academicYear: academicYear,
@@ -114,6 +125,8 @@ export async function getMarksForAssessment(
         studentId: mark.studentId.toString(),
         markedByTeacherId: mark.markedByTeacherId.toString(),
         schoolId: mark.schoolId.toString(),
+        // classId is already a string if fetched after conversion, or ensure it is.
+        classId: mark.classId.toString(), 
     }));
 
     return { success: true, marks: marksWithStrId };
@@ -125,40 +138,59 @@ export async function getMarksForAssessment(
   }
 }
 
-// Placeholder for fetching subjects a teacher is assigned to or can enter marks for.
-// This would likely involve looking up class assignments, then subjects for those classes.
-export async function getSubjectsForTeacher(teacherId: string, schoolId: string): Promise<{ value: string, label: string, classId: string, className: string }[]> {
-    // TODO: Implement actual logic based on how subjects are assigned to teachers or classes.
-    // For now, this is a placeholder. It might look at SchoolClass documents where teacher is classTeacherId,
-    // or a more complex mapping if teachers teach subjects across multiple classes.
-    
-    // Example: Fetch classes the teacher is a classTeacher of, then get subjects of those classes
+
+export interface SubjectForTeacher {
+  value: string; // Composite key: e.g., classId + "_" + subjectName
+  label: string; // e.g., "Mathematics (Grade 10A)"
+  classId: string; // ObjectId of the class as string
+  className: string;
+  subjectName: string; // Original subject name
+}
+
+export async function getSubjectsForTeacher(teacherId: string, schoolId: string): Promise<SubjectForTeacher[]> {
     if (!ObjectId.isValid(teacherId) || !ObjectId.isValid(schoolId)) {
+        console.warn("getSubjectsForTeacher: Invalid teacherId or schoolId format provided.");
         return [];
     }
     try {
         const { db } = await connectToDatabase();
-        const schoolClassesCollection = db.collection('school_classes');
-        const teacherClasses = await schoolClassesCollection.find({
-            schoolId: new ObjectId(schoolId),
-            classTeacherId: new ObjectId(teacherId) // Find classes where this teacher is the classTeacher
-        }).project({ _id: 1, name: 1, subjects: 1 }).toArray();
+        // Type assertion for documents from 'school_classes' collection
+        const schoolClassesCollection = db.collection<Omit<SchoolClass, '_id' | 'schoolId'> & { _id: ObjectId; schoolId: ObjectId }>('school_classes'); 
+        
+        const teacherObjectId = new ObjectId(teacherId);
+        const schoolObjectId = new ObjectId(schoolId);
 
-        const subjects: { value: string, label: string, classId: string, className: string }[] = [];
-        teacherClasses.forEach(cls => {
-            (cls.subjects as Array<{name: string}> || []).forEach(subj => {
-                 // Ensure subject isn't already added from another class if teacher handles same subject in multiple primary classes
-                if (!subjects.some(s => s.value === subj.name && s.classId === cls._id.toString())) {
-                    subjects.push({
-                        value: subj.name, // Using subject name as value for simplicity
-                        label: `${subj.name} (Class: ${cls.name})`,
-                        classId: cls._id.toString(),
-                        className: cls.name
-                    });
+        const classesInSchool = await schoolClassesCollection.find({ schoolId: schoolObjectId }).toArray();
+        
+        const taughtSubjects: SubjectForTeacher[] = [];
+
+        classesInSchool.forEach(cls => {
+            const classSubjects = (cls.subjects || []) as SchoolClassSubject[]; // Ensure cls.subjects is an array
+
+            classSubjects.forEach(subject => {
+                let isMatch = false;
+                if (subject.teacherId) {
+                    // Standardize comparison to string form of ObjectId
+                    const subjectTeacherIdStr = subject.teacherId.toString();
+                    isMatch = subjectTeacherIdStr === teacherId; // teacherId is already a string
+                }
+
+                if (isMatch) {
+                    const uniqueValue = `${cls._id.toString()}_${subject.name}`;
+                    if (!taughtSubjects.some(ts => ts.value === uniqueValue)) {
+                        taughtSubjects.push({
+                            value: uniqueValue,
+                            label: `${subject.name} (${cls.name})`,
+                            classId: cls._id.toString(),
+                            className: cls.name,
+                            subjectName: subject.name
+                        });
+                    }
                 }
             });
         });
-        return subjects.sort((a,b) => a.label.localeCompare(b.label));
+        
+        return taughtSubjects.sort((a, b) => a.label.localeCompare(b.label));
 
     } catch (error) {
         console.error("Error fetching subjects for teacher:", error);
