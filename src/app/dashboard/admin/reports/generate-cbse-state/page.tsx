@@ -17,7 +17,7 @@ import CBSEStateBack, {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Printer, RotateCcw, Eye, EyeOff, Save, Loader2, User, School as SchoolIconUI, Search as SearchIcon } from 'lucide-react';
+import { FileText, Printer, RotateCcw, Eye, EyeOff, Save, Loader2, User, School as SchoolIconUI, Search as SearchIcon, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { AuthUser, UserRole } from '@/types/user';
 import { saveReportCard } from '@/app/actions/reports';
@@ -29,7 +29,6 @@ import { getClassDetailsById } from '@/app/actions/classes';
 import { getSchoolById } from '@/app/actions/schools';
 import type { SchoolClassSubject } from '@/types/classes';
 import type { School } from '@/types/school';
-import { ObjectId } from 'mongodb'; // For checking validity, though actions handle conversion
 
 
 // --- Defaults for Front Side ---
@@ -46,7 +45,7 @@ const defaultStudentDataFront: FrontStudentData = {
   studentName: '',
   fatherName: '',
   motherName: '',
-  class: '',
+  class: '', // This will be populated with class name
   section: '',
   studentIdNo: '', // This will be populated with actual student _id
   rollNo: '',
@@ -128,10 +127,10 @@ export default function GenerateCBSEStateReportPage() {
       };
     });
     setFaMarks(newFaMarks);
-    setSaData(prevSaData => 
+    setSaData(prevSaData => // Ensure defaultSaDataBack structure is used for SA
         defaultSaDataBack.map(defaultRow => ({
             ...defaultRow,
-            faTotal200M: calculateFaTotal200MForRow(defaultRow.subjectName)
+            faTotal200M: calculateFaTotal200MForRow(defaultRow.subjectName) // Recalculate based on new FA
         }))
     );
   }, []);
@@ -148,7 +147,6 @@ export default function GenerateCBSEStateReportPage() {
     }
 
     setIsLoadingStudentAndClassData(true);
-    // Reset all states before loading new data
     setLoadedStudent(null);
     setLoadedClassSubjects([]);
     setTeacherEditableSubjects([]);
@@ -160,7 +158,6 @@ export default function GenerateCBSEStateReportPage() {
     setAttendanceData(defaultAttendanceDataBack);
     setFinalOverallGradeInput(null);
     setFrontAcademicYear(getCurrentAcademicYear());
-
 
     try {
       const studentRes = await getStudentDetailsForReportCard(admissionIdInput, authUser.schoolId.toString());
@@ -177,22 +174,22 @@ export default function GenerateCBSEStateReportPage() {
         setIsLoadingStudentAndClassData(false);
         return;
       }
-      // ObjectId.isValid can be used for client-side pre-check if desired, but actions should handle it.
-      // if (!ObjectId.isValid(studentRes.student.classId)) {
-      //   toast({ variant: "destructive", title: "Invalid Class ID", description: `Student ${studentRes.student.name}'s assigned class ID is invalid.` });
-      //   setIsLoadingStudentAndClassData(false);
-      //   return;
-      // }
+      
+      if (!studentRes.student.schoolId) {
+         toast({ variant: "destructive", title: "School ID Missing", description: `Student ${studentRes.student.name} does not have a school ID associated.` });
+        setIsLoadingStudentAndClassData(false);
+        return;
+      }
 
 
-      const schoolRes = await getSchoolById(studentRes.student.schoolId!); // studentRes.student.schoolId should be valid if student was found
+      const schoolRes = await getSchoolById(studentRes.student.schoolId);
       if(schoolRes.success && schoolRes.school) {
         setLoadedSchool(schoolRes.school);
       } else {
         toast({variant: "warning", title: "School Info", description: "Could not load school details for report header."});
       }
 
-      const classRes = await getClassDetailsById(studentRes.student.classId, studentRes.student.schoolId!);
+      const classRes = await getClassDetailsById(studentRes.student.classId, studentRes.student.schoolId);
       if (classRes.success && classRes.classDetails) {
         setLoadedClassSubjects(classRes.classDetails.subjects);
         initializeMarksForSubjects(classRes.classDetails.subjects);
@@ -208,13 +205,12 @@ export default function GenerateCBSEStateReportPage() {
           ...prev,
           udiseCodeSchoolName: schoolRes.school?.schoolName || '', 
           studentName: studentRes.student?.name || '',
-          class: classRes.classDetails.name || '', 
+          class: classRes.classDetails?.name || '', // Use fetched class name
           studentIdNo: studentRes.student?._id || '', 
           admissionNo: studentRes.student?.admissionId || '',
-          // Other fields like fatherName, motherName, dob remain manual entry or could be fetched if added to student profile
         }));
       } else {
-        toast({ variant: "destructive", title: "Class Details Error", description: classRes.message || `Could not load class details for class ID: ${studentRes.student.classId}.`});
+        toast({ variant: "destructive", title: "Class Details Error", description: classRes.message || `Could not load class details for class ID: ${studentRes.student.classId}. Ensure it's a valid Class ID.`});
       }
 
     } catch (error) {
@@ -226,6 +222,7 @@ export default function GenerateCBSEStateReportPage() {
   };
 
   const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string): number | null => {
+    // For "Science" on the back page (Physics/Biology papers), use the FA total for "Science" subject from front.
     const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
     
     const subjectFaData = faMarks[faSubjectKey];
@@ -236,13 +233,14 @@ export default function GenerateCBSEStateReportPage() {
       const periodMarks = subjectFaData[faPeriodKey];
       overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
     });
-    return overallTotal > 200 ? 200 : overallTotal;
+    return overallTotal > 200 ? 200 : overallTotal; // Cap at 200
   }, [faMarks]);
 
   useEffect(() => {
     setSaData(prevSaData => 
       prevSaData.map(row => ({
         ...row,
+        // Pass the subject name from the default SA structure (e.g., "Telugu", "Science")
         faTotal200M: calculateFaTotal200MForRow(row.subjectName) 
       }))
     );
@@ -447,8 +445,9 @@ export default function GenerateCBSEStateReportPage() {
           </CardTitle>
           <CardDescription>
             Logged in as: <span className="font-semibold capitalize">{authUser?.role || 'N/A'}</span>. 
-            Enter Student's Admission ID to load data, then fill in marks.
+            Enter Student's Admission ID to load data.
             {authUser?.role === 'teacher' && " You can only edit marks for subjects assigned to you."}
+            {authUser?.role === 'admin' && " You can view and save the report card. Marks entry is done by teachers."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -529,9 +528,14 @@ export default function GenerateCBSEStateReportPage() {
         </>
       )}
       {!isLoadingStudentAndClassData && !loadedStudent && admissionIdInput && (
-          <Card className="no-print">
-            <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">Student data not loaded. Please ensure the Admission ID is correct and click "Load Student & Class Data".</p>
+          <Card className="no-print border-destructive">
+            <CardHeader className="flex-row items-center gap-2">
+                <AlertTriangle className="h-6 w-6 text-destructive"/>
+                <CardTitle className="text-destructive">Student Data Not Loaded</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p>Student data could not be loaded for Admission ID: <span className="font-semibold">{admissionIdInput}</span>.</p>
+                <p className="mt-1">Please ensure the Admission ID is correct and the student is properly configured in the system (assigned to a class, etc.).</p>
             </CardContent>
           </Card>
       )}

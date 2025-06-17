@@ -29,7 +29,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser } from "@/app/actions/schoolUsers";
@@ -50,14 +50,15 @@ import type { AuthUser } from "@/types/attendance";
 
 type SchoolUser = Partial<AppUser>; 
 
-const NONE_CLASS_VALUE = "__NONE_CLASS__"; 
+const NONE_CLASS_VALUE = "__NONE_CLASS_ID__"; // Changed to indicate it's an ID
 
 export default function AdminUserManagementPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null); 
   const [managedClasses, setManagedClasses] = useState<SchoolClass[]>([]); 
-  const [availableClassNames, setAvailableClassNames] = useState<string[]>([]);
+  // availableClassNames is no longer needed as we use managedClasses for IDs
+  // const [availableClassNames, setAvailableClassNames] = useState<string[]>([]);
   const [schoolUsers, setSchoolUsers] = useState<SchoolUser[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
@@ -142,12 +143,9 @@ export default function AdminUserManagementPage() {
 
       if (classesResult.success && classesResult.classes) {
         setManagedClasses(classesResult.classes);
-        const classNamesFromManaged = classesResult.classes.map(cls => cls.name).filter(Boolean) as string[];
-        setAvailableClassNames(classNamesFromManaged);
       } else {
         toast({ variant: "warning", title: "Class List Error", description: classesResult.message || "Failed to load managed class list." });
         setManagedClasses([]);
-        setAvailableClassNames([]);
       }
 
     } catch (error) {
@@ -159,28 +157,34 @@ export default function AdminUserManagementPage() {
 
   useEffect(() => {
     if (authUser?.schoolId) fetchInitialData();
-    else { setIsLoadingData(false); setSchoolUsers([]); setSchoolDetails(null); setManagedClasses([]); setAvailableClassNames([]); }
+    else { setIsLoadingData(false); setSchoolUsers([]); setSchoolDetails(null); setManagedClasses([]); }
   }, [authUser, fetchInitialData]);
 
   const calculateAnnualFeeFromTerms = useCallback((terms: TermFee[]): number => {
     return terms.reduce((sum, term) => sum + (term.amount || 0), 0);
   }, []);
   
-  const selectedClassForTuition = studentForm.watch("classId");
+  const selectedClassIdForTuition = studentForm.watch("classId");
   useEffect(() => {
     setNoTuitionFeeStructureFound(false);
-    if (selectedClassForTuition && selectedClassForTuition !== NONE_CLASS_VALUE && schoolDetails?.tuitionFees) {
-      const feeConfig = schoolDetails.tuitionFees.find(tf => tf.className === selectedClassForTuition);
-      if (feeConfig?.terms) {
-        setCalculatedTuitionFee(calculateAnnualFeeFromTerms(feeConfig.terms));
+    if (selectedClassIdForTuition && selectedClassIdForTuition !== NONE_CLASS_VALUE && schoolDetails?.tuitionFees && managedClasses.length > 0) {
+      const selectedClass = managedClasses.find(cls => cls._id === selectedClassIdForTuition);
+      if (selectedClass) {
+        const feeConfig = schoolDetails.tuitionFees.find(tf => tf.className === selectedClass.name);
+        if (feeConfig?.terms) {
+          setCalculatedTuitionFee(calculateAnnualFeeFromTerms(feeConfig.terms));
+        } else {
+          setCalculatedTuitionFee(0); 
+          setNoTuitionFeeStructureFound(true);
+        }
       } else {
-        setCalculatedTuitionFee(0); 
-        setNoTuitionFeeStructureFound(true);
+        setCalculatedTuitionFee(null);
       }
     } else {
       setCalculatedTuitionFee(null);
     }
-  }, [selectedClassForTuition, schoolDetails, calculateAnnualFeeFromTerms]);
+  }, [selectedClassIdForTuition, schoolDetails, managedClasses, calculateAnnualFeeFromTerms]);
+
 
   const studentFormEnableBus = studentForm.watch("enableBusTransport");
   const studentFormBusLocation = studentForm.watch("busRouteLocation");
@@ -230,7 +234,7 @@ export default function AdminUserManagementPage() {
         email: editingUser.email || "",
         password: "", 
         role: editingUser.role as 'teacher' | 'student' | undefined,
-        classId: editingUser.classId || "", 
+        classId: editingUser.classId || "", // This should be the class _id string
         admissionId: editingUser.admissionId || "",
         enableBusTransport: !!editingUser.busRouteLocation,
         busRouteLocation: editingUser.busRouteLocation || "",
@@ -269,6 +273,7 @@ export default function AdminUserManagementPage() {
   async function handleTeacherSubmit(values: CreateTeacherFormData) {
     if (!authUser?.schoolId) return;
     setIsSubmittingTeacher(true);
+    // For teachers, classId is the ID of the class they are class teacher for.
     const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'teacher', classId: values.classId === NONE_CLASS_VALUE ? undefined : values.classId };
     const result = await createSchoolUser(payload, authUser.schoolId.toString());
     setIsSubmittingTeacher(false);
@@ -286,7 +291,7 @@ export default function AdminUserManagementPage() {
     setIsSubmittingEdit(true);
     const payload = { 
       ...values, 
-      classId: values.classId === NONE_CLASS_VALUE ? "" : values.classId,
+      classId: values.classId === NONE_CLASS_VALUE ? "" : values.classId, // Send empty string if "None"
       busRouteLocation: values.enableBusTransport && values.role === 'student' ? values.busRouteLocation : undefined,
       busClassCategory: values.enableBusTransport && values.role === 'student' ? values.busClassCategory : undefined,
     };
@@ -324,6 +329,12 @@ export default function AdminUserManagementPage() {
   );
 
   const totalAnnualFee = (calculatedTuitionFee || 0) + (studentForm.getValues("enableBusTransport") && calculatedBusFee ? (calculatedBusFee || 0) : 0);
+
+  const getClassNameFromId = (classId: string | undefined): string => {
+    if (!classId) return 'N/A';
+    const foundClass = managedClasses.find(cls => cls._id === classId);
+    return foundClass?.name || 'N/A (Invalid ID)';
+  };
 
 
   if (!authUser && !isLoadingData) { 
@@ -396,26 +407,26 @@ export default function AdminUserManagementPage() {
                    )}
                     <FormField 
                         control={editForm.control} 
-                        name="classId" 
+                        name="classId" // Stores class _id
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Assign to Class</FormLabel>
                                 <Select 
                                     onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)}
                                     value={field.value || ""} 
-                                    disabled={isSubmittingEdit || availableClassNames.length === 0}
+                                    disabled={isSubmittingEdit || managedClasses.length === 0}
                                 >
                                     <FormControl><SelectTrigger>
-                                        <SelectValue placeholder={availableClassNames.length > 0 ? "Select class" : "No classes available"} />
+                                        <SelectValue placeholder={managedClasses.length > 0 ? "Select class" : "No classes available"} />
                                     </SelectTrigger></FormControl>
                                     <SelectContent>
                                         <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
-                                        {availableClassNames.filter(Boolean).map((cn) => (
-                                            <SelectItem key={cn} value={cn}>{cn}</SelectItem>
+                                        {managedClasses.map((cls) => (
+                                            <SelectItem key={cls._id} value={cls._id.toString()}>{cls.name}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
+                                {managedClasses.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -494,23 +505,23 @@ export default function AdminUserManagementPage() {
                         <FormField control={studentForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="student@example.com" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={studentForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={studentForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel><FormControl><Input placeholder="e.g., S1001" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={studentForm.control} name="classId" render={({ field }) => (
+                        <FormField control={studentForm.control} name="classId" render={({ field }) => ( // classId stores _id of the class
                             <FormItem>
                                 <FormLabel>Assign to Class</FormLabel>
                                 <Select 
                                     onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)} 
                                     value={field.value || ""} 
-                                    disabled={isSubmittingStudent || availableClassNames.length === 0}
+                                    disabled={isSubmittingStudent || managedClasses.length === 0}
                                 >
                                     <FormControl><SelectTrigger>
-                                        <SelectValue placeholder={availableClassNames.length > 0 ? "Select class" : "No classes available"} />
+                                        <SelectValue placeholder={managedClasses.length > 0 ? "Select class" : "No classes available"} />
                                     </SelectTrigger></FormControl>
                                     <SelectContent>
                                         <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
-                                        {availableClassNames.filter(Boolean).map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
+                                        {managedClasses.map((cls)=>(<SelectItem key={cls._id} value={cls._id.toString()}>{cls.name}</SelectItem>))}
                                     </SelectContent>
                                 </Select>
-                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
+                                {managedClasses.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
                                 {calculatedTuitionFee !== null && (
                                     <FormDescription className="text-xs pt-1">
                                         Annual Tuition Fee: <span className="font-sans">₹</span>{calculatedTuitionFee.toLocaleString()}
@@ -602,24 +613,24 @@ export default function AdminUserManagementPage() {
                         <FormField control={teacherForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Jane Teacher" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={teacherForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="teacher@example.com" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={teacherForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={teacherForm.control} name="classId" render={({ field }) => (
+                        <FormField control={teacherForm.control} name="classId" render={({ field }) => ( // classId stores _id of the class
                             <FormItem>
                                 <FormLabel>Assign as Class Teacher (Optional)</FormLabel>
                                 <Select 
                                     onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)} 
                                     value={field.value || ""} 
-                                    disabled={isSubmittingTeacher || availableClassNames.length === 0}
+                                    disabled={isSubmittingTeacher || managedClasses.length === 0}
                                 >
                                     <FormControl><SelectTrigger>
-                                        <SelectValue placeholder={availableClassNames.length > 0 ? "Select class if class teacher" : "No classes available"} />
+                                        <SelectValue placeholder={managedClasses.length > 0 ? "Select class if class teacher" : "No classes available"} />
                                     </SelectTrigger></FormControl>
                                     <SelectContent>
                                         <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
-                                        {availableClassNames.filter(Boolean).map((cn)=>(<SelectItem key={cn} value={cn}>{cn}</SelectItem>))}
+                                        {managedClasses.map((cls)=>(<SelectItem key={cls._id} value={cls._id.toString()}>{cls.name}</SelectItem>))}
                                     </SelectContent>
                                 </Select>
                                 <FormDescription className="text-xs">Assigning here makes them the primary class teacher for attendance.</FormDescription>
-                                {availableClassNames.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
+                                {managedClasses.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
                                 <FormMessage/>
                             </FormItem>
                         )}/>
@@ -660,7 +671,7 @@ export default function AdminUserManagementPage() {
                       {user.role}
                     </span>
                   </TableCell>
-                  <TableCell>{user.classId || 'N/A'}</TableCell>
+                  <TableCell>{getClassNameFromId(user.classId)}</TableCell>
                   <TableCell>{user.busRouteLocation ? `${user.busRouteLocation} (${user.busClassCategory || 'N/A'})` : 'N/A'}</TableCell>
                   <TableCell>{user.createdAt ? format(new Date(user.createdAt as string), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">

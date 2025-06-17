@@ -14,7 +14,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { submitAttendance } from "@/app/actions/attendance";
 import { getStudentsByClass } from "@/app/actions/schoolUsers";
-import { getSchoolClasses } from "@/app/actions/classes"; // To fetch class details
+import { getClassDetailsById } from "@/app/actions/classes"; 
 import type { AttendanceEntry, AttendanceStatus, AttendanceSubmissionPayload } from "@/types/attendance";
 import type { AuthUser } from "@/types/user";
 import type { SchoolClass } from "@/types/classes";
@@ -56,48 +56,46 @@ export default function TeacherAttendancePage() {
   }, [toast]); 
 
   const fetchClassDetailsAndStudents = useCallback(async () => {
-    if (!authUser || !authUser.schoolId || !authUser.classId) {
+    if (!authUser || !authUser.schoolId || !authUser.classId) { // authUser.classId should be the class _id
       setAssignedClassDetails(null);
       setStudentAttendance([]);
       setIsLoadingClassDetails(false);
       setIsLoadingStudents(false);
       if (authUser && !authUser.classId) {
-        console.log("TeacherAttendancePage: fetchClassDetails - authUser.classId is missing.");
+        console.log("TeacherAttendancePage: fetchClassDetails - authUser.classId (expected class _id) is missing.");
       }
       return;
     }
 
     setIsLoadingClassDetails(true);
-    const classesResult = await getSchoolClasses(authUser.schoolId.toString());
-    if (classesResult.success && classesResult.classes) {
-      const foundClass = classesResult.classes.find(cls => cls._id === authUser.classId);
-      if (foundClass) {
-        setAssignedClassDetails(foundClass);
-        // Now fetch students for this class
-        setIsLoadingStudents(true);
-        const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), foundClass.name);
-        if (studentsResult.success && studentsResult.users) {
-          const studentsForAttendance: AttendanceEntry[] = studentsResult.users.map(student => ({
-            studentId: student._id!.toString(),
-            studentName: student.name || 'Unknown Student',
-            status: 'present' as AttendanceStatus, 
-          }));
-          setStudentAttendance(studentsForAttendance);
-          if (studentsForAttendance.length === 0) {
-            toast({ title: "No Students", description: `No students found in your assigned class: ${foundClass.name}. Please contact admin.` });
-          }
-        } else {
-          toast({ variant: "destructive", title: "Error Loading Students", description: studentsResult.message || "Could not fetch students." });
-          setStudentAttendance([]);
+    // Fetch the specific class details using classId from authUser
+    const classResult = await getClassDetailsById(authUser.classId, authUser.schoolId.toString());
+
+    if (classResult.success && classResult.classDetails) {
+      const foundClass = classResult.classDetails;
+      setAssignedClassDetails(foundClass);
+      
+      // Now fetch students for this class using its _id
+      setIsLoadingStudents(true);
+      // Use foundClass._id which is the correct class ID
+      const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), foundClass._id); 
+      if (studentsResult.success && studentsResult.users) {
+        const studentsForAttendance: AttendanceEntry[] = studentsResult.users.map(student => ({
+          studentId: student._id!.toString(),
+          studentName: student.name || 'Unknown Student',
+          status: 'present' as AttendanceStatus, 
+        }));
+        setStudentAttendance(studentsForAttendance);
+        if (studentsForAttendance.length === 0) {
+          toast({ title: "No Students", description: `No students found in your assigned class: ${foundClass.name}. Please contact admin.` });
         }
-        setIsLoadingStudents(false);
       } else {
-        toast({ variant: "destructive", title: "Class Not Found", description: "Your assigned class details could not be found. Contact admin." });
-        setAssignedClassDetails(null);
+        toast({ variant: "destructive", title: "Error Loading Students", description: studentsResult.message || "Could not fetch students." });
         setStudentAttendance([]);
       }
+      setIsLoadingStudents(false);
     } else {
-      toast({ variant: "destructive", title: "Error Loading Classes", description: classesResult.message || "Could not fetch class list." });
+      toast({ variant: "destructive", title: "Class Not Found", description: `Your assigned class (ID: ${authUser.classId}) details could not be found. Contact admin.` });
       setAssignedClassDetails(null);
       setStudentAttendance([]);
     }
@@ -137,7 +135,7 @@ export default function TeacherAttendancePage() {
     setIsSubmitting(true);
 
     const payload: AttendanceSubmissionPayload = {
-      classId: authUser.classId, // This is the actual Class _id
+      classId: assignedClassDetails._id, // Use the actual _id of the class
       className: assignedClassDetails.name, 
       schoolId: authUser.schoolId.toString(),
       date: attendanceDate,

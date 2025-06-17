@@ -110,11 +110,10 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
 
   const isSubjectEditableForTeacher = (subjectName: string): boolean => {
     if (isTeacher) {
-      // For "Science" on the back page, if teacher teaches "Science" on front, they can edit both Physics and Biology.
       if ((subjectName === "Physics" || subjectName === "Biology") && editableSubjects.includes("Science")) return true;
       return editableSubjects.includes(subjectName);
     }
-    return false; // Only teachers can edit their assigned subjects
+    return false; 
   };
 
   const calculateRowDerivedData = (rowData: SARowData, rowIndex: number) => {
@@ -180,6 +179,9 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const totalWorkingDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month.workingDays || 0), 0);
   const totalPresentDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month.presentDays || 0), 0);
   const attendancePercentage = totalWorkingDays > 0 ? Math.round((totalPresentDays / totalWorkingDays) * 100) : 0;
+  
+  const isPageReadOnlyForAdmin = isAdmin && saData.some(row => row.faTotal200M !== null); // Check if any data loaded
+
 
   return (
     <>
@@ -291,7 +293,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             {saData.map((rowData, rowIndex) => {
                 const derived = calculateRowDerivedData(rowData, rowIndex);
                 const faTotal200M_display = rowData.faTotal200M ?? '';
-                const isSaMarkInputDisabled = isStudent || isAdmin || (isTeacher && !isSubjectEditableForTeacher(rowData.subjectName === "Science" ? "Science" : rowData.subjectName));
+                const isSaMarkInputDisabled = isStudent || isPageReadOnlyForAdmin || (isTeacher && !isSubjectEditableForTeacher(rowData.subjectName === "Science" ? "Science" : rowData.subjectName));
                 
                 const faAvg50 = (rowData.faTotal200M || 0) / 4;
                 const sa1_50_for_avg = (derived.sa1Total > 80 ? 80 : derived.sa1Total) * (50/80);
@@ -330,7 +332,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           </tbody>
         </table>
 
-        <p><strong>Final Grade in Curricular Areas:</strong> <input type="text" value={finalOverallGradeInput ?? calculateOverallFinalGrade()} onChange={e => onFinalOverallGradeInputChange(e.target.value)} className="final-grade-input calculated" readOnly={isStudent || isTeacher || isAdmin} disabled={isStudent || isTeacher || isAdmin} /></p>
+        <p><strong>Final Grade in Curricular Areas:</strong> <input type="text" value={finalOverallGradeInput ?? calculateOverallFinalGrade()} onChange={e => onFinalOverallGradeInputChange(e.target.value)} className="final-grade-input calculated" readOnly={isStudent || isTeacher || isPageReadOnlyForAdmin} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></p>
         <p className="small-note">*(Internal 20M) = FA-1, FA-2, FA-3, FA-4 (Total 200M), SA-1 (80M), SA-2 (80M). Grand Total 360M. Reduced to 20 Marks (360/18 = 20)</p>
         
         <table className="attendance-table">
@@ -345,27 +347,27 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             <tr>
               <td>No. of Working days</td>
               {attendanceData.slice(0,11).map((month, index) => (
-                <td key={`wd-${index}`}><input type="number" value={month.workingDays ?? ''} onChange={e => onAttendanceDataChange(index, 'workingDays', e.target.value)} disabled={isStudent || isTeacher || isAdmin} /></td>
+                <td key={`wd-${index}`}><input type="number" value={month.workingDays ?? ''} onChange={e => onAttendanceDataChange(index, 'workingDays', e.target.value)} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></td>
               ))}
               <td className="calculated">{totalWorkingDays}</td>
               <td rowSpan={2} className="calculated">{attendancePercentage}%</td>
-              <td rowSpan={2}><input type="text" style={{width:'50px'}} disabled={isStudent || isTeacher || isAdmin}/></td>
+              <td rowSpan={2}><input type="text" style={{width:'50px'}} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin}/></td>
             </tr>
             <tr>
               <td>No. of days present</td>
               {attendanceData.slice(0,11).map((month, index) => (
-                <td key={`pd-${index}`}><input type="number" value={month.presentDays ?? ''} onChange={e => onAttendanceDataChange(index, 'presentDays', e.target.value)} disabled={isStudent || isTeacher || isAdmin}/></td>
+                <td key={`pd-${index}`}><input type="number" value={month.presentDays ?? ''} onChange={e => onAttendanceDataChange(index, 'presentDays', e.target.value)} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin}/></td>
               ))}
               <td className="calculated">{totalPresentDays}</td>
             </tr>
             <tr>
-              <td>Sign. of Class Teacher</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={isStudent || isTeacher || isAdmin} /></td><td></td><td></td><th>Final Grade</th>
+              <td>Sign. of Class Teacher</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></td><td></td><td></td><th>Final Grade</th>
             </tr>
              <tr>
-              <td>Sign. of Headmaster</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={isStudent || isTeacher || isAdmin} /></td><td></td><td></td><th>School Re Opening</th>
+              <td>Sign. of Headmaster</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></td><td></td><td></td><th>School Re Opening</th>
             </tr>
              <tr>
-              <td>Sign. of Parent</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={isStudent || isTeacher || isAdmin} /></td><td></td><td></td><td><input type="text" style={{width:'100%'}} disabled={isStudent || isTeacher || isAdmin}/></td>
+              <td>Sign. of Parent</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></td><td></td><td></td><td><input type="text" style={{width:'100%'}} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin}/></td>
             </tr>
           </tbody>
         </table>
@@ -403,3 +405,4 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
 };
 
 export default CBSEStateBack;
+

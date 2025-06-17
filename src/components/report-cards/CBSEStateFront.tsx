@@ -123,19 +123,16 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   const isStudent = currentUserRole === 'student';
   const isAdmin = currentUserRole === 'admin';
 
-  // Student data fields are non-editable if student data is loaded (studentIdNo is present)
-  // or if the user is a teacher or student. Only admin can edit initially before loading.
-  const isStudentDataFieldDisabled = (!!studentData.studentIdNo) || isTeacher || isStudent;
-
-  const isAcademicYearDisabled = isTeacher || isStudent || (isAdmin && !!studentData.studentIdNo);
-  const isSecondLangDisabled = isTeacher || isStudent || (isAdmin && !!studentData.studentIdNo);
+  const isStudentDataFieldDisabled = isStudent || isTeacher || (isAdmin && !!studentData.studentIdNo);
+  const isAcademicYearDisabled = isStudent || isTeacher || (isAdmin && !!studentData.studentIdNo);
+  const isSecondLangDisabled = isStudent || isTeacher || (isAdmin && !!studentData.studentIdNo);
 
 
   const isSubjectEditableForTeacher = (subjectName: string): boolean => {
     if (isTeacher) {
       return editableSubjects.includes(subjectName);
     }
-    return false; // Only teachers can edit their assigned subjects, admin/student cannot.
+    return false; 
   };
 
 
@@ -363,7 +360,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
           <tbody>
             {(academicSubjects || []).map((subject, SIndex) => { 
               const subjectIdentifier = subject.name; 
-              const isFaMarkInputDisabled = isStudent || isAdmin || (isTeacher && !isSubjectEditableForTeacher(subjectIdentifier));
+              const isFaMarkInputDisabled = isStudent || (isAdmin && !!studentData.studentIdNo) || (isTeacher && !isSubjectEditableForTeacher(subjectIdentifier));
               const subjectFaData = faMarks[subjectIdentifier] || { 
                 fa1: { tool1: null, tool2: null, tool3: null, tool4: null }, 
                 fa2: { tool1: null, tool2: null, tool3: null, tool4: null }, 
@@ -430,7 +427,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                 {coCurricularSubjects.map((subject, SIndex) => {
                   const subjectCoData = coMarks[SIndex] || { sa1Max: 50, sa1Marks: null, sa2Max: 50, sa2Marks: null, sa3Max: 50, sa3Marks: null };
                   const coResults = calculateCoResults(SIndex);
-                  const isCoCurricularInputDisabled = isStudent || isTeacher || isAdmin;
+                  const isCoCurricularInputDisabled = isStudent || isTeacher || (isAdmin && !!studentData.studentIdNo);
                   return (
                   <tr key={subject}>
                     <td>{SIndex + 1}</td>
@@ -518,3 +515,4 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 };
 
 export default CBSEStateFront;
+

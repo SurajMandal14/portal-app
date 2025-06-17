@@ -55,7 +55,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
       password: hashedPassword,
       role: role as UserRole,
       schoolId: userSchoolId,
-      classId: (classId && classId.trim() !== "") ? classId.trim() : undefined,
+      classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined, // Store class _id string
       admissionId: role === 'student' ? (admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined) : undefined,
       busRouteLocation: role === 'student' ? (busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined) : undefined,
       busClassCategory: role === 'student' ? (busClassCategory && busClassCategory.trim() !== "" ? busClassCategory.trim() : undefined) : undefined,
@@ -119,7 +119,7 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         ...userWithoutPassword,
         _id: user._id.toString(),
         schoolId: user.schoolId?.toString(),
-        classId: user.classId || undefined,
+        classId: user.classId || undefined, // classId is already string or undefined
         admissionId: user.admissionId || undefined,
         busRouteLocation: user.busRouteLocation || undefined,
         busClassCategory: user.busClassCategory || undefined,
@@ -186,7 +186,7 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
     const updateData: Partial<Omit<User, '_id' | 'role' | 'createdAt'>> & { role?: UserRole; updatedAt: Date } = {
       name,
       email,
-      classId: (classId && classId.trim() !== "") ? classId.trim() : undefined,
+      classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined, // Store class _id string
       updatedAt: new Date(),
     };
 
@@ -240,7 +240,7 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         ...userWithoutPassword,
         _id: updatedUserDoc._id.toString(),
         schoolId: updatedUserDoc.schoolId?.toString(),
-        classId: updatedUserDoc.classId || undefined,
+        classId: updatedUserDoc.classId || undefined, // classId is already string or undefined
         admissionId: updatedUserDoc.admissionId || undefined,
         busRouteLocation: updatedUserDoc.busRouteLocation || undefined,
         busClassCategory: updatedUserDoc.busClassCategory || undefined,
@@ -291,13 +291,10 @@ export async function deleteSchoolUser(userId: string, schoolId: string): Promis
   }
 }
 
-export async function getStudentsByClass(schoolId: string, className: string): Promise<GetSchoolUsersResult> {
+export async function getStudentsByClass(schoolId: string, classId: string): Promise<GetSchoolUsersResult> {
   try {
-    if (!ObjectId.isValid(schoolId)) {
-      return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.' };
-    }
-    if (!className || className.trim() === "") {
-        return { success: false, message: 'Class name must be provided.', error: 'Invalid class name.' };
+    if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(classId)) {
+      return { success: false, message: 'Invalid School or Class ID format.', error: 'Invalid ID format.' };
     }
 
     const { db } = await connectToDatabase();
@@ -305,7 +302,7 @@ export async function getStudentsByClass(schoolId: string, className: string): P
 
     const studentsFromDb = await usersCollection.find({
       schoolId: new ObjectId(schoolId) as any,
-      classId: className,
+      classId: classId, // classId is now the _id (string)
       role: 'student'
     }).project({ password: 0 }).sort({ name: 1 }).toArray();
 
@@ -371,13 +368,10 @@ export interface GetStudentCountByClassResult {
   message?: string;
 }
 
-export async function getStudentCountByClass(schoolId: string, className: string): Promise<GetStudentCountByClassResult> {
+export async function getStudentCountByClass(schoolId: string, classId: string): Promise<GetStudentCountByClassResult> {
   try {
-    if (!ObjectId.isValid(schoolId)) {
-      return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.' };
-    }
-    if (!className || className.trim() === "") {
-      return { success: false, message: 'Class name must be provided.', error: 'Invalid class name.' };
+    if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(classId)) {
+      return { success: false, message: 'Invalid School or Class ID format.', error: 'Invalid ID.' };
     }
 
     const { db } = await connectToDatabase();
@@ -385,7 +379,7 @@ export async function getStudentCountByClass(schoolId: string, className: string
 
     const count = await usersCollection.countDocuments({
       schoolId: new ObjectId(schoolId) as any,
-      classId: className,
+      classId: classId, // classId is the _id (string)
       role: 'student'
     });
 
@@ -398,11 +392,11 @@ export async function getStudentCountByClass(schoolId: string, className: string
 }
 
 export interface StudentDetailsForReportCard {
-    _id: string; // Actual MongoDB _id as string
+    _id: string; // Actual MongoDB _id as string (student's _id)
     name: string;
     admissionId?: string;
-    classId?: string; 
-    schoolId?: string;
+    classId?: string; // Class _id as string
+    schoolId?: string; // School _id as string
 }
 export interface GetStudentDetailsForReportCardResult {
   success: boolean;
@@ -434,10 +428,10 @@ export async function getStudentDetailsForReportCard(admissionIdQuery: string, s
     }
 
     const studentDetails: StudentDetailsForReportCard = {
-      _id: student._id.toString(), // This is the actual MongoDB _id
+      _id: student._id.toString(), // This is the actual MongoDB _id of the student
       name: student.name,
       admissionId: student.admissionId,
-      classId: student.classId, 
+      classId: student.classId, // This should be the class _id string
       schoolId: student.schoolId?.toString(),
     };
 
@@ -448,3 +442,4 @@ export async function getStudentDetailsForReportCard(admissionIdQuery: string, s
     return { success: false, error: errorMessage, message: 'Failed to fetch student details for report card.' };
   }
 }
+
