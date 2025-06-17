@@ -110,7 +110,10 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
 
   const isSubjectEditableForTeacher = (subjectName: string): boolean => {
     if (isTeacher) {
-      if ((subjectName === "Physics" || subjectName === "Biology") && editableSubjects.includes("Science")) return true;
+      // Special handling for Science: if teacher teaches Physics or Biology, they can edit Science SA row
+      if (subjectName === "Science" && (editableSubjects.includes("Physics") || editableSubjects.includes("Biology"))) {
+        return true;
+      }
       return editableSubjects.includes(subjectName);
     }
     return false; 
@@ -134,7 +137,9 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
     const sa1ForCalc = sa1Total > 80 ? 80 : sa1Total; 
     const sa2ForCalc = sa2Total > 80 ? 80 : sa2Total; 
 
-    const faSa1Total = faTotal200M_val + sa1ForCalc; 
+    const faAvg50 = faTotal200M_val / 4; // Average of FA out of 50M each (200M total / 4 FAs)
+    const sa1_50_for_avg = sa1ForCalc * (50/80); // SA1 converted to 50M for averaging with FA
+    const faAvgPlusSa1_100M = Math.round(faAvg50 + sa1_50_for_avg); // FA Avg + SA1 (Max 100M)
     
     const internalMarks = Math.round((faTotal200M_val + sa1ForCalc + sa2ForCalc) / 18);
 
@@ -144,7 +149,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
     return {
       sa1Total, sa1Grade,
       sa2Total, sa2Grade,
-      faSa1Total, internalMarks,
+      faAvgPlusSa1_100M, internalMarks,
       finalTotal100M, finalGrade
     };
   };
@@ -180,7 +185,8 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const totalPresentDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month.presentDays || 0), 0);
   const attendancePercentage = totalWorkingDays > 0 ? Math.round((totalPresentDays / totalWorkingDays) * 100) : 0;
   
-  const isPageReadOnlyForAdmin = isAdmin && saData.some(row => row.faTotal200M !== null); // Check if any data loaded
+  // Admin can only edit if data is not yet loaded/saved. Once data exists (e.g., faTotal200M is populated), it's read-only for admin.
+  const isPageReadOnlyForAdmin = isAdmin && saData.some(row => row.faTotal200M !== null);
 
 
   return (
@@ -293,17 +299,16 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             {saData.map((rowData, rowIndex) => {
                 const derived = calculateRowDerivedData(rowData, rowIndex);
                 const faTotal200M_display = rowData.faTotal200M ?? '';
-                const isSaMarkInputDisabled = isStudent || isPageReadOnlyForAdmin || (isTeacher && !isSubjectEditableForTeacher(rowData.subjectName === "Science" ? "Science" : rowData.subjectName));
                 
-                const faAvg50 = (rowData.faTotal200M || 0) / 4;
-                const sa1_50_for_avg = (derived.sa1Total > 80 ? 80 : derived.sa1Total) * (50/80);
-                const faAvgPlusSa1_100M = Math.round(faAvg50 + sa1_50_for_avg);
+                const isSaMarkInputDisabled = isStudent || isPageReadOnlyForAdmin || (isTeacher && !isSubjectEditableForTeacher(rowData.subjectName));
+                const isFaTotalInputDisabled = isStudent || isPageReadOnlyForAdmin || (isTeacher && !isSubjectEditableForTeacher(rowData.subjectName));
+
 
                 const isFirstPaperOfSubject = rowIndex === 0 || saData[rowIndex-1].subjectName !== rowData.subjectName;
                 const subjectPaperCount = saData.filter(r => r.subjectName === rowData.subjectName).length;
 
                 return (
-                  <tr key={`${rowData.subjectName}-${rowData.paper}`}>
+                  <tr key={`${rowData.subjectName}-${rowData.paper}-${rowIndex}`}>
                     {isFirstPaperOfSubject && <td rowSpan={subjectPaperCount} className="subject-cell">{rowData.subjectName}</td>}
                     <td className="paper-cell">{rowData.paper}</td>
                     
@@ -319,9 +324,9 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
                     <td className="sa2-total calculated">{derived.sa2Total}</td>
                     <td className="sa2-grade calculated">{derived.sa2Grade}</td>
 
-                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} min="0" max="200" onChange={e => onFaTotalChange(rowIndex, e.target.value)} disabled={isSaMarkInputDisabled} /></td>
+                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} min="0" max="200" onChange={e => onFaTotalChange(rowIndex, e.target.value)} disabled={isFaTotalInputDisabled} /></td>
                     <td className="calculated">{derived.sa1Total > 80 ? 80 : derived.sa1Total}</td>
-                    <td className="calculated">{faAvgPlusSa1_100M}</td>
+                    <td className="calculated">{derived.faAvgPlusSa1_100M}</td>
                     <td className="internal calculated">{derived.internalMarks}</td>
                     <td className="calculated">{derived.sa2Total > 80 ? 80 : derived.sa2Total}</td>
                     <td className="final-total calculated">{derived.finalTotal100M}</td>
