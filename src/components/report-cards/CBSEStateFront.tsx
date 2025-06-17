@@ -121,16 +121,21 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 
   const isTeacher = currentUserRole === 'teacher';
   const isStudent = currentUserRole === 'student';
-  const isStudentDataEditable = currentUserRole === 'admin'; // Only admin can edit student details section
-  const isCoCurricularEditable = currentUserRole === 'admin'; // Only admin can edit co-curricular
-  const isAcademicYearEditable = currentUserRole === 'admin'; // Only admin can edit academic year
-  const isSecondLangEditable = currentUserRole === 'admin'; // Only admin can edit second language
+  const isAdmin = currentUserRole === 'admin';
+
+  // Student data fields are non-editable if student data is loaded (studentIdNo is present)
+  // or if the user is a teacher or student. Only admin can edit initially before loading.
+  const isStudentDataFieldDisabled = (!!studentData.studentIdNo) || isTeacher || isStudent;
+
+  const isAcademicYearDisabled = isTeacher || isStudent || (isAdmin && !!studentData.studentIdNo);
+  const isSecondLangDisabled = isTeacher || isStudent || (isAdmin && !!studentData.studentIdNo);
+
 
   const isSubjectEditableForTeacher = (subjectName: string): boolean => {
     if (isTeacher) {
       return editableSubjects.includes(subjectName);
     }
-    return true; // Admins can edit all
+    return false; // Only teachers can edit their assigned subjects, admin/student cannot.
   };
 
 
@@ -245,7 +250,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
           color: #000; 
         }
         .report-card-container input:disabled, .report-card-container select:disabled {
-          background-color: #f0f0f0 !important; /* Ensure disabled style applies */
+          background-color: #f0f0f0 !important; 
           color: #555 !important;
           cursor: not-allowed;
           border: 1px solid #ddd !important;
@@ -277,16 +282,16 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
         .report-card-container .academic-year-input {
             font-weight: bold;
             font-size: 14px; 
-            border: 1px solid #ccc; /* Add border for consistency when editable */
+            border: 1px solid #ccc; 
             text-align: center;
             width: 100px; 
             display: inline-block; 
             vertical-align: baseline;
         }
         .report-card-container .academic-year-input:disabled {
-            border: none; /* Remove border when disabled for cleaner look */
+            border: none; 
             background-color: transparent !important;
-            color: #000 !important; /* Keep text black */
+            color: #000 !important; 
         }
       `}</style>
       <div className="report-card-container">
@@ -297,37 +302,37 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
               value={academicYear} 
               onChange={e => onAcademicYearChange(e.target.value)}
               placeholder="20XX-20YY"
-              disabled={!isAcademicYearEditable || isStudent}
+              disabled={isAcademicYearDisabled}
             />
         </div>
         <div className="subtitle">CBSE STATE</div>
 
         <table className="header-table"><tbody>
             <tr>
-              <td colSpan={4}>U-DISE Code & School Name : <input type="text" value={studentData.udiseCodeSchoolName || ""} onChange={e => onStudentDataChange('udiseCodeSchoolName', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent} /></td>
+              <td colSpan={4}>U-DISE Code & School Name : <input type="text" value={studentData.udiseCodeSchoolName || ""} onChange={e => onStudentDataChange('udiseCodeSchoolName', e.target.value)} disabled={isStudentDataFieldDisabled} /></td>
             </tr>
             <tr>
-              <td>Student Name: <input type="text" value={studentData.studentName || ""} onChange={e => onStudentDataChange('studentName', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-              <td>Father Name: <input type="text" value={studentData.fatherName || ""} onChange={e => onStudentDataChange('fatherName', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-              <td>Mother Name: <input type="text" value={studentData.motherName || ""} onChange={e => onStudentDataChange('motherName', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-               <td>Roll No: <input type="text" value={studentData.rollNo || ""} onChange={e => onStudentDataChange('rollNo', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
+              <td>Student Name: <input type="text" value={studentData.studentName || ""} onChange={e => onStudentDataChange('studentName', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+              <td>Father Name: <input type="text" value={studentData.fatherName || ""} onChange={e => onStudentDataChange('fatherName', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+              <td>Mother Name: <input type="text" value={studentData.motherName || ""} onChange={e => onStudentDataChange('motherName', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+               <td>Roll No: <input type="text" value={studentData.rollNo || ""} onChange={e => onStudentDataChange('rollNo', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
             </tr>
             <tr>
-              <td>Class: <input type="text" value={studentData.class || ""} onChange={e => onStudentDataChange('class', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-              <td>Section: <input type="text" value={studentData.section || ""} onChange={e => onStudentDataChange('section', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-              <td>Student ID No: <input type="text" value={studentData.studentIdNo || ""} onChange={e => onStudentDataChange('studentIdNo', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-              <td>Admn. No: <input type="text" value={studentData.admissionNo || ""} onChange={e => onStudentDataChange('admissionNo', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
+              <td>Class: <input type="text" value={studentData.class || ""} onChange={e => onStudentDataChange('class', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+              <td>Section: <input type="text" value={studentData.section || ""} onChange={e => onStudentDataChange('section', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+              <td>Student ID No: <input type="text" value={studentData.studentIdNo || ""} onChange={e => onStudentDataChange('studentIdNo', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+              <td>Admn. No: <input type="text" value={studentData.admissionNo || ""} onChange={e => onStudentDataChange('admissionNo', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
             </tr>
             <tr>
-              <td>Medium: <input type="text" value={studentData.medium || ""} onChange={e => onStudentDataChange('medium', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-              <td>Date of Birth: <input type="text" value={studentData.dob || ""} onChange={e => onStudentDataChange('dob', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-              <td>Exam No: <input type="text" value={studentData.examNo || ""} onChange={e => onStudentDataChange('examNo', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
-               <td>Aadhar No: <input type="text" value={studentData.aadharNo || ""} onChange={e => onStudentDataChange('aadharNo', e.target.value)} disabled={!isStudentDataEditable || isTeacher || isStudent}/></td>
+              <td>Medium: <input type="text" value={studentData.medium || ""} onChange={e => onStudentDataChange('medium', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+              <td>Date of Birth: <input type="text" value={studentData.dob || ""} onChange={e => onStudentDataChange('dob', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+              <td>Exam No: <input type="text" value={studentData.examNo || ""} onChange={e => onStudentDataChange('examNo', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
+               <td>Aadhar No: <input type="text" value={studentData.aadharNo || ""} onChange={e => onStudentDataChange('aadharNo', e.target.value)} disabled={isStudentDataFieldDisabled}/></td>
             </tr>
             <tr>
               <td colSpan={4}>
                 Second Language:
-                <select value={secondLanguage} onChange={(e) => onSecondLanguageChange(e.target.value as 'Hindi' | 'Telugu')} disabled={!isSecondLangEditable || isStudent}>
+                <select value={secondLanguage} onChange={(e) => onSecondLanguageChange(e.target.value as 'Hindi' | 'Telugu')} disabled={isSecondLangDisabled}>
                   <option value="Hindi">Hindi</option>
                   <option value="Telugu">Telugu</option>
                 </select>
@@ -358,7 +363,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
           <tbody>
             {(academicSubjects || []).map((subject, SIndex) => { 
               const subjectIdentifier = subject.name; 
-              const isFaEditableForThisSubject = isStudent ? false : (isTeacher ? isSubjectEditableForTeacher(subjectIdentifier) : true);
+              const isFaMarkInputDisabled = isStudent || isAdmin || (isTeacher && !isSubjectEditableForTeacher(subjectIdentifier));
               const subjectFaData = faMarks[subjectIdentifier] || { 
                 fa1: { tool1: null, tool2: null, tool3: null, tool4: null }, 
                 fa2: { tool1: null, tool2: null, tool3: null, tool4: null }, 
@@ -382,7 +387,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                                 onChange={(e) => onFaMarksChange(subjectIdentifier, faPeriodKey, toolKey, e.target.value)}
                                 max={toolKey === 'tool4' ? 20 : 10}
                                 min="0"
-                                disabled={!isFaEditableForThisSubject}
+                                disabled={isFaMarkInputDisabled}
                             />
                             </td>
                         ))}
@@ -425,6 +430,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                 {coCurricularSubjects.map((subject, SIndex) => {
                   const subjectCoData = coMarks[SIndex] || { sa1Max: 50, sa1Marks: null, sa2Max: 50, sa2Marks: null, sa3Max: 50, sa3Marks: null };
                   const coResults = calculateCoResults(SIndex);
+                  const isCoCurricularInputDisabled = isStudent || isTeacher || isAdmin;
                   return (
                   <tr key={subject}>
                     <td>{SIndex + 1}</td>
@@ -437,7 +443,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                             value={subjectCoData[`${saPeriodKey}Max`] ?? ''}
                             onChange={e => onCoMarksChange(SIndex, saPeriodKey, 'Max', e.target.value)}
                             min="1"
-                            disabled={!isCoCurricularEditable || isTeacher || isStudent}
+                            disabled={isCoCurricularInputDisabled}
                           />
                         </td>
                         <td>
@@ -447,7 +453,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                             onChange={e => onCoMarksChange(SIndex, saPeriodKey, 'Marks', e.target.value)}
                             max={subjectCoData[`${saPeriodKey}Max`] ?? undefined}
                             min="0"
-                            disabled={!isCoCurricularEditable || isTeacher || isStudent}
+                            disabled={isCoCurricularInputDisabled}
                           />
                         </td>
                       </React.Fragment>
@@ -512,4 +518,3 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 };
 
 export default CBSEStateFront;
-

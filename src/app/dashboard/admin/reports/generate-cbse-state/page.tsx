@@ -29,12 +29,14 @@ import { getClassDetailsById } from '@/app/actions/classes';
 import { getSchoolById } from '@/app/actions/schools';
 import type { SchoolClassSubject } from '@/types/classes';
 import type { School } from '@/types/school';
+import { ObjectId } from 'mongodb'; // For checking validity, though actions handle conversion
+
 
 // --- Defaults for Front Side ---
 const coCurricularSubjectsListFront = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."];
 
 const getDefaultFaMarksEntryFront = (): FrontMarksEntry => ({ tool1: null, tool2: null, tool3: null, tool4: null });
-const getDefaultSubjectFaDataFront = (): Record<string, FrontSubjectFAData> => ({}); // Changed to empty object
+const getDefaultSubjectFaDataFront = (): Record<string, FrontSubjectFAData> => ({});
 const getDefaultCoCurricularSaDataFront = (): FrontCoCurricularSAData => ({
   sa1Max: 50, sa1Marks: null, sa2Max: 50, sa2Marks: null, sa3Max: 50, sa3Marks: null,
 });
@@ -46,7 +48,7 @@ const defaultStudentDataFront: FrontStudentData = {
   motherName: '',
   class: '',
   section: '',
-  studentIdNo: '',
+  studentIdNo: '', // This will be populated with actual student _id
   rollNo: '',
   medium: 'English',
   dob: '',
@@ -65,7 +67,7 @@ const getCurrentAcademicYear = (): string => {
   const today = new Date();
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
-  if (currentMonth >= 5) { // June or later
+  if (currentMonth >= 5) { 
     return `${currentYear}-${currentYear + 1}`;
   } else {
     return `${currentYear - 1}-${currentYear}`;
@@ -126,8 +128,12 @@ export default function GenerateCBSEStateReportPage() {
       };
     });
     setFaMarks(newFaMarks);
-    // Reset SA data, which will trigger re-calculation of FA totals on the back
-    setSaData(defaultSaDataBack.map(row => ({ ...row, faTotal200M: null })));
+    setSaData(prevSaData => 
+        defaultSaDataBack.map(defaultRow => ({
+            ...defaultRow,
+            faTotal200M: calculateFaTotal200MForRow(defaultRow.subjectName)
+        }))
+    );
   }, []);
 
 
@@ -142,60 +148,73 @@ export default function GenerateCBSEStateReportPage() {
     }
 
     setIsLoadingStudentAndClassData(true);
+    // Reset all states before loading new data
     setLoadedStudent(null);
     setLoadedClassSubjects([]);
     setTeacherEditableSubjects([]);
+    setLoadedSchool(null);
     setStudentData(defaultStudentDataFront);
     setFaMarks(getDefaultSubjectFaDataFront());
     setSaData(defaultSaDataBack); 
     setCoMarks(defaultCoMarksFront);
     setAttendanceData(defaultAttendanceDataBack);
     setFinalOverallGradeInput(null);
-    setFrontAcademicYear(getCurrentAcademicYear()); // Reset academic year
+    setFrontAcademicYear(getCurrentAcademicYear());
 
 
     try {
       const studentRes = await getStudentDetailsForReportCard(admissionIdInput, authUser.schoolId.toString());
+      
       if (!studentRes.success || !studentRes.student) {
-        toast({ variant: "destructive", title: "Student Not Found", description: studentRes.message || "Could not find student with that Admission ID." });
+        toast({ variant: "destructive", title: "Student Not Found", description: studentRes.message || `Could not find student with Admission ID: ${admissionIdInput}.` });
         setIsLoadingStudentAndClassData(false);
         return;
       }
       setLoadedStudent(studentRes.student);
       
-      const schoolRes = await getSchoolById(studentRes.student.schoolId!);
+      if (!studentRes.student.classId) {
+        toast({ variant: "destructive", title: "Class Assignment Missing", description: `Student ${studentRes.student.name} is not assigned to any class.` });
+        setIsLoadingStudentAndClassData(false);
+        return;
+      }
+      // ObjectId.isValid can be used for client-side pre-check if desired, but actions should handle it.
+      // if (!ObjectId.isValid(studentRes.student.classId)) {
+      //   toast({ variant: "destructive", title: "Invalid Class ID", description: `Student ${studentRes.student.name}'s assigned class ID is invalid.` });
+      //   setIsLoadingStudentAndClassData(false);
+      //   return;
+      // }
+
+
+      const schoolRes = await getSchoolById(studentRes.student.schoolId!); // studentRes.student.schoolId should be valid if student was found
       if(schoolRes.success && schoolRes.school) {
         setLoadedSchool(schoolRes.school);
       } else {
         toast({variant: "warning", title: "School Info", description: "Could not load school details for report header."});
       }
 
-      if (studentRes.student.classId) { // classId for student is their actual class _id
-        const classRes = await getClassDetailsById(studentRes.student.classId, studentRes.student.schoolId!);
-        if (classRes.success && classRes.classDetails) {
-          setLoadedClassSubjects(classRes.classDetails.subjects);
-          initializeMarksForSubjects(classRes.classDetails.subjects);
-          
-          if (authUser.role === 'teacher') {
-            const editableSubs = classRes.classDetails.subjects
-              .filter(sub => sub.teacherId === authUser._id)
-              .map(sub => sub.name);
-            setTeacherEditableSubjects(editableSubs);
-          }
-
-          setStudentData(prev => ({
-            ...prev,
-            udiseCodeSchoolName: schoolRes.school?.schoolName || '', 
-            studentName: studentRes.student?.name || '',
-            class: classRes.classDetails.name || '', 
-            studentIdNo: studentRes.student?._id || '', 
-            admissionNo: studentRes.student?.admissionId || '',
-          }));
-        } else {
-          toast({ variant: "destructive", title: "Class Details Error", description: classRes.message || "Could not load class subjects."});
+      const classRes = await getClassDetailsById(studentRes.student.classId, studentRes.student.schoolId!);
+      if (classRes.success && classRes.classDetails) {
+        setLoadedClassSubjects(classRes.classDetails.subjects);
+        initializeMarksForSubjects(classRes.classDetails.subjects);
+        
+        if (authUser.role === 'teacher') {
+          const editableSubs = classRes.classDetails.subjects
+            .filter(sub => sub.teacherId === authUser._id)
+            .map(sub => sub.name);
+          setTeacherEditableSubjects(editableSubs);
         }
+
+        setStudentData(prev => ({
+          ...prev,
+          udiseCodeSchoolName: schoolRes.school?.schoolName || '', 
+          studentName: studentRes.student?.name || '',
+          class: classRes.classDetails.name || '', 
+          studentIdNo: studentRes.student?._id || '', 
+          admissionNo: studentRes.student?.admissionId || '',
+          // Other fields like fatherName, motherName, dob remain manual entry or could be fetched if added to student profile
+        }));
       } else {
-        toast({ variant: "warning", title: "No Class Assigned", description: "This student is not assigned to any class." });
+        toast({ variant: "destructive", title: "Class Details Error", description: classRes.message || `Could not load class details for class ID: ${studentRes.student.classId}.`});
       }
 
     } catch (error) {
@@ -207,10 +226,9 @@ export default function GenerateCBSEStateReportPage() {
   };
 
   const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string): number | null => {
-    // For "Science" on back, sum FA of "Science" on front. Otherwise, direct match.
-    const faSubjectKey = subjectNameForBack === "Physics" || subjectNameForBack === "Biology" ? "Science" : subjectNameForBack;
+    const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
     
-    const subjectFaData = faMarks[faSubjectKey]; // faMarks is Record<string, FrontSubjectFAData>
+    const subjectFaData = faMarks[faSubjectKey];
     if (!subjectFaData) return null;
 
     let overallTotal = 0;
@@ -222,7 +240,6 @@ export default function GenerateCBSEStateReportPage() {
   }, [faMarks]);
 
   useEffect(() => {
-    // Update SA data's FA total when faMarks change
     setSaData(prevSaData => 
       prevSaData.map(row => ({
         ...row,
@@ -317,8 +334,6 @@ export default function GenerateCBSEStateReportPage() {
     ));
   };
 
-  // Function to set final grade already exists, no need for a new one.
-  // setFinalOverallGradeInput will be passed directly.
 
   const handleLogData = () => {
     const formattedFaMarksForLog: FormativeAssessmentEntryForStorage[] = Object.entries(faMarks).map(([subjectName, marksData]) => ({
