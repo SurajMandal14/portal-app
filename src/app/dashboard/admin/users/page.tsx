@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen, DollarSign, Bus, Info, CalendarIcon } from "lucide-react"; // Added CalendarIcon
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen, DollarSign, Bus, Info, CalendarIcon } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
 import {
@@ -29,6 +29,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added missing import
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser } from "@/app/actions/schoolUsers";
@@ -132,7 +133,7 @@ export default function AdminUserManagementPage() {
       if (schoolResult.success && schoolResult.school) {
         setSchoolDetails(schoolResult.school);
         const uniqueLocations = Array.from(new Set(schoolResult.school.busFeeStructures?.map(bfs => bfs.location) || []));
-        setSelectedBusLocations(uniqueLocations.filter(Boolean));
+        setSelectedBusLocations(uniqueLocations.filter(Boolean) as string[]);
       } else {
         toast({ variant: "destructive", title: "Error", description: schoolResult.message || "Failed to load school details." });
         setSchoolDetails(null);
@@ -200,7 +201,7 @@ export default function AdminUserManagementPage() {
       const categories = schoolDetails.busFeeStructures
         .filter(bfs => bfs.location === studentFormBusLocation)
         .map(bfs => bfs.classCategory)
-        .filter(Boolean);
+        .filter(Boolean) as string[];
       setAvailableBusClassCategories(Array.from(new Set(categories)));
       if (!categories.includes(studentForm.getValues("busClassCategory"))) {
         studentForm.setValue("busClassCategory", ""); 
@@ -508,7 +509,7 @@ export default function AdminUserManagementPage() {
                                             <Select onValueChange={field.onChange} value={field.value} disabled={isSubmittingEdit || availableBusClassCategories.length === 0}>
                                                 <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
                                                 <SelectContent>
-                                                     {schoolDetails?.busFeeStructures?.filter(bfs => bfs.location === editForm.getValues("busRouteLocation")).map(bfs => bfs.classCategory).filter((value, index, self) => self.indexOf(value) === index && value).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                                     {schoolDetails?.busFeeStructures?.filter(bfs => bfs.location === editForm.getValues("busRouteLocation")).map(bfs => bfs.classCategory).filter((value, index, self) => self.indexOf(value) === index && value).map(cat => <SelectItem key={cat} value={cat!}>{cat!}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                             <FormMessage />
