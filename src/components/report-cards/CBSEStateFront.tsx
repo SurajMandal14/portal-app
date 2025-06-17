@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import type { SchoolClassSubject } from '@/types/classes'; // Import SchoolClassSubject
+import type { SchoolClassSubject } from '@/types/classes';
 
 // Define interfaces for props and state
 export interface StudentData {
@@ -48,9 +48,9 @@ interface CBSEStateFrontProps {
   studentData: StudentData;
   onStudentDataChange: (field: keyof StudentData, value: string) => void;
   
-  academicSubjects: SchoolClassSubject[]; // Changed from faMarks to accept dynamic subjects
-  faMarks: Record<string, SubjectFAData>; // Changed to be an object keyed by subject identifier
-  onFaMarksChange: (subjectIdentifier: string, faPeriod: keyof SubjectFAData, toolKey: keyof MarksEntry, value: string) => void; // subjectIdentifier added
+  academicSubjects: SchoolClassSubject[]; 
+  faMarks: Record<string, SubjectFAData>; 
+  onFaMarksChange: (subjectIdentifier: string, faPeriod: keyof SubjectFAData, toolKey: keyof MarksEntry, value: string) => void;
   
   coMarks: CoCurricularSAData[];
   onCoMarksChange: (subjectIndex: number, saPeriod: 'sa1' | 'sa2' | 'sa3', type: 'Marks' | 'Max', value: string) => void;
@@ -63,7 +63,7 @@ interface CBSEStateFrontProps {
 }
 
 // Grade scales
-const overallSubjectGradeScale = [ // For total out of 200M
+const overallSubjectGradeScale = [ 
   { min: 180, grade: 'A+' }, { min: 160, grade: 'A' }, 
   { min: 140, grade: 'B+' }, { min: 120, grade: 'B' }, 
   { min: 100, grade: 'C+' }, { min: 80, grade: 'C' },  
@@ -71,19 +71,19 @@ const overallSubjectGradeScale = [ // For total out of 200M
   { min: 0, grade: 'F' } 
 ];
 
-const faPeriodGradeScale = [ // For 50M - Main Subjects
+const faPeriodGradeScale = [ 
   { min: 46, grade: 'A1' }, { min: 41, grade: 'A2' },
   { min: 36, grade: 'B1' }, { min: 31, grade: 'B2' },
   { min: 26, grade: 'C1' }, { min: 21, grade: 'C2' },
   { min: 18, grade: 'D1' }, { min: 0, grade: 'D2' } 
 ];
-const faPeriodGradeScale2ndLang = [ // For 50M - Second Language
+const faPeriodGradeScale2ndLang = [ 
   { min: 45, grade: 'A1' }, { min: 40, grade: 'A2' },
   { min: 34, grade: 'B1' }, { min: 29, grade: 'B2' },
   { min: 23, grade: 'C1' }, { min: 18, grade: 'C2' },
   { min: 10, grade: 'D1' }, { min: 0, grade: 'D2' } 
 ];
-const coCurricularGradeScale = [ // Percentage based
+const coCurricularGradeScale = [ 
   { min: 85, grade: 'A+' }, { min: 71, grade: 'A' },
   { min: 56, grade: 'B' }, { min: 41, grade: 'C' },
   { min: 0, grade: 'D' }
@@ -96,16 +96,15 @@ const getGrade = (totalMarks: number, scale: { min: number; grade: string }[]): 
   return scale[scale.length - 1]?.grade || 'N/A'; 
 };
 
-// const mainSubjects = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"]; // Removed, now dynamic
-const coCurricularSubjects = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."]; // Kept static for now
+const coCurricularSubjects = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."]; 
 
 
 const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   studentData,
   onStudentDataChange,
-  academicSubjects, // New prop
-  faMarks, // Now an object
-  onFaMarksChange, // Signature changed
+  academicSubjects, 
+  faMarks, 
+  onFaMarksChange, 
   coMarks,
   onCoMarksChange,
   secondLanguage,
@@ -114,17 +113,16 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   onAcademicYearChange
 }) => {
 
-  const calculateFaResults = React.useCallback((subjectIdentifier: string) => { // subjectIdentifier instead of subjectIndex
-    const subjectData = faMarks[subjectIdentifier]; // Access marks using identifier
-    if (!subjectData) {
-        const defaultFaPeriod = { tool1: null, tool2: null, tool3: null, tool4: null };
-        const defaultSubjectDataForCalc = { fa1: defaultFaPeriod, fa2: defaultFaPeriod, fa3: defaultFaPeriod, fa4: defaultFaPeriod };
-        return { 
-            ...Object.fromEntries((['fa1', 'fa2', 'fa3', 'fa4'] as const).map(key => [key, { total: 0, grade: 'N/A' }])),
-            overallTotal: 0, 
-            overallGrade: 'N/A' 
-        };
-    }
+  const calculateFaResults = React.useCallback((subjectIdentifier: string) => {
+    const subjectFaData = faMarks[subjectIdentifier];
+    
+    const defaultFaPeriodMarks: MarksEntry = { tool1: null, tool2: null, tool3: null, tool4: null };
+    const defaultSubjectFaDataForCalc: SubjectFAData = { 
+        fa1: {...defaultFaPeriodMarks}, fa2: {...defaultFaPeriodMarks}, 
+        fa3: {...defaultFaPeriodMarks}, fa4: {...defaultFaPeriodMarks}
+    };
+
+    const currentSubjectData = subjectFaData || defaultSubjectFaDataForCalc;
 
     const results: Record<string, { total: number; grade: string }> & { overallTotal: number; overallGrade: string } = {
       overallTotal: 0,
@@ -132,13 +130,12 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
     };
     let currentOverallTotal = 0;
 
-    // const subjectName = mainSubjects[subjectIndex]; // Old logic
-    const subjectName = subjectIdentifier; // Use identifier directly (assuming it's the name for now)
+    const subjectName = subjectIdentifier; // Assuming subjectIdentifier is the subject name
     const isSecondLang = subjectName === secondLanguage;
     const currentFaPeriodGradeScale = isSecondLang ? faPeriodGradeScale2ndLang : faPeriodGradeScale;
 
     (['fa1', 'fa2', 'fa3', 'fa4'] as const).forEach(faPeriodKey => {
-      const periodMarks = subjectData[faPeriodKey] || { tool1: null, tool2: null, tool3: null, tool4: null}; 
+      const periodMarks = currentSubjectData[faPeriodKey]; 
       const periodTotal = (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
       currentOverallTotal += periodTotal;
       results[faPeriodKey] = {
@@ -160,8 +157,8 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
     let totalMaxMarksPossible = 0;
 
     (['sa1', 'sa2', 'sa3'] as const).forEach(saPeriodKey => {
-      totalMarksObtained += subjectData[`${saPeriodKey}Marks`] || 0;
-      totalMaxMarksPossible += subjectData[`${saPeriodKey}Max`] || 50; 
+      totalMarksObtained += subjectData[\`\${saPeriodKey}Marks\`] || 0;
+      totalMaxMarksPossible += subjectData[\`\${saPeriodKey}Max\`] || 50; 
     });
     
     const percentage = totalMaxMarksPossible > 0 ? (totalMarksObtained / totalMaxMarksPossible) * 100 : 0;
@@ -173,7 +170,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 
   return (
     <>
-      <style jsx global>{`
+      <style jsx global>{\`
         .report-card-container body, .report-card-container { 
           font-family: Arial, sans-serif;
           font-size: 11px; 
@@ -259,7 +256,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
             display: inline-block; 
             vertical-align: baseline;
         }
-      `}</style>
+      \`}</style>
       <div className="report-card-container">
         <div className="title">STUDENT ACADEMIC PERFORMANCE REPORT - 
             <input 
@@ -326,8 +323,8 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
             </tr>
           </thead>
           <tbody>
-            {(academicSubjects || []).map((subject, SIndex) => { // Loop over dynamic academicSubjects
-              const subjectIdentifier = subject.name; // Use subject name as identifier for faMarks
+            {(academicSubjects || []).map((subject, SIndex) => { 
+              const subjectIdentifier = subject.name; 
               const subjectFaData = faMarks[subjectIdentifier] || { 
                 fa1: { tool1: null, tool2: null, tool3: null, tool4: null }, 
                 fa2: { tool1: null, tool2: null, tool3: null, tool4: null }, 
@@ -340,7 +337,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                   <td>{SIndex + 1}</td>
                   <td style={{textAlign: 'left', paddingLeft: '5px'}}>{subject.name}</td>
                   {(['fa1', 'fa2', 'fa3', 'fa4'] as const).map(faPeriodKey => {
-                     const periodData = subjectFaData[faPeriodKey] || { tool1: null, tool2: null, tool3: null, tool4: null};
+                     const periodData = subjectFaData[faPeriodKey];
                      return (
                         <React.Fragment key={faPeriodKey}>
                         {(['tool1', 'tool2', 'tool3', 'tool4'] as const).map(toolKey => (
@@ -402,7 +399,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                         <td>
                           <input
                             type="number"
-                            value={subjectCoData[`${saPeriodKey}Max`] ?? ''}
+                            value={subjectCoData[\`\${saPeriodKey}Max\`] ?? ''}
                             onChange={e => onCoMarksChange(SIndex, saPeriodKey, 'Max', e.target.value)}
                             min="1"
                           />
@@ -410,9 +407,9 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                         <td>
                           <input
                             type="number"
-                            value={subjectCoData[`${saPeriodKey}Marks`] ?? ''}
+                            value={subjectCoData[\`\${saPeriodKey}Marks\`] ?? ''}
                             onChange={e => onCoMarksChange(SIndex, saPeriodKey, 'Marks', e.target.value)}
-                            max={subjectCoData[`${saPeriodKey}Max`] ?? undefined}
+                            max={subjectCoData[\`\${saPeriodKey}Max\`] ?? undefined}
                             min="0"
                           />
                         </td>
@@ -437,7 +434,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                 </thead>
                 <tbody>
                   {faPeriodGradeScale.map((g, i) => (
-                    <tr key={`fa-grade-${g.grade}`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (faPeriodGradeScale[i-1]?.min ?? 51) -1 : 50}</td><td>{faPeriodGradeScale2ndLang[i].min}-{i > 0 ? (faPeriodGradeScale2ndLang[i-1]?.min ?? 51) -1 : 50}</td></tr>
+                    <tr key={\`fa-grade-\${g.grade}\`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (faPeriodGradeScale[i-1]?.min ?? 51) -1 : 50}</td><td>{faPeriodGradeScale2ndLang[i].min}-{i > 0 ? (faPeriodGradeScale2ndLang[i-1]?.min ?? 51) -1 : 50}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -449,7 +446,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                 </thead>
                 <tbody>
                   {coCurricularGradeScale.map((g, i) => (
-                    <tr key={`co-grade-${g.grade}`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (coCurricularGradeScale[i-1]?.min ?? 101) -1 : 100}</td></tr>
+                    <tr key={\`co-grade-\${g.grade}\`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (coCurricularGradeScale[i-1]?.min ?? 101) -1 : 100}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -461,7 +458,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                 </thead>
                 <tbody>
                   {overallSubjectGradeScale.map((g, i) => (
-                    <tr key={`overall-sub-grade-${g.grade}`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (overallSubjectGradeScale[i-1]?.min ?? 201) -1 : 200}</td></tr>
+                    <tr key={\`overall-sub-grade-\${g.grade}\`}><td>{g.grade}</td><td>{g.min}-{i > 0 ? (overallSubjectGradeScale[i-1]?.min ?? 201) -1 : 200}</td></tr>
                   ))}
                 </tbody>
               </table>

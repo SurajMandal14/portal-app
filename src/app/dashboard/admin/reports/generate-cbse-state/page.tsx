@@ -20,7 +20,7 @@ import { FileText, Printer, RotateCcw, Eye, EyeOff, Save, Loader2, User, School 
 import { useToast } from '@/hooks/use-toast';
 import type { AuthUser } from '@/types/user';
 import { saveReportCard } from '@/app/actions/reports';
-import type { ReportCardData } from '@/types/report';
+import type { ReportCardData, FormativeAssessmentEntryForStorage } from '@/types/report';
 import { Input } from '@/components/ui/input'; 
 import { Label } from '@/components/ui/label'; 
 import { getStudentDetailsForReportCard, type StudentDetailsForReportCard } from '@/app/actions/schoolUsers';
@@ -30,7 +30,6 @@ import type { SchoolClassSubject, SchoolClass } from '@/types/classes';
 import type { School } from '@/types/school';
 
 // --- Defaults for Front Side ---
-// const mainSubjectsListFront = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"]; // To be replaced by dynamic
 const coCurricularSubjectsListFront = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."];
 
 const getDefaultFaMarksEntryFront = (): FrontMarksEntry => ({ tool1: null, tool2: null, tool3: null, tool4: null });
@@ -57,12 +56,11 @@ const defaultStudentDataFront: FrontStudentData = {
   aadharNo: '',
 };
 
-// const defaultFaMarksFront: FrontSubjectFAData[] = mainSubjectsListFront.map(() => getDefaultSubjectFaDataFront()); // To be replaced
 const defaultCoMarksFront: FrontCoCurricularSAData[] = coCurricularSubjectsListFront.map(() => getDefaultCoCurricularSaDataFront());
 
 
 // --- Defaults for Back Side ---
-const backSubjectStructure = [ // This will also need to become dynamic or be mapped from dynamic main subjects
+const backSubjectStructure = [ 
   { subjectName: "Telugu", paper: "I" }, { subjectName: "Telugu", paper: "II" },
   { subjectName: "Hindi", paper: "I" },
   { subjectName: "English", paper: "I" }, { subjectName: "English", paper: "II" },
@@ -99,13 +97,13 @@ export default function GenerateCBSEStateReportPage() {
 
   // Front Side State
   const [studentData, setStudentData] = useState<FrontStudentData>(defaultStudentDataFront);
-  const [faMarks, setFaMarks] = useState<Record<string, FrontSubjectFAData>>({}); // Key: subject name or unique ID
-  const [coMarks, setCoMarks] = useState<FrontCoCurricularSAData[]>(defaultCoMarksFront); // Co-curricular remains static for now
+  const [faMarks, setFaMarks] = useState<Record<string, FrontSubjectFAData>>({}); 
+  const [coMarks, setCoMarks] = useState<FrontCoCurricularSAData[]>(defaultCoMarksFront); 
   const [frontSecondLanguage, setFrontSecondLanguage] = useState<'Hindi' | 'Telugu'>('Hindi');
   const [frontAcademicYear, setFrontAcademicYear] = useState<string>('2023-2024');
 
   // Back Side State
-  const [saData, setSaData] = useState<BackSARowData[]>(defaultSaDataBack); // This will also need dynamic initialization
+  const [saData, setSaData] = useState<BackSARowData[]>(defaultSaDataBack); 
   const [attendanceData, setAttendanceData] = useState<BackAttendanceMonthData[]>(defaultAttendanceDataBack);
   const [finalOverallGradeInput, setFinalOverallGradeInput] = useState<string | null>(null);
 
@@ -128,19 +126,16 @@ export default function GenerateCBSEStateReportPage() {
     }
   }, [toast]);
 
-  const initializeMarksForSubjects = (subjects: SchoolClassSubject[]) => {
+  const initializeMarksForSubjects = useCallback((subjects: SchoolClassSubject[]) => {
     const newFaMarks: Record<string, FrontSubjectFAData> = {};
     subjects.forEach(subject => {
-      newFaMarks[subject.name] = getDefaultSubjectFaDataFront(); // Use subject.name as key for now
+      newFaMarks[subject.name] = getDefaultSubjectFaDataFront(); 
     });
     setFaMarks(newFaMarks);
 
-    // TODO: Initialize saData dynamically based on subjects (considering paper splits if needed)
-    // For now, saData remains based on static backSubjectStructure, which will be incorrect for dynamic subjects.
-    // This needs careful planning on how to map main academic subjects to the SA table structure.
-    // Example: "Science" subject on front might map to "Physics" and "Biology" rows on back.
-    setSaData(defaultSaDataBack); // Placeholder - needs to be dynamic
-  };
+    // TODO: Initialize saData dynamically based on subjects.
+    setSaData(defaultSaDataBack); 
+  }, []);
 
   const handleLoadStudentAndClassData = async () => {
     if (!targetStudentIdInput.trim()) {
@@ -157,7 +152,7 @@ export default function GenerateCBSEStateReportPage() {
     setLoadedClassSubjects([]);
     setStudentData(defaultStudentDataFront);
     setFaMarks({});
-    setSaData(defaultSaDataBack); // Reset SA data too
+    setSaData(defaultSaDataBack); 
 
     try {
       const studentRes = await getStudentDetailsForReportCard(targetStudentIdInput);
@@ -176,20 +171,18 @@ export default function GenerateCBSEStateReportPage() {
       }
 
       if (studentRes.student.classId) {
+        // Assuming classId on student is the actual _id of the class document
         const classRes = await getClassDetailsById(studentRes.student.classId, studentRes.student.schoolId!);
         if (classRes.success && classRes.classDetails) {
           setLoadedClassSubjects(classRes.classDetails.subjects);
           initializeMarksForSubjects(classRes.classDetails.subjects);
-          // Populate studentData for the report card header
           setStudentData(prev => ({
             ...prev,
-            udiseCodeSchoolName: schoolRes.school?.schoolName || '', // Assuming UDISE code is part of school name or fetched separately
+            udiseCodeSchoolName: schoolRes.school?.schoolName || '', 
             studentName: studentRes.student?.name || '',
-            class: classRes.classDetails.name || '',
+            class: classRes.classDetails.name || '', // Use class name from classDetails
             studentIdNo: studentRes.student?._id || '',
             admissionNo: studentRes.student?.admissionId || '',
-            // Other fields like fatherName, motherName, rollNo, dob, aadharNo are not in User model
-            // They will remain manual entries or need to be added to student profile
           }));
         } else {
           toast({ variant: "destructive", title: "Class Details Error", description: classRes.message || "Could not load class subjects."});
@@ -208,13 +201,7 @@ export default function GenerateCBSEStateReportPage() {
 
 
   const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string, paperNameForBack: string): number | null => {
-    // This logic needs to be significantly updated to use the dynamic `faMarks` (object keyed by subject name)
-    // and map it correctly to potentially split subjects on the back (e.g., Science -> Physics, Biology).
-    // For now, this will likely be incorrect if subjects on front and back don't align perfectly with old hardcoded structure.
-    
-    // Placeholder: Find the subject in the dynamic faMarks.
-    // This needs a robust mapping strategy.
-    const subjectFaData = faMarks[subjectNameForBack]; // This is a simplification
+    const subjectFaData = faMarks[subjectNameForBack]; 
     if (!subjectFaData) return null;
 
     let overallTotal = 0;
@@ -226,14 +213,13 @@ export default function GenerateCBSEStateReportPage() {
   }, [faMarks]);
 
   useEffect(() => {
-    // This re-calculation of faTotal200M for saData also needs to be dynamic
     setSaData(prevSaData => 
       prevSaData.map(row => ({
         ...row,
         faTotal200M: calculateFaTotal200MForRow(row.subjectName, row.paper)
       }))
     );
-  }, [faMarks, calculateFaTotal200MForRow]); // Will re-run when faMarks changes
+  }, [faMarks, calculateFaTotal200MForRow]); 
 
   const handleStudentDataChange = (field: keyof FrontStudentData, value: string) => {
     setStudentData(prev => ({ ...prev, [field]: value }));
@@ -241,19 +227,23 @@ export default function GenerateCBSEStateReportPage() {
 
   const handleFaMarksChange = (subjectIdentifier: string, faPeriod: keyof FrontSubjectFAData, toolKey: keyof FrontMarksEntry, value: string) => {
     const numValue = parseInt(value, 10);
-    const maxMark = toolKey === 'tool4' ? 20 : 10;
+    const maxMark = toolKey === 'tool4' ? 20 : 10; // Assuming tool4 is 20 marks, others 10
     const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), maxMark);
     
-    setFaMarks(prev => ({
-      ...prev,
-      [subjectIdentifier]: {
-        ...(prev[subjectIdentifier] || getDefaultSubjectFaDataFront()), // Ensure subject entry exists
-        [faPeriod]: { 
-          ...(prev[subjectIdentifier]?.[faPeriod] || getDefaultFaMarksEntryFront()), // Ensure period entry exists
-          [toolKey]: validatedValue 
+    setFaMarks(prev => {
+      const currentSubjectMarks = prev[subjectIdentifier] || getDefaultSubjectFaDataFront();
+      const updatedPeriodMarks = { 
+        ...(currentSubjectMarks[faPeriod] || getDefaultFaMarksEntryFront()), 
+        [toolKey]: validatedValue 
+      };
+      return {
+        ...prev,
+        [subjectIdentifier]: {
+          ...currentSubjectMarks,
+          [faPeriod]: updatedPeriodMarks
         }
-      }
-    }));
+      };
+    });
   };
 
   const handleCoMarksChange = (subjectIndex: number, saPeriod: 'sa1' | 'sa2' | 'sa3', type: 'Marks' | 'Max', value: string) => {
@@ -264,9 +254,9 @@ export default function GenerateCBSEStateReportPage() {
       const newCoMarks = prev.map((coSubj, idx) => {
         if (idx === subjectIndex) {
           const updatedSubj = { ...coSubj };
-          const keyToUpdate = `${saPeriod}${type}` as keyof FrontCoCurricularSAData;
+          const keyToUpdate = \`\${saPeriod}\${type}\` as keyof FrontCoCurricularSAData;
           if (type === 'Marks' && validatedValue !== null) {
-            const maxKey = `${saPeriod}Max` as keyof FrontCoCurricularSAData;
+            const maxKey = \`\${saPeriod}Max\` as keyof FrontCoCurricularSAData;
             const currentMax = updatedSubj[maxKey] as number | null;
             if (currentMax !== null && validatedValue > currentMax) validatedValue = currentMax;
           }
@@ -316,12 +306,16 @@ export default function GenerateCBSEStateReportPage() {
   }
 
   const handleLogData = () => {
+    const formattedFaMarksForLog: FormativeAssessmentEntryForStorage[] = Object.entries(faMarks).map(([subjectName, marksData]) => ({
+        subjectName,
+        ...marksData,
+    }));
     console.log("Report Card Data:", {
       targetStudentId: loadedStudent?._id || targetStudentIdInput,
       academicYear: frontAcademicYear,
       secondLanguage: frontSecondLanguage,
       studentInfo: studentData,
-      formativeAssessments: faMarks, // This is now an object
+      formativeAssessments: formattedFaMarksForLog, 
       coCurricularAssessments: coMarks,
       summativeAssessments: saData,
       attendanceData,
@@ -360,17 +354,23 @@ export default function GenerateCBSEStateReportPage() {
     }
 
     setIsSaving(true);
+
+    const formativeAssessmentsForStorage: FormativeAssessmentEntryForStorage[] = Object.entries(faMarks)
+      .map(([subjectName, marksData]) => ({
+        subjectName,
+        ...marksData,
+      }));
+
     const reportPayload: Omit<ReportCardData, '_id' | 'createdAt' | 'updatedAt'> = {
       studentId: loadedStudent._id,
-      schoolId: authUser.schoolId.toString(), // Should be loadedSchool?._id if available, fallback to authUser
+      schoolId: (loadedSchool?._id || authUser.schoolId).toString(),
       academicYear: frontAcademicYear,
       reportCardTemplateKey: 'cbse_state', 
       studentInfo: studentData,
-      // Adapt faMarks to be an array of {subjectName, marksData} for saving if ReportCardData expects array
-      formativeAssessments: Object.entries(faMarks).map(([subjectName, marks]) => ({subjectName, ...marks})), // Or adjust ReportCardData
+      formativeAssessments: formativeAssessmentsForStorage, 
       coCurricularAssessments: coMarks,
       secondLanguage: frontSecondLanguage,
-      summativeAssessments: saData, // This also needs dynamic subject mapping for saving
+      summativeAssessments: saData, 
       attendance: attendanceData,
       finalOverallGrade: finalOverallGradeInput, 
       generatedByAdminId: authUser._id.toString(),
@@ -381,7 +381,7 @@ export default function GenerateCBSEStateReportPage() {
     setIsSaving(false);
 
     if (result.success) {
-      toast({ title: "Report Card Saved", description: result.message + (result.reportCardId ? ` ID: ${result.reportCardId}` : '') });
+      toast({ title: "Report Card Saved", description: result.message + (result.reportCardId ? \` ID: \${result.reportCardId}\` : '') });
     } else {
       toast({ variant: "destructive", title: "Save Failed", description: result.error || result.message });
     }
@@ -389,7 +389,7 @@ export default function GenerateCBSEStateReportPage() {
 
   return (
     <div className="space-y-6">
-      <style jsx global>{`
+      <style jsx global>{\`
         @media print {
           body * { visibility: hidden; }
           .printable-report-card, .printable-report-card * { visibility: visible !important; }
@@ -406,7 +406,7 @@ export default function GenerateCBSEStateReportPage() {
           .no-print { display: none !important; }
           .page-break { page-break-after: always; }
         }
-      `}</style>
+      \`}</style>
       <Card className="no-print">
         <CardHeader>
           <CardTitle className="text-2xl font-headline flex items-center">
@@ -465,11 +465,11 @@ export default function GenerateCBSEStateReportPage() {
 
       {!isLoadingStudentAndClassData && loadedStudent && (
         <>
-          <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${showBackSide ? 'hidden' : ''}`}>
+          <div className={\`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md \${showBackSide ? 'hidden' : ''}\`}>
             <CBSEStateFront
               studentData={studentData} onStudentDataChange={handleStudentDataChange}
-              academicSubjects={loadedClassSubjects} // Pass dynamic subjects
-              faMarks={faMarks} onFaMarksChange={handleFaMarksChange} // Pass object-based faMarks
+              academicSubjects={loadedClassSubjects} 
+              faMarks={faMarks} onFaMarksChange={handleFaMarksChange} 
               coMarks={coMarks} onCoMarksChange={handleCoMarksChange}
               secondLanguage={frontSecondLanguage} onSecondLanguageChange={setFrontSecondLanguage}
               academicYear={frontAcademicYear} onAcademicYearChange={setFrontAcademicYear}
@@ -478,12 +478,12 @@ export default function GenerateCBSEStateReportPage() {
           
           {showBackSide && <div className="page-break no-print"></div>}
 
-          <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${!showBackSide ? 'hidden' : ''}`}>
+          <div className={\`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md \${!showBackSide ? 'hidden' : ''}\`}>
             <CBSEStateBack
-              saData={saData} onSaDataChange={handleSaDataChange} // Needs to be dynamic based on loadedClassSubjects
-              onFaTotalChange={handleFaTotalChangeBack} // Needs to be dynamic
+              saData={saData} onSaDataChange={handleSaDataChange} 
+              onFaTotalChange={handleFaTotalChangeBack} 
               attendanceData={attendanceData} onAttendanceDataChange={handleAttendanceDataChange}
-              finalOverallGradeInput={finalOverallGradeInput} onFinalOverallGradeInputChange={setFinalOverallGradeInput}
+              finalOverallGradeInput={finalOverallGradeInput} onFinalOverallGradeInputChange={setFinalOverallGradeInputChange}
               secondLanguageSubjectName={frontSecondLanguage} 
             />
           </div>

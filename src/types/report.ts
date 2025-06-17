@@ -1,8 +1,17 @@
 
 import type { ObjectId } from 'mongodb';
 import type { ReportCardTemplateKey } from './school';
-import type { StudentData as FrontStudentData, SubjectFAData as FrontSubjectFAData, CoCurricularSAData as FrontCoCurricularSAData } from '@/components/report-cards/CBSEStateFront';
+import type { StudentData as FrontStudentData, MarksEntry, SubjectFAData as FrontSubjectFAData, CoCurricularSAData as FrontCoCurricularSAData } from '@/components/report-cards/CBSEStateFront';
 import type { SARowData as BackSARowData, AttendanceMonthData as BackAttendanceMonthData } from '@/components/report-cards/CBSEStateBack';
+
+// Define a structure for storing FA marks that includes the subject identifier
+export interface FormativeAssessmentEntryForStorage {
+  subjectName: string; // Or a unique subject ID if available and preferred
+  fa1: MarksEntry;
+  fa2: MarksEntry;
+  fa3: MarksEntry;
+  fa4: MarksEntry;
+}
 
 export interface ReportCardData {
   _id?: ObjectId | string;
@@ -13,7 +22,7 @@ export interface ReportCardData {
   
   // Data from CBSEStateFront
   studentInfo: FrontStudentData;
-  formativeAssessments: FrontSubjectFAData[];
+  formativeAssessments: FormativeAssessmentEntryForStorage[]; // Updated structure
   coCurricularAssessments: FrontCoCurricularSAData[];
   secondLanguage?: 'Hindi' | 'Telugu'; // From front page state
 
@@ -35,3 +44,4 @@ export interface SaveReportCardResult {
   error?: string;
   reportCardId?: string;
 }
+
