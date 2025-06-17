@@ -105,6 +105,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
 }) => {
 
   const isTeacher = currentUserRole === 'teacher';
+  const isStudent = currentUserRole === 'student';
   const isAttendanceEditable = currentUserRole === 'admin';
   const isFinalGradeEditable = currentUserRole === 'admin';
   const isOtherFieldsEditable = currentUserRole === 'admin';
@@ -229,8 +230,10 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           -moz-appearance: textfield; 
         }
         .report-card-back-container input:disabled {
-            background-color: #f0f0f0;
+            background-color: #f0f0f0 !important;
+            color: #555 !important;
             cursor: not-allowed;
+            border: 1px solid #ddd !important;
         }
         .report-card-back-container input::-webkit-outer-spin-button,
         .report-card-back-container input::-webkit-inner-spin-button {
@@ -290,7 +293,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             {saData.map((rowData, rowIndex) => {
                 const derived = calculateRowDerivedData(rowData, rowIndex);
                 const faTotal200M_display = rowData.faTotal200M ?? '';
-                const isSaEditable = isSubjectEditableForTeacher(rowData.subjectName);
+                const isSaEditableForThisSubject = isStudent ? false : (isTeacher ? isSubjectEditableForTeacher(rowData.subjectName) : true);
                 
                 const faAvg50 = (rowData.faTotal200M || 0) / 4;
                 const sa1_50_for_avg = (derived.sa1Total > 80 ? 80 : derived.sa1Total) * (50/80);
@@ -305,18 +308,18 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
                     <td className="paper-cell">{rowData.paper}</td>
                     
                     {(Object.keys(rowData.sa1Marks) as Array<keyof SAPeriodMarksEntry>).map(asKey => (
-                      <td key={`sa1-${asKey}`}><input type="number" value={rowData.sa1Marks[asKey] ?? ''} min="0" max="20" onChange={e => onSaDataChange(rowIndex, 'sa1', asKey, e.target.value)} disabled={!isSaEditable} /></td>
+                      <td key={`sa1-${asKey}`}><input type="number" value={rowData.sa1Marks[asKey] ?? ''} min="0" max="20" onChange={e => onSaDataChange(rowIndex, 'sa1', asKey, e.target.value)} disabled={!isSaEditableForThisSubject} /></td>
                     ))}
                     <td className="sa1-total calculated">{derived.sa1Total}</td>
                     <td className="sa1-grade calculated">{derived.sa1Grade}</td>
 
                     {(Object.keys(rowData.sa2Marks) as Array<keyof SAPeriodMarksEntry>).map(asKey => (
-                      <td key={`sa2-${asKey}`}><input type="number" value={rowData.sa2Marks[asKey] ?? ''} min="0" max="20" onChange={e => onSaDataChange(rowIndex, 'sa2', asKey, e.target.value)} disabled={!isSaEditable} /></td>
+                      <td key={`sa2-${asKey}`}><input type="number" value={rowData.sa2Marks[asKey] ?? ''} min="0" max="20" onChange={e => onSaDataChange(rowIndex, 'sa2', asKey, e.target.value)} disabled={!isSaEditableForThisSubject} /></td>
                     ))}
                     <td className="sa2-total calculated">{derived.sa2Total}</td>
                     <td className="sa2-grade calculated">{derived.sa2Grade}</td>
 
-                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} min="0" max="200" onChange={e => onFaTotalChange(rowIndex, e.target.value)} disabled={!isSaEditable} /></td>
+                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} min="0" max="200" onChange={e => onFaTotalChange(rowIndex, e.target.value)} disabled={!isSaEditableForThisSubject} /></td>
                     <td className="calculated">{derived.sa1Total > 80 ? 80 : derived.sa1Total}</td>
                     <td className="calculated">{faAvgPlusSa1_100M}</td>
                     <td className="internal calculated">{derived.internalMarks}</td>
@@ -329,8 +332,8 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           </tbody>
         </table>
 
-        <p><strong>Final Grade in Curricular Areas:</strong> <input type="text" value={finalOverallGradeInput ?? calculateOverallFinalGrade()} onChange={e => onFinalOverallGradeInputChange(e.target.value)} className="final-grade-input calculated" readOnly={!isFinalGradeEditable} disabled={!isFinalGradeEditable} /></p>
-        <p className="small">*(Internal 20M) = FA-1, FA-2, FA-3, FA-4 (Total 200M), SA-1 (80M), SA-2 (80M). Grand Total 360M. Reduced to 20 Marks (360/18 = 20)</p>
+        <p><strong>Final Grade in Curricular Areas:</strong> <input type="text" value={finalOverallGradeInput ?? calculateOverallFinalGrade()} onChange={e => onFinalOverallGradeInputChange(e.target.value)} className="final-grade-input calculated" readOnly={!isFinalGradeEditable || isStudent} disabled={!isFinalGradeEditable || isStudent} /></p>
+        <p className="small-note">*(Internal 20M) = FA-1, FA-2, FA-3, FA-4 (Total 200M), SA-1 (80M), SA-2 (80M). Grand Total 360M. Reduced to 20 Marks (360/18 = 20)</p>
         
         <table className="attendance-table">
           <thead>
@@ -344,27 +347,27 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             <tr>
               <td>No. of Working days</td>
               {attendanceData.slice(0,11).map((month, index) => (
-                <td key={`wd-${index}`}><input type="number" value={month.workingDays ?? ''} onChange={e => onAttendanceDataChange(index, 'workingDays', e.target.value)} disabled={!isAttendanceEditable} /></td>
+                <td key={`wd-${index}`}><input type="number" value={month.workingDays ?? ''} onChange={e => onAttendanceDataChange(index, 'workingDays', e.target.value)} disabled={!isAttendanceEditable || isTeacher || isStudent} /></td>
               ))}
               <td className="calculated">{totalWorkingDays}</td>
               <td rowSpan={2} className="calculated">{attendancePercentage}%</td>
-              <td rowSpan={2}><input type="text" style={{width:'50px'}} disabled={!isOtherFieldsEditable}/></td>
+              <td rowSpan={2}><input type="text" style={{width:'50px'}} disabled={!isOtherFieldsEditable || isTeacher || isStudent}/></td>
             </tr>
             <tr>
               <td>No. of days present</td>
               {attendanceData.slice(0,11).map((month, index) => (
-                <td key={`pd-${index}`}><input type="number" value={month.presentDays ?? ''} onChange={e => onAttendanceDataChange(index, 'presentDays', e.target.value)} disabled={!isAttendanceEditable}/></td>
+                <td key={`pd-${index}`}><input type="number" value={month.presentDays ?? ''} onChange={e => onAttendanceDataChange(index, 'presentDays', e.target.value)} disabled={!isAttendanceEditable || isTeacher || isStudent}/></td>
               ))}
               <td className="calculated">{totalPresentDays}</td>
             </tr>
             <tr>
-              <td>Sign. of Class Teacher</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={!isOtherFieldsEditable} /></td><td></td><td></td><th>Final Grade</th>
+              <td>Sign. of Class Teacher</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={!isOtherFieldsEditable || isTeacher || isStudent} /></td><td></td><td></td><th>Final Grade</th>
             </tr>
              <tr>
-              <td>Sign. of Headmaster</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={!isOtherFieldsEditable} /></td><td></td><td></td><th>School Re Opening</th>
+              <td>Sign. of Headmaster</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={!isOtherFieldsEditable || isTeacher || isStudent} /></td><td></td><td></td><th>School Re Opening</th>
             </tr>
              <tr>
-              <td>Sign. of Parent</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={!isOtherFieldsEditable} /></td><td></td><td></td><td><input type="text" style={{width:'100%'}} disabled={!isOtherFieldsEditable}/></td>
+              <td>Sign. of Parent</td><td colSpan={11}><input type="text" style={{width:'100%', textAlign:'left'}} disabled={!isOtherFieldsEditable || isTeacher || isStudent} /></td><td></td><td></td><td><input type="text" style={{width:'100%'}} disabled={!isOtherFieldsEditable || isTeacher || isStudent}/></td>
             </tr>
           </tbody>
         </table>

@@ -88,3 +88,65 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
     return { success: false, message: 'An unexpected error occurred during report card saving.', error: errorMessage };
   }
 }
+
+
+export interface GetStudentReportCardResult {
+  success: boolean;
+  reportCard?: ReportCardData;
+  message?: string;
+  error?: string;
+}
+
+export async function getStudentReportCard(
+  studentId: string, 
+  schoolId: string, 
+  academicYear: string,
+  term?: string // Optional term filter
+): Promise<GetStudentReportCardResult> {
+  try {
+    if (!ObjectId.isValid(studentId) || !ObjectId.isValid(schoolId)) {
+      return { success: false, message: 'Invalid student or school ID format.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const reportCardsCollection = db.collection<ReportCardData>('report_cards');
+
+    const query: any = {
+      studentId: studentId, // Stored as string in DB
+      schoolId: new ObjectId(schoolId),
+      academicYear: academicYear,
+      reportCardTemplateKey: 'cbse_state', // Assuming we are only fetching this type for now
+    };
+
+    if (term) {
+      query.term = term;
+    }
+
+    // Fetch the most recently updated report card matching the criteria
+    const reportCardDoc = await reportCardsCollection.findOne(query, {
+      sort: { updatedAt: -1 }, 
+    });
+
+    if (!reportCardDoc) {
+      return { success: false, message: 'No report card found for the specified criteria.' };
+    }
+    
+    const reportCard: ReportCardData = {
+        ...reportCardDoc,
+        _id: reportCardDoc._id?.toString(),
+        schoolId: reportCardDoc.schoolId.toString(),
+        generatedByAdminId: reportCardDoc.generatedByAdminId?.toString(),
+        createdAt: reportCardDoc.createdAt ? new Date(reportCardDoc.createdAt) : undefined,
+        updatedAt: reportCardDoc.updatedAt ? new Date(reportCardDoc.updatedAt) : undefined,
+    };
+
+
+    return { success: true, reportCard };
+
+  } catch (error) {
+    console.error('Get student report card error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch student report card.' };
+  }
+}
+

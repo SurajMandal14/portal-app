@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, CheckSquare, Percent, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks, RefreshCw, AlertTriangle } from "lucide-react";
+import { DollarSign, CheckSquare, Percent, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks, RefreshCw, AlertTriangle, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { StudentDataProvider, useStudentData } from '@/contexts/StudentDataContext';
@@ -148,7 +148,7 @@ function StudentDashboardContent() {
                 <Link href="/dashboard/student/profile"><UserCircle className="mr-2 h-5 w-5"/> My Profile</Link>
             </Button>
              <Button variant="outline" className="w-full justify-start" asChild>
-                <Link href="/dashboard/student/results"><Percent className="mr-2 h-5 w-5"/> Exam Results</Link>
+                <Link href="/dashboard/student/results"><Award className="mr-2 h-5 w-5"/> Exam Results</Link>
             </Button>
         </CardContent>
       </Card>
