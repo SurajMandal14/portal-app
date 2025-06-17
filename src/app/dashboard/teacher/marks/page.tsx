@@ -167,8 +167,7 @@ export default function TeacherMarksEntryPage() {
   }, [selectedSubject, selectedAssessment, selectedTerm, selectedAcademicYear, fetchStudentsAndMarks]);
 
 
-  const handleSubjectChange = (value: string) // value is the composite "classId_subjectName"
-    => {
+  const handleSubjectChange = (value: string) => { // value is the composite "classId_subjectName"
     const subjectInfo = availableSubjects.find(s => s.value === value);
     setSelectedSubject(subjectInfo || null);
     // Reset dependent fields
