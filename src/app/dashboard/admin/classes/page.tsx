@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BookCopy, PlusCircle, Edit3, Trash2, Loader2, UserCheck, FilePlus, XCircle, Info } from "lucide-react";
+import { BookCopy, PlusCircle, Edit3, Trash2, Loader2, UserCheck, FilePlus, XCircle, Info, Users } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import {
@@ -28,7 +28,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolClass, getSchoolClasses, updateSchoolClass, deleteSchoolClass } from "@/app/actions/classes";
@@ -57,8 +56,8 @@ export default function AdminClassManagementPage() {
     resolver: zodResolver(createClassFormSchema),
     defaultValues: {
       name: "",
-      classTeacherId: "", // Empty string signifies no teacher selected
-      subjects: [{ name: "" }],
+      classTeacherId: "", 
+      subjects: [{ name: "", teacherId: "" }],
     },
   });
 
@@ -123,10 +122,12 @@ export default function AdminClassManagementPage() {
       form.reset({
         name: editingClass.name,
         classTeacherId: editingClass.classTeacherId?.toString() || "",
-        subjects: editingClass.subjects.length > 0 ? editingClass.subjects : [{ name: "" }],
+        subjects: editingClass.subjects.length > 0 
+          ? editingClass.subjects.map(s => ({ name: s.name, teacherId: s.teacherId?.toString() || "" })) 
+          : [{ name: "", teacherId: "" }],
       });
     } else {
-      form.reset({ name: "", classTeacherId: "", subjects: [{ name: "" }] });
+      form.reset({ name: "", classTeacherId: "", subjects: [{ name: "", teacherId: "" }] });
     }
   }, [editingClass, form]);
 
@@ -183,7 +184,7 @@ export default function AdminClassManagementPage() {
             <BookCopy className="mr-2 h-6 w-6" /> Class Management
           </CardTitle>
           <CardDescription>
-            {editingClass ? `Editing Class: ${editingClass.name}` : "Create and manage classes, assign class teachers, and define subjects."}
+            {editingClass ? `Editing Class: ${editingClass.name}` : "Create and manage classes, assign class teachers, and define subjects with their respective teachers."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -210,7 +211,7 @@ export default function AdminClassManagementPage() {
                       onValueChange={(value) => {
                         field.onChange(value === NONE_TEACHER_VALUE ? "" : value);
                       }}
-                      value={field.value || ""} // If field.value is "", placeholder shows. If an ID, that teacher is selected.
+                      value={field.value || ""} 
                       disabled={isSubmitting || isLoadingData || availableTeachers.length === 0}
                     >
                       <FormControl><SelectTrigger>
@@ -230,26 +231,49 @@ export default function AdminClassManagementPage() {
               </div>
 
               <div className="space-y-3">
-                <FormLabel>Subjects Offered</FormLabel>
+                <FormLabel className="text-lg font-semibold">Subjects Offered</FormLabel>
                 {subjectFields.map((subjectItem, index) => (
-                  <div key={subjectItem.id} className="flex items-end gap-2">
-                    <FormField control={form.control} name={`subjects.${index}.name`} render={({ field }) => (
-                      <FormItem className="flex-grow">
-                        <FormLabel htmlFor={`subject-${index}`} className="sr-only">Subject Name {index + 1}</FormLabel>
-                        <FormControl>
-                          <Input id={`subject-${index}`} placeholder={`Subject ${index + 1}`} {...field} disabled={isSubmitting} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}/>
-                    {subjectFields.length > 1 && (
-                      <Button type="button" variant="destructive" size="icon" onClick={() => removeSubject(index)} disabled={isSubmitting}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
+                  <Card key={subjectItem.id} className="p-4 border-dashed">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
+                      <FormField control={form.control} name={`subjects.${index}.name`} render={({ field }) => (
+                        <FormItem className="md:col-span-1">
+                          <FormLabel htmlFor={`subject-name-${index}`}>Subject Name {index + 1}</FormLabel>
+                          <FormControl>
+                            <Input id={`subject-name-${index}`} placeholder={`Subject ${index + 1}`} {...field} disabled={isSubmitting} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}/>
+                      <FormField control={form.control} name={`subjects.${index}.teacherId`} render={({ field }) => (
+                        <FormItem className="md:col-span-1">
+                           <FormLabel htmlFor={`subject-teacher-${index}`} className="flex items-center"><Users className="mr-1 h-4 w-4 text-muted-foreground"/>Assign Subject Teacher</FormLabel>
+                           <Select
+                              onValueChange={(value) => field.onChange(value === NONE_TEACHER_VALUE ? "" : value)}
+                              value={field.value || ""}
+                              disabled={isSubmitting || isLoadingData || availableTeachers.length === 0}
+                            >
+                              <FormControl><SelectTrigger id={`subject-teacher-${index}`}>
+                                  <SelectValue placeholder={availableTeachers.length > 0 ? "Select teacher" : "No teachers"} />
+                              </SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value={NONE_TEACHER_VALUE}>-- None --</SelectItem>
+                                {availableTeachers.map(teacher => (
+                                  <SelectItem key={teacher._id!.toString()} value={teacher._id!.toString()}>{teacher.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                           <FormMessage />
+                        </FormItem>
+                      )}/>
+                      {subjectFields.length > 1 && (
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeSubject(index)} disabled={isSubmitting} className="text-destructive hover:bg-destructive/10 self-end justify-self-start md:justify-self-center">
+                          <Trash2 className="mr-1 h-4 w-4" />Remove Subject
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
                 ))}
-                <Button type="button" variant="outline" size="sm" onClick={() => appendSubject({ name: "" })} disabled={isSubmitting}>
+                <Button type="button" variant="outline" size="sm" onClick={() => appendSubject({ name: "", teacherId: "" })} disabled={isSubmitting}>
                   <FilePlus className="mr-2 h-4 w-4"/>Add Subject
                 </Button>
               </div>
@@ -281,7 +305,7 @@ export default function AdminClassManagementPage() {
               <TableRow>
                 <TableHead>Class Name</TableHead>
                 <TableHead>Class Teacher</TableHead>
-                <TableHead>Subjects</TableHead>
+                <TableHead>Subjects (Teachers)</TableHead>
                 <TableHead>Created On</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -290,8 +314,16 @@ export default function AdminClassManagementPage() {
               {schoolClasses.map((cls) => (
                 <TableRow key={cls._id.toString()}>
                   <TableCell className="font-medium">{cls.name}</TableCell>
-                  <TableCell>{(cls as any).classTeacherName || (cls.classTeacherId ? 'N/A' : 'Not Assigned')}</TableCell>
-                  <TableCell>{cls.subjects.map(s => s.name).join(', ') || 'None'}</TableCell>
+                  <TableCell>{cls.classTeacherName || (cls.classTeacherId ? 'N/A' : 'Not Assigned')}</TableCell>
+                  <TableCell>
+                    {cls.subjects.length > 0 ? (
+                        <ul className="list-disc pl-4 text-xs">
+                            {cls.subjects.map(s => (
+                                <li key={s.name}>{s.name} <span className="text-muted-foreground">({s.teacherName || (s.teacherId ? 'Teacher N/A' : 'Unassigned')})</span></li>
+                            ))}
+                        </ul>
+                    ) : 'None'}
+                  </TableCell>
                   <TableCell>{format(new Date(cls.createdAt), "PP")}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(cls)} disabled={isSubmitting || isDeleting}><Edit3 className="h-4 w-4" /></Button>
@@ -328,4 +360,3 @@ export default function AdminClassManagementPage() {
     </div>
   );
 }
-
