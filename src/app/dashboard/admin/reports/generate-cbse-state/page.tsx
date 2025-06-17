@@ -31,23 +31,20 @@ import type { SchoolClassSubject } from '@/types/classes';
 import type { School } from '@/types/school';
 
 
-// --- Defaults for Front Side ---
-const coCurricularSubjectsListFront = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."];
-
 const getDefaultFaMarksEntryFront = (): FrontMarksEntry => ({ tool1: null, tool2: null, tool3: null, tool4: null });
 const getDefaultSubjectFaDataFront = (): Record<string, FrontSubjectFAData> => ({});
-const getDefaultCoCurricularSaDataFront = (): FrontCoCurricularSAData => ({
-  sa1Max: 50, sa1Marks: null, sa2Max: 50, sa2Marks: null, sa3Max: 50, sa3Marks: null,
-});
+
+// Co-curricular data is kept for potential future dynamic implementation, but rendering is removed.
+const defaultCoMarksFront: FrontCoCurricularSAData[] = []; 
 
 const defaultStudentDataFront: FrontStudentData = {
   udiseCodeSchoolName: '',
   studentName: '',
   fatherName: '',
   motherName: '',
-  class: '', // This will be populated with class name
+  class: '', 
   section: '',
-  studentIdNo: '', // This will be populated with actual student _id
+  studentIdNo: '', 
   rollNo: '',
   medium: 'English',
   dob: '',
@@ -56,10 +53,6 @@ const defaultStudentDataFront: FrontStudentData = {
   aadharNo: '',
 };
 
-const defaultCoMarksFront: FrontCoCurricularSAData[] = coCurricularSubjectsListFront.map(() => getDefaultCoCurricularSaDataFront());
-
-
-// --- Defaults for Back Side ---
 const defaultAttendanceDataBack: BackAttendanceMonthData[] = Array(11).fill(null).map(() => ({ workingDays: null, presentDays: null }));
 
 const getCurrentAcademicYear = (): string => {
@@ -84,15 +77,12 @@ export default function GenerateCBSEStateReportPage() {
   const [loadedSchool, setLoadedSchool] = useState<School | null>(null);
   const [isLoadingStudentAndClassData, setIsLoadingStudentAndClassData] = useState(false);
 
-
-  // Front Side State
   const [studentData, setStudentData] = useState<FrontStudentData>(defaultStudentDataFront);
   const [faMarks, setFaMarks] = useState<Record<string, FrontSubjectFAData>>(getDefaultSubjectFaDataFront()); 
   const [coMarks, setCoMarks] = useState<FrontCoCurricularSAData[]>(defaultCoMarksFront); 
   const [frontSecondLanguage, setFrontSecondLanguage] = useState<'Hindi' | 'Telugu'>('Hindi');
   const [frontAcademicYear, setFrontAcademicYear] = useState<string>(getCurrentAcademicYear());
 
-  // Back Side State
   const [saData, setSaData] = useState<BackSARowData[]>(defaultSaDataBack); 
   const [attendanceData, setAttendanceData] = useState<BackAttendanceMonthData[]>(defaultAttendanceDataBack);
   const [finalOverallGradeInput, setFinalOverallGradeInput] = useState<string | null>(null);
@@ -127,10 +117,10 @@ export default function GenerateCBSEStateReportPage() {
       };
     });
     setFaMarks(newFaMarks);
-    setSaData(prevSaData => // Ensure defaultSaDataBack structure is used for SA
+    setSaData(prevSaData => 
         defaultSaDataBack.map(defaultRow => ({
             ...defaultRow,
-            faTotal200M: calculateFaTotal200MForRow(defaultRow.subjectName) // Recalculate based on new FA
+            faTotal200M: calculateFaTotal200MForRow(defaultRow.subjectName)
         }))
     );
   }, []);
@@ -141,7 +131,7 @@ export default function GenerateCBSEStateReportPage() {
       toast({ variant: "destructive", title: "Missing Input", description: "Please enter an Admission ID." });
       return;
     }
-    if (!authUser || !authUser.schoolId) {
+    if (!authUser || !authUser.schoolId || !authUser._id) { // Added authUser._id check for saving later
         toast({ variant: "destructive", title: "Error", description: "Admin/Teacher session or school ID missing." });
         return;
     }
@@ -181,7 +171,6 @@ export default function GenerateCBSEStateReportPage() {
         return;
       }
 
-
       const schoolRes = await getSchoolById(studentRes.student.schoolId);
       if(schoolRes.success && schoolRes.school) {
         setLoadedSchool(schoolRes.school);
@@ -205,9 +194,16 @@ export default function GenerateCBSEStateReportPage() {
           ...prev,
           udiseCodeSchoolName: schoolRes.school?.schoolName || '', 
           studentName: studentRes.student?.name || '',
-          class: classRes.classDetails?.name || '', // Use fetched class name
+          fatherName: studentRes.student?.fatherName || '',
+          motherName: studentRes.student?.motherName || '',
+          class: classRes.classDetails?.name || '', 
+          section: studentRes.student?.section || '',
           studentIdNo: studentRes.student?._id || '', 
+          rollNo: studentRes.student?.rollNo || '',
+          dob: studentRes.student?.dob || '',
           admissionNo: studentRes.student?.admissionId || '',
+          examNo: studentRes.student?.examNo || '',
+          aadharNo: studentRes.student?.aadharNo || '',
         }));
       } else {
         toast({ variant: "destructive", title: "Class Details Error", description: classRes.message || `Could not load class details for class ID: ${studentRes.student.classId}. Ensure it's a valid Class ID.`});
@@ -222,7 +218,6 @@ export default function GenerateCBSEStateReportPage() {
   };
 
   const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string): number | null => {
-    // For "Science" on the back page (Physics/Biology papers), use the FA total for "Science" subject from front.
     const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
     
     const subjectFaData = faMarks[faSubjectKey];
@@ -233,14 +228,13 @@ export default function GenerateCBSEStateReportPage() {
       const periodMarks = subjectFaData[faPeriodKey];
       overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
     });
-    return overallTotal > 200 ? 200 : overallTotal; // Cap at 200
+    return overallTotal > 200 ? 200 : overallTotal;
   }, [faMarks]);
 
   useEffect(() => {
     setSaData(prevSaData => 
       prevSaData.map(row => ({
         ...row,
-        // Pass the subject name from the default SA structure (e.g., "Telugu", "Science")
         faTotal200M: calculateFaTotal200MForRow(row.subjectName) 
       }))
     );
@@ -463,7 +457,7 @@ export default function GenerateCBSEStateReportPage() {
                 disabled={isLoadingStudentAndClassData || isSaving}
               />
             </div>
-             <Button onClick={handleLoadStudentAndClassData} disabled={isLoadingStudentAndClassData || isSaving || !admissionIdInput.trim()}>
+             <Button onClick={handleLoadStudentAndClassData} disabled={isLoadingStudentAndClassData || isSaving || !admissionIdInput.trim() || !authUser || !authUser.schoolId}>
                 {isLoadingStudentAndClassData ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <SearchIcon className="mr-2 h-4 w-4"/>}
                 Load Student & Class Data
             </Button>

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/lib/mongodb';
 import type { User, UserRole } from '@/types/user';
-import { createSchoolUserFormSchema, type CreateSchoolUserFormData, updateSchoolUserFormSchema, type UpdateSchoolUserFormData } from '@/types/user';
+import { createSchoolUserFormSchema, type CreateSchoolUserFormData, updateSchoolUserFormSchema, type UpdateSchoolUserFormData, type CreateSchoolUserServerActionFormData } from '@/types/user';
 import { revalidatePath } from 'next/cache';
 import { ObjectId } from 'mongodb';
 
@@ -17,8 +17,9 @@ export interface CreateSchoolUserResult {
   user?: Partial<User>;
 }
 
-export async function createSchoolUser(values: CreateSchoolUserFormData, schoolId: string): Promise<CreateSchoolUserResult> {
+export async function createSchoolUser(values: CreateSchoolUserServerActionFormData, schoolId: string): Promise<CreateSchoolUserResult> {
   try {
+    // Validate against the more comprehensive schema that includes student-specific new fields
     const validatedFields = createSchoolUserFormSchema.safeParse(values);
     if (!validatedFields.success) {
       const errors = validatedFields.error.errors.map(e => e.message).join(' ');
@@ -29,7 +30,11 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
         return { success: false, message: 'Invalid School ID provided for user creation.', error: 'Invalid School ID.'};
     }
 
-    const { name, email, password, role, classId, admissionId, busRouteLocation, busClassCategory } = validatedFields.data;
+    const { 
+        name, email, password, role, classId, admissionId, 
+        busRouteLocation, busClassCategory,
+        fatherName, motherName, dob, section, rollNo, examNo, aadharNo // New fields
+    } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<Omit<User, '_id'>>('users');
@@ -55,10 +60,18 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
       password: hashedPassword,
       role: role as UserRole,
       schoolId: userSchoolId,
-      classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined, // Store class _id string
+      classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined,
       admissionId: role === 'student' ? (admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined) : undefined,
       busRouteLocation: role === 'student' ? (busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined) : undefined,
       busClassCategory: role === 'student' ? (busClassCategory && busClassCategory.trim() !== "" ? busClassCategory.trim() : undefined) : undefined,
+      // New fields
+      fatherName: role === 'student' ? fatherName : undefined,
+      motherName: role === 'student' ? motherName : undefined,
+      dob: role === 'student' ? dob : undefined,
+      section: role === 'student' ? section : undefined,
+      rollNo: role === 'student' ? rollNo : undefined,
+      examNo: role === 'student' ? examNo : undefined,
+      aadharNo: role === 'student' ? aadharNo : undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -119,10 +132,17 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         ...userWithoutPassword,
         _id: user._id.toString(),
         schoolId: user.schoolId?.toString(),
-        classId: user.classId || undefined, // classId is already string or undefined
+        classId: user.classId || undefined, 
         admissionId: user.admissionId || undefined,
         busRouteLocation: user.busRouteLocation || undefined,
         busClassCategory: user.busClassCategory || undefined,
+        fatherName: user.fatherName,
+        motherName: user.motherName,
+        dob: user.dob,
+        section: user.section,
+        rollNo: user.rollNo,
+        examNo: user.examNo,
+        aadharNo: user.aadharNo,
         createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
         updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : undefined,
       };
@@ -156,7 +176,11 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { name, email, password, role, classId, admissionId, enableBusTransport, busRouteLocation, busClassCategory } = validatedFields.data;
+    const { 
+        name, email, password, role, classId, admissionId, 
+        enableBusTransport, busRouteLocation, busClassCategory,
+        fatherName, motherName, dob, section, rollNo, examNo, aadharNo // New fields
+    } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
@@ -186,12 +210,12 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
     const updateData: Partial<Omit<User, '_id' | 'role' | 'createdAt'>> & { role?: UserRole; updatedAt: Date } = {
       name,
       email,
-      classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined, // Store class _id string
+      classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined,
       updatedAt: new Date(),
     };
 
     if (role && (role === 'teacher' || role === 'student')) {
-        updateData.role = role;
+        updateData.role = role; // Role shouldn't change, but schema expects it
         if (role === 'student') {
             updateData.admissionId = admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined;
             updateData.busRouteLocation = enableBusTransport && busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined;
@@ -200,10 +224,26 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
                 updateData.busRouteLocation = undefined;
                 updateData.busClassCategory = undefined;
             }
+            // Update new student fields
+            updateData.fatherName = fatherName;
+            updateData.motherName = motherName;
+            updateData.dob = dob;
+            updateData.section = section;
+            updateData.rollNo = rollNo;
+            updateData.examNo = examNo;
+            updateData.aadharNo = aadharNo;
         } else { 
             updateData.admissionId = undefined;
             updateData.busRouteLocation = undefined;
             updateData.busClassCategory = undefined;
+            // Clear student-specific fields for teachers
+            updateData.fatherName = undefined;
+            updateData.motherName = undefined;
+            updateData.dob = undefined;
+            updateData.section = undefined;
+            updateData.rollNo = undefined;
+            updateData.examNo = undefined;
+            updateData.aadharNo = undefined;
         }
     }
 
@@ -240,10 +280,17 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         ...userWithoutPassword,
         _id: updatedUserDoc._id.toString(),
         schoolId: updatedUserDoc.schoolId?.toString(),
-        classId: updatedUserDoc.classId || undefined, // classId is already string or undefined
+        classId: updatedUserDoc.classId || undefined, 
         admissionId: updatedUserDoc.admissionId || undefined,
         busRouteLocation: updatedUserDoc.busRouteLocation || undefined,
         busClassCategory: updatedUserDoc.busClassCategory || undefined,
+        fatherName: updatedUserDoc.fatherName,
+        motherName: updatedUserDoc.motherName,
+        dob: updatedUserDoc.dob,
+        section: updatedUserDoc.section,
+        rollNo: updatedUserDoc.rollNo,
+        examNo: updatedUserDoc.examNo,
+        aadharNo: updatedUserDoc.aadharNo,
         createdAt: updatedUserDoc.createdAt ? new Date(updatedUserDoc.createdAt).toISOString() : undefined,
         updatedAt: updatedUserDoc.updatedAt ? new Date(updatedUserDoc.updatedAt).toISOString() : undefined,
       }
@@ -318,6 +365,13 @@ export async function getStudentsByClass(schoolId: string, classId: string): Pro
         admissionId: student.admissionId || undefined,
         busRouteLocation: student.busRouteLocation || undefined,
         busClassCategory: student.busClassCategory || undefined,
+        fatherName: student.fatherName,
+        motherName: student.motherName,
+        dob: student.dob,
+        section: student.section,
+        rollNo: student.rollNo,
+        examNo: student.examNo,
+        aadharNo: student.aadharNo,
         createdAt: student.createdAt ? new Date(student.createdAt).toISOString() : undefined,
         updatedAt: student.updatedAt ? new Date(student.updatedAt).toISOString() : undefined,
       };
@@ -392,11 +446,20 @@ export async function getStudentCountByClass(schoolId: string, classId: string):
 }
 
 export interface StudentDetailsForReportCard {
-    _id: string; // Actual MongoDB _id as string (student's _id)
+    _id: string; 
     name: string;
     admissionId?: string;
-    classId?: string; // Class _id as string
-    schoolId?: string; // School _id as string
+    classId?: string; 
+    schoolId?: string; 
+    // New fields
+    fatherName?: string;
+    motherName?: string;
+    dob?: string;
+    section?: string;
+    rollNo?: string;
+    examNo?: string;
+    aadharNo?: string;
+    udiseCodeSchoolName?: string; // Placeholder for school name
 }
 export interface GetStudentDetailsForReportCardResult {
   success: boolean;
@@ -417,22 +480,31 @@ export async function getStudentDetailsForReportCard(admissionIdQuery: string, s
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
 
-    const student = await usersCollection.findOne({ 
+    const studentDoc = await usersCollection.findOne({ 
         admissionId: admissionIdQuery, 
         schoolId: new ObjectId(schoolIdQuery) as any,
         role: 'student' 
     });
 
-    if (!student) {
+    if (!studentDoc) {
       return { success: false, message: `Student with Admission ID '${admissionIdQuery}' not found in this school.`, error: 'Student not found.' };
     }
+    
+    const student = studentDoc as User; // Type assertion
 
     const studentDetails: StudentDetailsForReportCard = {
-      _id: student._id.toString(), // This is the actual MongoDB _id of the student
+      _id: student._id.toString(), 
       name: student.name,
       admissionId: student.admissionId,
-      classId: student.classId, // This should be the class _id string
+      classId: student.classId, 
       schoolId: student.schoolId?.toString(),
+      fatherName: student.fatherName,
+      motherName: student.motherName,
+      dob: student.dob,
+      section: student.section,
+      rollNo: student.rollNo,
+      examNo: student.examNo,
+      aadharNo: student.aadharNo,
     };
 
     return { success: true, student: studentDetails };

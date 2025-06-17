@@ -21,6 +21,16 @@ export interface User {
   busRouteLocation?: string; // For students using bus transport
   busClassCategory?: string; // For students using bus transport, to match specific bus fee tier
   subjectsTaught?: string[]; // For teachers, list of subject names or IDs they teach (Future use)
+  
+  // New fields for student report card
+  fatherName?: string;
+  motherName?: string;
+  dob?: string; // Store as string for simplicity, can be Date if strict typing needed
+  section?: string;
+  rollNo?: string;
+  examNo?: string;
+  aadharNo?: string;
+
   createdAt: Date | string; // Allow string for client-side
   updatedAt: Date | string; // Allow string for client-side
 }
@@ -49,6 +59,14 @@ export const createStudentFormSchema = z.object({
   enableBusTransport: z.boolean().default(false).optional(),
   busRouteLocation: z.string().optional(),
   busClassCategory: z.string().optional(),
+  // New fields for student
+  fatherName: z.string().optional(),
+  motherName: z.string().optional(),
+  dob: z.string().optional(), // Consider date validation if needed: .refine(val => !val || !isNaN(Date.parse(val)), { message: "Invalid date format" })
+  section: z.string().optional(),
+  rollNo: z.string().optional(),
+  examNo: z.string().optional(),
+  aadharNo: z.string().optional(),
 }).refine(data => {
   if (data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
     return false;
@@ -80,6 +98,14 @@ export const createSchoolUserFormSchema = z.object({
   admissionId: z.string().optional(),
   busRouteLocation: z.string().optional(),
   busClassCategory: z.string().optional(),
+  // New fields for student
+  fatherName: z.string().optional(),
+  motherName: z.string().optional(),
+  dob: z.string().optional(),
+  section: z.string().optional(),
+  rollNo: z.string().optional(),
+  examNo: z.string().optional(),
+  aadharNo: z.string().optional(),
 }).refine(data => {
   if (data.role === 'student' && (!data.admissionId || data.admissionId.trim() === "")) {
     return false;
@@ -103,6 +129,14 @@ export const updateSchoolUserFormSchema = z.object({
   enableBusTransport: z.boolean().default(false).optional(),
   busRouteLocation: z.string().optional(),
   busClassCategory: z.string().optional(),
+  // New fields for student
+  fatherName: z.string().optional(),
+  motherName: z.string().optional(),
+  dob: z.string().optional(),
+  section: z.string().optional(),
+  rollNo: z.string().optional(),
+  examNo: z.string().optional(),
+  aadharNo: z.string().optional(),
 }).refine(data => {
   if (data.role === 'student' && data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
     return false;
@@ -125,6 +159,14 @@ export interface CreateSchoolUserServerActionFormData {
   admissionId?: string;
   busRouteLocation?: string;
   busClassCategory?: string;
+  // New fields for student
+  fatherName?: string;
+  motherName?: string;
+  dob?: string;
+  section?: string;
+  rollNo?: string;
+  examNo?: string;
+  aadharNo?: string;
 }
 
 

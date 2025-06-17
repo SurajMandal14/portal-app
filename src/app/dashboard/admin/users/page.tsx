@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen, DollarSign, Bus } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, Briefcase, XCircle, SquarePen, DollarSign, Bus, Info, CalendarIcon } from "lucide-react"; // Added CalendarIcon
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
 import {
@@ -29,7 +29,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser } from "@/app/actions/schoolUsers";
@@ -50,15 +49,13 @@ import type { AuthUser } from "@/types/attendance";
 
 type SchoolUser = Partial<AppUser>; 
 
-const NONE_CLASS_VALUE = "__NONE_CLASS_ID__"; // Changed to indicate it's an ID
+const NONE_CLASS_VALUE = "__NONE_CLASS_ID__"; 
 
 export default function AdminUserManagementPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null); 
   const [managedClasses, setManagedClasses] = useState<SchoolClass[]>([]); 
-  // availableClassNames is no longer needed as we use managedClasses for IDs
-  // const [availableClassNames, setAvailableClassNames] = useState<string[]>([]);
   const [schoolUsers, setSchoolUsers] = useState<SchoolUser[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
@@ -80,7 +77,11 @@ export default function AdminUserManagementPage() {
 
   const studentForm = useForm<CreateStudentFormData>({
     resolver: zodResolver(createStudentFormSchema),
-    defaultValues: { name: "", email: "", password: "", admissionId: "", classId: "", enableBusTransport: false, busRouteLocation: "", busClassCategory: "" },
+    defaultValues: { 
+        name: "", email: "", password: "", admissionId: "", classId: "", 
+        enableBusTransport: false, busRouteLocation: "", busClassCategory: "",
+        fatherName: "", motherName: "", dob: "", section: "", rollNo: "", examNo: "", aadharNo: ""
+    },
   });
 
   const teacherForm = useForm<CreateTeacherFormData>({
@@ -90,7 +91,11 @@ export default function AdminUserManagementPage() {
 
   const editForm = useForm<UpdateSchoolUserFormData>({
     resolver: zodResolver(updateSchoolUserFormSchema),
-    defaultValues: { name: "", email: "", password: "", role: undefined, classId: "", admissionId: "", enableBusTransport: false, busRouteLocation: "", busClassCategory: "" },
+    defaultValues: { 
+        name: "", email: "", password: "", role: undefined, classId: "", admissionId: "", 
+        enableBusTransport: false, busRouteLocation: "", busClassCategory: "",
+        fatherName: "", motherName: "", dob: "", section: "", rollNo: "", examNo: "", aadharNo: ""
+    },
   });
   const editingUserRole = editForm.watch("role");
   const editEnableBusTransport = editForm.watch("enableBusTransport");
@@ -234,14 +239,25 @@ export default function AdminUserManagementPage() {
         email: editingUser.email || "",
         password: "", 
         role: editingUser.role as 'teacher' | 'student' | undefined,
-        classId: editingUser.classId || "", // This should be the class _id string
+        classId: editingUser.classId || "", 
         admissionId: editingUser.admissionId || "",
         enableBusTransport: !!editingUser.busRouteLocation,
         busRouteLocation: editingUser.busRouteLocation || "",
         busClassCategory: editingUser.busClassCategory || "",
+        fatherName: editingUser.fatherName || "",
+        motherName: editingUser.motherName || "",
+        dob: editingUser.dob || "",
+        section: editingUser.section || "",
+        rollNo: editingUser.rollNo || "",
+        examNo: editingUser.examNo || "",
+        aadharNo: editingUser.aadharNo || "",
       });
     } else {
-      editForm.reset({ name: "", email: "", password: "", role: undefined, classId: "", admissionId: "", enableBusTransport: false, busRouteLocation: "", busClassCategory:"" });
+      editForm.reset({ 
+        name: "", email: "", password: "", role: undefined, classId: "", admissionId: "", 
+        enableBusTransport: false, busRouteLocation: "", busClassCategory:"",
+        fatherName: "", motherName: "", dob: "", section: "", rollNo: "", examNo: "", aadharNo: ""
+      });
     }
   }, [editingUser, editForm]);
 
@@ -273,8 +289,11 @@ export default function AdminUserManagementPage() {
   async function handleTeacherSubmit(values: CreateTeacherFormData) {
     if (!authUser?.schoolId) return;
     setIsSubmittingTeacher(true);
-    // For teachers, classId is the ID of the class they are class teacher for.
-    const payload: CreateSchoolUserServerActionFormData = { ...values, role: 'teacher', classId: values.classId === NONE_CLASS_VALUE ? undefined : values.classId };
+    const payload: CreateSchoolUserServerActionFormData = { 
+        ...values, 
+        role: 'teacher', 
+        classId: values.classId === NONE_CLASS_VALUE ? undefined : values.classId 
+    };
     const result = await createSchoolUser(payload, authUser.schoolId.toString());
     setIsSubmittingTeacher(false);
     if (result.success) {
@@ -291,7 +310,7 @@ export default function AdminUserManagementPage() {
     setIsSubmittingEdit(true);
     const payload = { 
       ...values, 
-      classId: values.classId === NONE_CLASS_VALUE ? "" : values.classId, // Send empty string if "None"
+      classId: values.classId === NONE_CLASS_VALUE ? "" : values.classId, 
       busRouteLocation: values.enableBusTransport && values.role === 'student' ? values.busRouteLocation : undefined,
       busClassCategory: values.enableBusTransport && values.role === 'student' ? values.busClassCategory : undefined,
     };
@@ -397,17 +416,40 @@ export default function AdminUserManagementPage() {
                       </FormItem>
                    )}/>
                    {editingUserRole === 'student' && (
-                      <FormField control={editForm.control} name="admissionId" render={({ field }) => (
-                          <FormItem>
-                              <FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel>
-                              <FormControl><Input {...field} disabled={isSubmittingEdit} /></FormControl>
-                              <FormMessage />
-                          </FormItem>
-                      )}/>
+                      <>
+                        <FormField control={editForm.control} name="admissionId" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel>
+                                <FormControl><Input {...field} disabled={isSubmittingEdit} /></FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}/>
+                        <FormField control={editForm.control} name="fatherName" render={({ field }) => (
+                            <FormItem><FormLabel>Father's Name</FormLabel><FormControl><Input {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={editForm.control} name="motherName" render={({ field }) => (
+                            <FormItem><FormLabel>Mother's Name</FormLabel><FormControl><Input {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                         <FormField control={editForm.control} name="dob" render={({ field }) => (
+                            <FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Birth</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={editForm.control} name="section" render={({ field }) => (
+                            <FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="e.g., A, B" {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={editForm.control} name="rollNo" render={({ field }) => (
+                            <FormItem><FormLabel>Roll Number</FormLabel><FormControl><Input {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={editForm.control} name="examNo" render={({ field }) => (
+                            <FormItem><FormLabel>Exam Number</FormLabel><FormControl><Input {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={editForm.control} name="aadharNo" render={({ field }) => (
+                            <FormItem><FormLabel>Aadhar Number</FormLabel><FormControl><Input {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                      </>
                    )}
                     <FormField 
                         control={editForm.control} 
-                        name="classId" // Stores class _id
+                        name="classId" 
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Assign to Class</FormLabel>
@@ -505,7 +547,7 @@ export default function AdminUserManagementPage() {
                         <FormField control={studentForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="student@example.com" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={studentForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={studentForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel><FormControl><Input placeholder="e.g., S1001" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={studentForm.control} name="classId" render={({ field }) => ( // classId stores _id of the class
+                        <FormField control={studentForm.control} name="classId" render={({ field }) => ( 
                             <FormItem>
                                 <FormLabel>Assign to Class</FormLabel>
                                 <Select 
@@ -531,7 +573,29 @@ export default function AdminUserManagementPage() {
                                 <FormMessage/>
                             </FormItem>
                         )}/>
-                        <div /> 
+                        <FormField control={studentForm.control} name="fatherName" render={({ field }) => (
+                            <FormItem><FormLabel>Father's Name</FormLabel><FormControl><Input placeholder="e.g., Robert Doe" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={studentForm.control} name="motherName" render={({ field }) => (
+                            <FormItem><FormLabel>Mother's Name</FormLabel><FormControl><Input placeholder="e.g., Maria Doe" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                         <FormField control={studentForm.control} name="dob" render={({ field }) => (
+                            <FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Birth</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={studentForm.control} name="section" render={({ field }) => (
+                            <FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="e.g., A, B" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={studentForm.control} name="rollNo" render={({ field }) => (
+                            <FormItem><FormLabel>Roll Number</FormLabel><FormControl><Input placeholder="e.g., 101" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={studentForm.control} name="examNo" render={({ field }) => (
+                            <FormItem><FormLabel>Exam Number (Optional)</FormLabel><FormControl><Input {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={studentForm.control} name="aadharNo" render={({ field }) => (
+                            <FormItem><FormLabel>Aadhar Number (Optional)</FormLabel><FormControl><Input placeholder="123456789012" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
+                        )}/>
+                        
+                        <div className="md:col-span-2" />
 
                         <FormField
                             control={studentForm.control}
@@ -613,7 +677,7 @@ export default function AdminUserManagementPage() {
                         <FormField control={teacherForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Jane Teacher" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={teacherForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="teacher@example.com" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={teacherForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={teacherForm.control} name="classId" render={({ field }) => ( // classId stores _id of the class
+                        <FormField control={teacherForm.control} name="classId" render={({ field }) => ( 
                             <FormItem>
                                 <FormLabel>Assign as Class Teacher (Optional)</FormLabel>
                                 <Select 
