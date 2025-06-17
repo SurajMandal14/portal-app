@@ -398,13 +398,11 @@ export async function getStudentCountByClass(schoolId: string, className: string
 }
 
 export interface StudentDetailsForReportCard {
-    _id: string;
+    _id: string; // Actual MongoDB _id as string
     name: string;
     admissionId?: string;
-    classId?: string; // This will be the actual class _id (string)
+    classId?: string; 
     schoolId?: string;
-    // Add other fields from FrontStudentData if they exist in User model
-    // e.g., studentName, studentIdNo (can be _id or admissionId), medium
 }
 export interface GetStudentDetailsForReportCardResult {
   success: boolean;
@@ -413,33 +411,39 @@ export interface GetStudentDetailsForReportCardResult {
   message?: string;
 }
 
-export async function getStudentDetailsForReportCard(studentId: string): Promise<GetStudentDetailsForReportCardResult> {
+export async function getStudentDetailsForReportCard(admissionIdQuery: string, schoolIdQuery: string): Promise<GetStudentDetailsForReportCardResult> {
   try {
-    if (!ObjectId.isValid(studentId)) {
-      return { success: false, message: 'Invalid Student ID format.', error: 'Invalid Student ID.' };
+    if (!admissionIdQuery || admissionIdQuery.trim() === "") {
+      return { success: false, message: 'Admission ID cannot be empty.', error: 'Invalid Admission ID.' };
+    }
+    if (!ObjectId.isValid(schoolIdQuery)) {
+      return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.' };
     }
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
 
-    const student = await usersCollection.findOne({ _id: new ObjectId(studentId) as any, role: 'student' });
+    const student = await usersCollection.findOne({ 
+        admissionId: admissionIdQuery, 
+        schoolId: new ObjectId(schoolIdQuery) as any,
+        role: 'student' 
+    });
 
     if (!student) {
-      return { success: false, message: 'Student not found.', error: 'Student not found.' };
+      return { success: false, message: `Student with Admission ID '${admissionIdQuery}' not found in this school.`, error: 'Student not found.' };
     }
 
-    // Map to StudentDetailsForReportCard, converting ObjectIds to strings
     const studentDetails: StudentDetailsForReportCard = {
-      _id: student._id.toString(),
+      _id: student._id.toString(), // This is the actual MongoDB _id
       name: student.name,
       admissionId: student.admissionId,
-      classId: student.classId, // Keep as string (name) or actual ObjectId string
+      classId: student.classId, 
       schoolId: student.schoolId?.toString(),
     };
 
     return { success: true, student: studentDetails };
   } catch (error) {
-    console.error('Get student details for report card error:', error);
+    console.error('Get student details for report card by admission ID error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch student details for report card.' };
   }

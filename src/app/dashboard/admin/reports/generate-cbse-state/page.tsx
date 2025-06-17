@@ -78,7 +78,7 @@ export default function GenerateCBSEStateReportPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   
-  const [targetStudentIdInput, setTargetStudentIdInput] = useState<string>(""); 
+  const [admissionIdInput, setAdmissionIdInput] = useState<string>(""); 
   const [loadedStudent, setLoadedStudent] = useState<StudentDetailsForReportCard | null>(null);
   const [loadedClassSubjects, setLoadedClassSubjects] = useState<SchoolClassSubject[]>([]);
   const [teacherEditableSubjects, setTeacherEditableSubjects] = useState<string[]>([]);
@@ -123,12 +123,12 @@ export default function GenerateCBSEStateReportPage() {
       newFaMarks[subject.name] = getDefaultSubjectFaDataFront(); 
     });
     setFaMarks(newFaMarks);
-    setSaData(defaultSaDataBack); 
+    setSaData(defaultSaDataBack.map(row => ({ ...row, faTotal200M: null }))); // Reset SA data and FA totals
   }, []);
 
   const handleLoadStudentAndClassData = async () => {
-    if (!targetStudentIdInput.trim()) {
-      toast({ variant: "destructive", title: "Missing Input", description: "Please enter a Student ID." });
+    if (!admissionIdInput.trim()) {
+      toast({ variant: "destructive", title: "Missing Input", description: "Please enter an Admission ID." });
       return;
     }
     if (!authUser || !authUser.schoolId) {
@@ -149,9 +149,9 @@ export default function GenerateCBSEStateReportPage() {
 
 
     try {
-      const studentRes = await getStudentDetailsForReportCard(targetStudentIdInput);
+      const studentRes = await getStudentDetailsForReportCard(admissionIdInput, authUser.schoolId.toString());
       if (!studentRes.success || !studentRes.student) {
-        toast({ variant: "destructive", title: "Student Not Found", description: studentRes.message || "Could not find student." });
+        toast({ variant: "destructive", title: "Student Not Found", description: studentRes.message || "Could not find student with that Admission ID." });
         setIsLoadingStudentAndClassData(false);
         return;
       }
@@ -182,7 +182,7 @@ export default function GenerateCBSEStateReportPage() {
             udiseCodeSchoolName: schoolRes.school?.schoolName || '', 
             studentName: studentRes.student?.name || '',
             class: classRes.classDetails.name || '', 
-            studentIdNo: studentRes.student?._id || '',
+            studentIdNo: studentRes.student?._id || '', // This is the actual Student _id
             admissionNo: studentRes.student?.admissionId || '',
           }));
         } else {
@@ -201,9 +201,10 @@ export default function GenerateCBSEStateReportPage() {
   };
 
   const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string): number | null => {
-    const subjectKeyForFa = subjectNameForBack; 
+    // For "Science" on back, sum FA of "Science" on front. Otherwise, direct match.
+    const faSubjectKey = subjectNameForBack === "Physics" || subjectNameForBack === "Biology" ? "Science" : subjectNameForBack;
     
-    const subjectFaData = faMarks[subjectKeyForFa];
+    const subjectFaData = faMarks[faSubjectKey];
     if (!subjectFaData) return null;
 
     let overallTotal = 0;
@@ -215,13 +216,14 @@ export default function GenerateCBSEStateReportPage() {
   }, [faMarks]);
 
   useEffect(() => {
+    // Update SA data's FA total when faMarks change
     setSaData(prevSaData => 
       prevSaData.map(row => ({
         ...row,
         faTotal200M: calculateFaTotal200MForRow(row.subjectName) 
       }))
     );
-  }, [faMarks, calculateFaTotal200MForRow]); 
+  }, [faMarks, calculateFaTotal200MForRow]);
 
 
   const handleStudentDataChange = (field: keyof FrontStudentData, value: string) => {
@@ -314,7 +316,7 @@ export default function GenerateCBSEStateReportPage() {
         ...marksData,
     }));
     console.log("Report Card Data:", {
-      targetStudentId: loadedStudent?._id || targetStudentIdInput,
+      targetStudentId: loadedStudent?._id || admissionIdInput,
       academicYear: frontAcademicYear,
       secondLanguage: frontSecondLanguage,
       studentInfo: studentData,
@@ -333,7 +335,7 @@ export default function GenerateCBSEStateReportPage() {
   const handlePrint = () => window.print();
   
   const handleResetData = () => {
-    setTargetStudentIdInput("");
+    setAdmissionIdInput("");
     setLoadedStudent(null);
     setLoadedClassSubjects([]);
     setTeacherEditableSubjects([]);
@@ -355,7 +357,7 @@ export default function GenerateCBSEStateReportPage() {
       return;
     }
     if (!loadedStudent || !loadedStudent._id) {
-      toast({ variant: "destructive", title: "Missing Student ID", description: "Please load student data first." });
+      toast({ variant: "destructive", title: "Missing Student ID", description: "Please load student data first using Admission ID." });
       return;
     }
 
@@ -368,7 +370,7 @@ export default function GenerateCBSEStateReportPage() {
       }));
 
     const reportPayload: Omit<ReportCardData, '_id' | 'createdAt' | 'updatedAt'> = {
-      studentId: loadedStudent._id,
+      studentId: loadedStudent._id, // This is the MongoDB _id of the student
       schoolId: (loadedSchool?._id || authUser.schoolId).toString(),
       academicYear: frontAcademicYear,
       reportCardTemplateKey: 'cbse_state', 
@@ -420,24 +422,24 @@ export default function GenerateCBSEStateReportPage() {
           </CardTitle>
           <CardDescription>
             Logged in as: <span className="font-semibold capitalize">{authUser?.role || 'N/A'}</span>. 
-            Enter Student ID to load data, then fill in marks.
+            Enter Student's Admission ID to load data, then fill in marks.
             {authUser?.role === 'teacher' && " You can only edit marks for subjects assigned to you."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row gap-2 items-end">
             <div className="w-full sm:w-auto">
-              <Label htmlFor="targetStudentIdInput" className="mb-1 flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Target Student ID</Label>
+              <Label htmlFor="admissionIdInput" className="mb-1 flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Enter Admission ID</Label>
               <Input 
-                id="targetStudentIdInput"
-                placeholder="Enter Student ID"
-                value={targetStudentIdInput}
-                onChange={(e) => setTargetStudentIdInput(e.target.value)}
+                id="admissionIdInput"
+                placeholder="Enter Admission ID"
+                value={admissionIdInput}
+                onChange={(e) => setAdmissionIdInput(e.target.value)}
                 className="w-full sm:min-w-[250px]"
                 disabled={isLoadingStudentAndClassData || isSaving}
               />
             </div>
-             <Button onClick={handleLoadStudentAndClassData} disabled={isLoadingStudentAndClassData || isSaving || !targetStudentIdInput.trim()}>
+             <Button onClick={handleLoadStudentAndClassData} disabled={isLoadingStudentAndClassData || isSaving || !admissionIdInput.trim()}>
                 {isLoadingStudentAndClassData ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <SearchIcon className="mr-2 h-4 w-4"/>}
                 Load Student & Class Data
             </Button>
@@ -501,21 +503,20 @@ export default function GenerateCBSEStateReportPage() {
           </div>
         </>
       )}
-      {!isLoadingStudentAndClassData && !loadedStudent && targetStudentIdInput && (
+      {!isLoadingStudentAndClassData && !loadedStudent && admissionIdInput && (
           <Card className="no-print">
             <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">Student data not loaded. Please ensure the Student ID is correct and click "Load Student & Class Data".</p>
+                <p className="text-muted-foreground">Student data not loaded. Please ensure the Admission ID is correct and click "Load Student & Class Data".</p>
             </CardContent>
           </Card>
       )}
-       {!isLoadingStudentAndClassData && !targetStudentIdInput && (
+       {!isLoadingStudentAndClassData && !admissionIdInput && (
           <Card className="no-print">
             <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">Enter a Student ID and click "Load Student & Class Data" to begin.</p>
+                <p className="text-muted-foreground">Enter an Admission ID and click "Load Student & Class Data" to begin.</p>
             </CardContent>
           </Card>
       )}
     </div>
   );
 }
-
