@@ -92,7 +92,7 @@ export default function TeacherMarksEntryPage() {
   }, [authUser, fetchSubjects]);
 
   const fetchStudentsAndMarks = useCallback(async () => {
-    if (!selectedSubject || !selectedAssessment || !selectedTerm || !selectedAcademicYear || !authUser?.schoolId) {
+    if (!selectedSubject || !selectedSubject.classId || !selectedAssessment || !selectedTerm || !selectedAcademicYear || !authUser?.schoolId) {
       setStudentsForMarks([]);
       setStudentMarks({});
       setIsLoadingStudentsAndMarks(false);
@@ -100,7 +100,8 @@ export default function TeacherMarksEntryPage() {
     }
     setIsLoadingStudentsAndMarks(true);
     try {
-      const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), selectedSubject.className);
+      // Use selectedSubject.classId (which is the _id string) for fetching students
+      const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), selectedSubject.classId);
       if (studentsResult.success && studentsResult.users) {
         setStudentsForMarks(studentsResult.users);
 
@@ -120,22 +121,25 @@ export default function TeacherMarksEntryPage() {
               studentId: mark.studentId.toString(),
               marksObtained: mark.marksObtained,
               maxMarks: mark.maxMarks,
-              studentName: mark.studentName, // Already there in MarkEntry
+              studentName: mark.studentName, 
             };
           });
            if (marksResult.marks.length > 0 && marksResult.marks[0]) {
              setDefaultMaxMarks(marksResult.marks[0].maxMarks);
            }
         }
-        // Initialize for students not in marksResult
+        
         studentsResult.users.forEach(student => {
           if (student._id && !initialMarks[student._id.toString()]) {
             initialMarks[student._id.toString()] = {
               studentId: student._id.toString(),
               studentName: student.name || "N/A",
-              marksObtained: 0, // Default to 0 or null
+              marksObtained: 0, 
               maxMarks: defaultMaxMarks, 
             };
+          } else if (student._id && initialMarks[student._id.toString()] && initialMarks[student._id.toString()].maxMarks === undefined) {
+            // Ensure existing marks also have maxMarks if it was missing (e.g., from older data)
+            initialMarks[student._id.toString()].maxMarks = defaultMaxMarks;
           }
         });
         setStudentMarks(initialMarks);
@@ -156,11 +160,9 @@ export default function TeacherMarksEntryPage() {
   }, [authUser, selectedSubject, selectedAssessment, selectedTerm, selectedAcademicYear, toast, defaultMaxMarks]);
   
   useEffect(() => {
-    // Trigger fetch when selections change
-    if (selectedSubject && selectedAssessment && selectedTerm && selectedAcademicYear) {
+    if (selectedSubject && selectedSubject.classId && selectedAssessment && selectedTerm && selectedAcademicYear) {
       fetchStudentsAndMarks();
     } else {
-      // Clear students and marks if selections are incomplete
       setStudentsForMarks([]);
       setStudentMarks({});
     }
@@ -170,7 +172,6 @@ export default function TeacherMarksEntryPage() {
   const handleSubjectChange = (value: string) => { // value is the composite "classId_subjectName"
     const subjectInfo = availableSubjects.find(s => s.value === value);
     setSelectedSubject(subjectInfo || null);
-    // Reset dependent fields
     setSelectedAssessment("");
     setStudentsForMarks([]);
     setStudentMarks({});
@@ -185,7 +186,7 @@ export default function TeacherMarksEntryPage() {
         studentId: studentId, 
         studentName: prev[studentId]?.studentName || studentsForMarks.find(s=>s._id === studentId)?.name || 'N/A',
         [field]: isNaN(numValue) ? (field === 'marksObtained' ? 0 : defaultMaxMarks) : numValue,
-        ...(field === 'maxMarks' && { maxMarks: isNaN(numValue) ? defaultMaxMarks : numValue }), // Ensure maxMarks is always set
+        ...(field === 'maxMarks' && { maxMarks: isNaN(numValue) ? defaultMaxMarks : numValue }),
         ...(field === 'marksObtained' && { marksObtained: isNaN(numValue) ? 0 : numValue })
 
       }
@@ -196,20 +197,17 @@ export default function TeacherMarksEntryPage() {
     const newMax = parseInt(value, 10);
     if (!isNaN(newMax) && newMax > 0) {
       setDefaultMaxMarks(newMax);
-      // Update maxMarks for all students if they haven't been individually set
       setStudentMarks(prev => {
         const updated = { ...prev };
         Object.keys(updated).forEach(studentId => {
-          // Check if maxMarks was at default or not individually set
-          // This logic might need refinement based on how you want to handle existing entries
-          if (updated[studentId].maxMarks === defaultMaxMarks || !updated[studentId].maxMarks) { 
+          if (updated[studentId].maxMarks === defaultMaxMarks || updated[studentId].maxMarks === undefined || updated[studentId].maxMarks === null) { 
             updated[studentId].maxMarks = newMax;
           }
         });
         return updated;
       });
     } else if (value === "") {
-        setDefaultMaxMarks(50); // Default back if cleared
+        setDefaultMaxMarks(50); 
     }
   };
 
@@ -220,8 +218,12 @@ export default function TeacherMarksEntryPage() {
     }
     setIsSubmitting(true);
 
-    const marksToSubmit: StudentMarkInput[] = Object.values(studentMarks).filter(mark => {
-      // Validate individual entries before submitting
+    const marksToSubmit: StudentMarkInput[] = Object.values(studentMarks).map(mark => ({
+        studentId: mark.studentId,
+        studentName: mark.studentName || studentsForMarks.find(s=>s._id === mark.studentId)?.name || 'N/A', // Ensure name is present
+        marksObtained: typeof mark.marksObtained === 'number' ? mark.marksObtained : 0,
+        maxMarks: typeof mark.maxMarks === 'number' && mark.maxMarks > 0 ? mark.maxMarks : defaultMaxMarks,
+    })).filter(mark => {
       if (mark.marksObtained < 0) {
         toast({ variant: "destructive", title: "Invalid Marks", description: `Marks for ${mark.studentName} cannot be negative.`});
         return false;
@@ -231,19 +233,18 @@ export default function TeacherMarksEntryPage() {
         return false;
       }
       if (mark.marksObtained > mark.maxMarks) {
-        toast({ variant: "destructive", title: "Marks Exceed Max", description: `Marks for ${mark.studentName} exceed max marks.`});
+        toast({ variant: "destructive", title: "Marks Exceed Max", description: `Marks for ${mark.studentName} (${mark.marksObtained}) exceed max marks (${mark.maxMarks}).`});
         return false;
       }
       return true;
     });
 
-    if (marksToSubmit.length !== Object.values(studentMarks).length) {
-        // This means some validation failed above and toast was shown
+    if (marksToSubmit.length !== Object.values(studentMarks).length && studentsForMarks.length > 0) {
         setIsSubmitting(false);
         return;
     }
      if (marksToSubmit.length === 0 && studentsForMarks.length > 0) {
-        toast({ variant: "info", title: "No Marks to Submit", description: "No marks were entered or all entries are invalid." });
+        toast({ variant: "info", title: "No Valid Marks to Submit", description: "No marks were entered or all entries are invalid." });
         setIsSubmitting(false);
         return;
     }
@@ -253,11 +254,10 @@ export default function TeacherMarksEntryPage() {
         return;
     }
 
-
     const payload: MarksSubmissionPayload = {
       classId: selectedSubject.classId,
       className: selectedSubject.className,
-      subjectId: selectedSubject.subjectName, // Using subject name as identifier
+      subjectId: selectedSubject.subjectName,
       subjectName: selectedSubject.subjectName,
       assessmentName: selectedAssessment,
       term: selectedTerm,
@@ -270,7 +270,7 @@ export default function TeacherMarksEntryPage() {
     const result = await submitMarks(payload);
     if (result.success) {
       toast({ title: "Marks Submitted", description: result.message });
-      fetchStudentsAndMarks(); // Refresh marks
+      fetchStudentsAndMarks(); 
     } else {
       toast({ variant: "destructive", title: "Submission Failed", description: result.error || result.message });
     }
@@ -290,6 +290,8 @@ export default function TeacherMarksEntryPage() {
       </Card>
     );
   }
+
+  const canLoadStudents = !!(selectedSubject && selectedSubject.classId && selectedAssessment && selectedTerm && selectedAcademicYear);
 
   return (
     <div className="space-y-6">
@@ -354,7 +356,7 @@ export default function TeacherMarksEntryPage() {
            <div className="lg:col-start-4">
             <Button 
               onClick={fetchStudentsAndMarks} 
-              disabled={isLoadingStudentsAndMarks || !selectedSubject || !selectedAssessment || !selectedTerm || !selectedAcademicYear}
+              disabled={isLoadingStudentsAndMarks || !canLoadStudents}
               className="w-full"
             >
               {isLoadingStudentsAndMarks ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Filter className="mr-2 h-4 w-4"/>}
@@ -364,7 +366,7 @@ export default function TeacherMarksEntryPage() {
         </CardContent>
       </Card>
 
-      {selectedSubject && selectedAssessment && (
+      {selectedSubject && selectedAssessment && selectedTerm && selectedAcademicYear && (
         <Card>
           <CardHeader>
             <CardTitle>Enter Marks for: {selectedSubject.label} - {selectedAssessment} - {selectedTerm} ({selectedAcademicYear})</CardTitle>
@@ -445,3 +447,4 @@ export default function TeacherMarksEntryPage() {
     </div>
   );
 }
+
