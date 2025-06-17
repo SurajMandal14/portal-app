@@ -112,7 +112,7 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
     }).sort({ createdAt: -1 }).toArray();
 
     const users = usersFromDb.map(userDoc => {
-      const user = userDoc as unknown as User; // Cast to User to help TypeScript with field access
+      const user = userDoc as unknown as User; 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...userWithoutPassword } = user;
       return {
@@ -196,11 +196,11 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
             updateData.admissionId = admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined;
             updateData.busRouteLocation = enableBusTransport && busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined;
             updateData.busClassCategory = enableBusTransport && busClassCategory && busClassCategory.trim() !== "" ? busClassCategory.trim() : undefined;
-             if (!enableBusTransport) { // Explicitly clear bus info if transport is disabled
+             if (!enableBusTransport) { 
                 updateData.busRouteLocation = undefined;
                 updateData.busClassCategory = undefined;
             }
-        } else { // For teacher
+        } else { 
             updateData.admissionId = undefined;
             updateData.busRouteLocation = undefined;
             updateData.busClassCategory = undefined;
@@ -397,3 +397,50 @@ export async function getStudentCountByClass(schoolId: string, className: string
   }
 }
 
+export interface StudentDetailsForReportCard {
+    _id: string;
+    name: string;
+    admissionId?: string;
+    classId?: string; // This will be the actual class _id (string)
+    schoolId?: string;
+    // Add other fields from FrontStudentData if they exist in User model
+    // e.g., studentName, studentIdNo (can be _id or admissionId), medium
+}
+export interface GetStudentDetailsForReportCardResult {
+  success: boolean;
+  student?: StudentDetailsForReportCard;
+  error?: string;
+  message?: string;
+}
+
+export async function getStudentDetailsForReportCard(studentId: string): Promise<GetStudentDetailsForReportCardResult> {
+  try {
+    if (!ObjectId.isValid(studentId)) {
+      return { success: false, message: 'Invalid Student ID format.', error: 'Invalid Student ID.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const usersCollection = db.collection<User>('users');
+
+    const student = await usersCollection.findOne({ _id: new ObjectId(studentId) as any, role: 'student' });
+
+    if (!student) {
+      return { success: false, message: 'Student not found.', error: 'Student not found.' };
+    }
+
+    // Map to StudentDetailsForReportCard, converting ObjectIds to strings
+    const studentDetails: StudentDetailsForReportCard = {
+      _id: student._id.toString(),
+      name: student.name,
+      admissionId: student.admissionId,
+      classId: student.classId, // Keep as string (name) or actual ObjectId string
+      schoolId: student.schoolId?.toString(),
+    };
+
+    return { success: true, student: studentDetails };
+  } catch (error) {
+    console.error('Get student details for report card error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch student details for report card.' };
+  }
+}

@@ -2,6 +2,7 @@
 "use client";
 
 import React from 'react';
+import type { SchoolClassSubject } from '@/types/classes'; // Import SchoolClassSubject
 
 // Define interfaces for props and state
 export interface StudentData {
@@ -47,8 +48,9 @@ interface CBSEStateFrontProps {
   studentData: StudentData;
   onStudentDataChange: (field: keyof StudentData, value: string) => void;
   
-  faMarks: SubjectFAData[];
-  onFaMarksChange: (subjectIndex: number, faPeriod: keyof SubjectFAData, toolKey: keyof MarksEntry, value: string) => void;
+  academicSubjects: SchoolClassSubject[]; // Changed from faMarks to accept dynamic subjects
+  faMarks: Record<string, SubjectFAData>; // Changed to be an object keyed by subject identifier
+  onFaMarksChange: (subjectIdentifier: string, faPeriod: keyof SubjectFAData, toolKey: keyof MarksEntry, value: string) => void; // subjectIdentifier added
   
   coMarks: CoCurricularSAData[];
   onCoMarksChange: (subjectIndex: number, saPeriod: 'sa1' | 'sa2' | 'sa3', type: 'Marks' | 'Max', value: string) => void;
@@ -94,15 +96,16 @@ const getGrade = (totalMarks: number, scale: { min: number; grade: string }[]): 
   return scale[scale.length - 1]?.grade || 'N/A'; 
 };
 
-const mainSubjects = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"];
-const coCurricularSubjects = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."];
+// const mainSubjects = ["Telugu", "Hindi", "English", "Maths", "Phy. Science", "Biol. Science", "Social Studies"]; // Removed, now dynamic
+const coCurricularSubjects = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."]; // Kept static for now
 
 
 const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   studentData,
   onStudentDataChange,
-  faMarks,
-  onFaMarksChange,
+  academicSubjects, // New prop
+  faMarks, // Now an object
+  onFaMarksChange, // Signature changed
   coMarks,
   onCoMarksChange,
   secondLanguage,
@@ -111,11 +114,11 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   onAcademicYearChange
 }) => {
 
-  const calculateFaResults = React.useCallback((subjectIndex: number) => {
-    const subjectData = faMarks[subjectIndex];
+  const calculateFaResults = React.useCallback((subjectIdentifier: string) => { // subjectIdentifier instead of subjectIndex
+    const subjectData = faMarks[subjectIdentifier]; // Access marks using identifier
     if (!subjectData) {
         const defaultFaPeriod = { tool1: null, tool2: null, tool3: null, tool4: null };
-        const defaultSubjectData = { fa1: defaultFaPeriod, fa2: defaultFaPeriod, fa3: defaultFaPeriod, fa4: defaultFaPeriod };
+        const defaultSubjectDataForCalc = { fa1: defaultFaPeriod, fa2: defaultFaPeriod, fa3: defaultFaPeriod, fa4: defaultFaPeriod };
         return { 
             ...Object.fromEntries((['fa1', 'fa2', 'fa3', 'fa4'] as const).map(key => [key, { total: 0, grade: 'N/A' }])),
             overallTotal: 0, 
@@ -129,7 +132,8 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
     };
     let currentOverallTotal = 0;
 
-    const subjectName = mainSubjects[subjectIndex];
+    // const subjectName = mainSubjects[subjectIndex]; // Old logic
+    const subjectName = subjectIdentifier; // Use identifier directly (assuming it's the name for now)
     const isSecondLang = subjectName === secondLanguage;
     const currentFaPeriodGradeScale = isSecondLang ? faPeriodGradeScale2ndLang : faPeriodGradeScale;
 
@@ -322,18 +326,19 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
             </tr>
           </thead>
           <tbody>
-            {mainSubjects.map((subject, SIndex) => {
-              const subjectFaData = faMarks[SIndex] || { 
+            {(academicSubjects || []).map((subject, SIndex) => { // Loop over dynamic academicSubjects
+              const subjectIdentifier = subject.name; // Use subject name as identifier for faMarks
+              const subjectFaData = faMarks[subjectIdentifier] || { 
                 fa1: { tool1: null, tool2: null, tool3: null, tool4: null }, 
                 fa2: { tool1: null, tool2: null, tool3: null, tool4: null }, 
                 fa3: { tool1: null, tool2: null, tool3: null, tool4: null }, 
                 fa4: { tool1: null, tool2: null, tool3: null, tool4: null }
               };
-              const results = calculateFaResults(SIndex);
+              const results = calculateFaResults(subjectIdentifier);
               return (
-                <tr key={subject}>
+                <tr key={subject.name}>
                   <td>{SIndex + 1}</td>
-                  <td style={{textAlign: 'left', paddingLeft: '5px'}}>{subject}</td>
+                  <td style={{textAlign: 'left', paddingLeft: '5px'}}>{subject.name}</td>
                   {(['fa1', 'fa2', 'fa3', 'fa4'] as const).map(faPeriodKey => {
                      const periodData = subjectFaData[faPeriodKey] || { tool1: null, tool2: null, tool3: null, tool4: null};
                      return (
@@ -343,7 +348,7 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
                             <input
                                 type="number"
                                 value={periodData[toolKey] ?? ''}
-                                onChange={(e) => onFaMarksChange(SIndex, faPeriodKey, toolKey, e.target.value)}
+                                onChange={(e) => onFaMarksChange(subjectIdentifier, faPeriodKey, toolKey, e.target.value)}
                                 max={toolKey === 'tool4' ? 20 : 10}
                                 min="0"
                             />
@@ -473,4 +478,3 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
 };
 
 export default CBSEStateFront;
-

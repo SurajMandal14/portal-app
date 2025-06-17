@@ -99,7 +99,7 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
       schoolId: new ObjectId(schoolId),
       name,
       classTeacherId: validTeacherObjectId, 
-      subjects: processedSubjects, // Use processed subjects with ObjectId for teacherId
+      subjects: processedSubjects, 
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -152,7 +152,7 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
     const classesWithDetails = await db.collection('school_classes').aggregate([
       { $match: { schoolId: new ObjectId(schoolId) } },
       {
-        $lookup: { // For Class Teacher
+        $lookup: { 
           from: 'users',
           localField: 'classTeacherId',
           foreignField: '_id',
@@ -161,22 +161,22 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
       },
       { $unwind: { path: '$classTeacherInfo', preserveNullAndEmptyArrays: true } },
       {
-        $unwind: { // Unwind subjects to process each one
+        $unwind: { 
           path: '$subjects',
           preserveNullAndEmptyArrays: true 
         }
       },
       {
-        $lookup: { // For Subject Teacher
+        $lookup: { 
           from: 'users',
-          localField: 'subjects.teacherId', // Path to teacherId within the subject
+          localField: 'subjects.teacherId', 
           foreignField: '_id',
           as: 'subjectTeacherInfo'
         }
       },
       { $unwind: { path: '$subjectTeacherInfo', preserveNullAndEmptyArrays: true } },
       {
-        $group: { // Group back by class _id
+        $group: { 
           _id: '$_id',
           name: { $first: '$name' },
           schoolId: { $first: '$schoolId' },
@@ -185,7 +185,7 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
           createdAt: { $first: '$createdAt' },
           updatedAt: { $first: '$updatedAt' },
           subjects: { 
-            $push: { // Reconstruct subjects array with teacherName
+            $push: { 
               name: '$subjects.name',
               teacherId: '$subjects.teacherId',
               teacherName: '$subjectTeacherInfo.name'
@@ -194,10 +194,10 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
         }
       },
       {
-        $project: { // Final projection
+        $project: { 
           _id: 1, name: 1, schoolId: 1, classTeacherId: 1, classTeacherName: 1, createdAt: 1, updatedAt: 1,
           subjects: {
-            $filter: { // Ensure subjects without a name (if any due to $unwind preserve) are filtered out
+            $filter: { 
                  input: "$subjects",
                  as: "subject",
                  cond: { $ne: [ "$$subject.name", null ] }
@@ -350,7 +350,7 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
         createdAt: new Date(updatedClassDocAfterDb.createdAt).toISOString(),
         updatedAt: new Date(updatedClassDocAfterDb.updatedAt).toISOString(),
         classTeacherId: updatedClassDocAfterDb.classTeacherId ? (updatedClassDocAfterDb.classTeacherId as ObjectId).toString() : undefined,
-        classTeacherName: undefined, // Name will be fetched by getSchoolClasses if needed again
+        classTeacherName: undefined, 
     };
     return { success: true, message: 'Class updated successfully!', class: clientUpdatedClass };
 
@@ -421,5 +421,105 @@ export async function getClassesForSchoolAsOptions(schoolId: string): Promise<{ 
   } catch (error) {
     console.error("Error fetching classes for options:", error);
     return [];
+  }
+}
+
+export interface GetClassDetailsByIdResult {
+  success: boolean;
+  classDetails?: SchoolClass;
+  error?: string;
+  message?: string;
+}
+
+export async function getClassDetailsById(classId: string, schoolId: string): Promise<GetClassDetailsByIdResult> {
+  try {
+    if (!ObjectId.isValid(classId) || !ObjectId.isValid(schoolId)) {
+      return { success: false, message: 'Invalid Class or School ID format.' };
+    }
+    const { db } = await connectToDatabase();
+    
+    const classDetailsArray = await db.collection('school_classes').aggregate([
+      { $match: { _id: new ObjectId(classId), schoolId: new ObjectId(schoolId) } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'classTeacherId',
+          foreignField: '_id',
+          as: 'classTeacherInfo'
+        }
+      },
+      { $unwind: { path: '$classTeacherInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $unwind: {
+          path: '$subjects',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'subjects.teacherId',
+          foreignField: '_id',
+          as: 'subjectTeacherInfo'
+        }
+      },
+      { $unwind: { path: '$subjectTeacherInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: '$_id',
+          name: { $first: '$name' },
+          schoolId: { $first: '$schoolId' },
+          classTeacherId: { $first: '$classTeacherId' },
+          classTeacherName: { $first: '$classTeacherInfo.name' },
+          createdAt: { $first: '$createdAt' },
+          updatedAt: { $first: '$updatedAt' },
+          subjects: { 
+            $push: {
+              name: '$subjects.name',
+              teacherId: '$subjects.teacherId',
+              teacherName: '$subjectTeacherInfo.name'
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1, name: 1, schoolId: 1, classTeacherId: 1, classTeacherName: 1, createdAt: 1, updatedAt: 1,
+          subjects: {
+            $filter: {
+                 input: "$subjects",
+                 as: "subject",
+                 cond: { $ne: [ "$$subject.name", null ] }
+            }
+          }
+        }
+      }
+    ]).toArray();
+
+    if (!classDetailsArray || classDetailsArray.length === 0) {
+      return { success: false, message: 'Class not found.' };
+    }
+    
+    const cls = classDetailsArray[0];
+    const classDetails: SchoolClass = {
+      _id: (cls._id as ObjectId).toString(),
+      name: cls.name || '',
+      schoolId: (cls.schoolId as ObjectId).toString(),
+      subjects: (cls.subjects || []).map((s: any) => ({
+        name: s.name,
+        teacherId: s.teacherId ? s.teacherId.toString() : undefined,
+        teacherName: s.teacherName || undefined,
+      })),
+      createdAt: cls.createdAt ? new Date(cls.createdAt).toISOString() : new Date().toISOString(),
+      updatedAt: cls.updatedAt ? new Date(cls.updatedAt).toISOString() : new Date().toISOString(),
+      classTeacherId: cls.classTeacherId ? (cls.classTeacherId as ObjectId).toString() : undefined,
+      classTeacherName: cls.classTeacherName || undefined,
+    };
+
+    return { success: true, classDetails };
+  } catch (error) {
+    console.error('Get class details by ID error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch class details.' };
   }
 }
