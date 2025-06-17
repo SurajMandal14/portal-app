@@ -12,6 +12,7 @@ import CBSEStateBack, {
     type SARowData as BackSARowData,
     type SAPeriodMarksEntry as BackSAPeriodMarksEntry,
     type AttendanceMonthData as BackAttendanceMonthData,
+    defaultSaDataBack, // Import default SA data structure
 } from '@/components/report-cards/CBSEStateBack';
 
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,7 @@ import { Label } from '@/components/ui/label';
 import { getStudentDetailsForReportCard, type StudentDetailsForReportCard } from '@/app/actions/schoolUsers';
 import { getClassDetailsById } from '@/app/actions/classes';
 import { getSchoolById } from '@/app/actions/schools';
-import type { SchoolClassSubject, SchoolClass } from '@/types/classes';
+import type { SchoolClassSubject } from '@/types/classes';
 import type { School } from '@/types/school';
 
 // --- Defaults for Front Side ---
@@ -60,27 +61,6 @@ const defaultCoMarksFront: FrontCoCurricularSAData[] = coCurricularSubjectsListF
 
 
 // --- Defaults for Back Side ---
-const backSubjectStructure = [ 
-  { subjectName: "Telugu", paper: "I" }, { subjectName: "Telugu", paper: "II" },
-  { subjectName: "Hindi", paper: "I" },
-  { subjectName: "English", paper: "I" }, { subjectName: "English", paper: "II" },
-  { subjectName: "Maths", paper: "I" }, { subjectName: "Maths", paper: "II" },
-  { subjectName: "Science", paper: "Physics" }, { subjectName: "Science", paper: "Biology" },
-  { subjectName: "Social", paper: "I" }, { subjectName: "Social", paper: "II" },
-];
-
-const getDefaultSAPeriodMarksEntryBack = (): BackSAPeriodMarksEntry => ({
-  as1: null, as2: null, as3: null, as4: null, as5: null, as6: null,
-});
-
-const defaultSaDataBack: BackSARowData[] = backSubjectStructure.map(s => ({
-  subjectName: s.subjectName,
-  paper: s.paper,
-  sa1Marks: getDefaultSAPeriodMarksEntryBack(),
-  sa2Marks: getDefaultSAPeriodMarksEntryBack(),
-  faTotal200M: null, 
-}));
-
 const defaultAttendanceDataBack: BackAttendanceMonthData[] = Array(11).fill(null).map(() => ({ workingDays: null, presentDays: null }));
 
 
@@ -100,7 +80,7 @@ export default function GenerateCBSEStateReportPage() {
   const [faMarks, setFaMarks] = useState<Record<string, FrontSubjectFAData>>({}); 
   const [coMarks, setCoMarks] = useState<FrontCoCurricularSAData[]>(defaultCoMarksFront); 
   const [frontSecondLanguage, setFrontSecondLanguage] = useState<'Hindi' | 'Telugu'>('Hindi');
-  const [frontAcademicYear, setFrontAcademicYear] = useState<string>('2023-2024');
+  const [frontAcademicYear, setFrontAcademicYear] = useState<string>(`${new Date().getFullYear()}-${new Date().getFullYear() + 1}`);
 
   // Back Side State
   const [saData, setSaData] = useState<BackSARowData[]>(defaultSaDataBack); 
@@ -129,12 +109,11 @@ export default function GenerateCBSEStateReportPage() {
   const initializeMarksForSubjects = useCallback((subjects: SchoolClassSubject[]) => {
     const newFaMarks: Record<string, FrontSubjectFAData> = {};
     subjects.forEach(subject => {
+      // Use subject.name as the key for faMarks
       newFaMarks[subject.name] = getDefaultSubjectFaDataFront(); 
     });
     setFaMarks(newFaMarks);
-
-    // TODO: Initialize saData dynamically based on subjects.
-    setSaData(defaultSaDataBack); 
+    setSaData(defaultSaDataBack); // Keep SA data based on fixed structure for now
   }, []);
 
   const handleLoadStudentAndClassData = async () => {
@@ -153,6 +132,10 @@ export default function GenerateCBSEStateReportPage() {
     setStudentData(defaultStudentDataFront);
     setFaMarks({});
     setSaData(defaultSaDataBack); 
+    setCoMarks(defaultCoMarksFront);
+    setAttendanceData(defaultAttendanceDataBack);
+    setFinalOverallGradeInput(null);
+
 
     try {
       const studentRes = await getStudentDetailsForReportCard(targetStudentIdInput);
@@ -171,7 +154,6 @@ export default function GenerateCBSEStateReportPage() {
       }
 
       if (studentRes.student.classId) {
-        // Assuming classId on student is the actual _id of the class document
         const classRes = await getClassDetailsById(studentRes.student.classId, studentRes.student.schoolId!);
         if (classRes.success && classRes.classDetails) {
           setLoadedClassSubjects(classRes.classDetails.subjects);
@@ -180,7 +162,7 @@ export default function GenerateCBSEStateReportPage() {
             ...prev,
             udiseCodeSchoolName: schoolRes.school?.schoolName || '', 
             studentName: studentRes.student?.name || '',
-            class: classRes.classDetails.name || '', // Use class name from classDetails
+            class: classRes.classDetails.name || '', 
             studentIdNo: studentRes.student?._id || '',
             admissionNo: studentRes.student?.admissionId || '',
           }));
@@ -199,9 +181,12 @@ export default function GenerateCBSEStateReportPage() {
     }
   };
 
-
-  const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string, paperNameForBack: string): number | null => {
-    const subjectFaData = faMarks[subjectNameForBack]; 
+  const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string): number | null => {
+    // The `subjectNameForBack` is from the fixed `backSubjectStructure` (e.g., "Telugu", "English", "Maths", "Science", "Social")
+    // We need to find the FA data for this *main* subject from the `faMarks` object.
+    const subjectKeyForFa = subjectNameForBack; // Direct mapping for most. "Science" on back should use "Science" FA from front.
+    
+    const subjectFaData = faMarks[subjectKeyForFa];
     if (!subjectFaData) return null;
 
     let overallTotal = 0;
@@ -209,17 +194,20 @@ export default function GenerateCBSEStateReportPage() {
       const periodMarks = subjectFaData[faPeriodKey];
       overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
     });
-    return overallTotal;
+    return overallTotal > 200 ? 200 : overallTotal; // Cap at 200
   }, [faMarks]);
 
   useEffect(() => {
+    // Update faTotal200M in saData whenever faMarks changes or loadedClassSubjects changes (which triggers faMarks init)
     setSaData(prevSaData => 
       prevSaData.map(row => ({
         ...row,
-        faTotal200M: calculateFaTotal200MForRow(row.subjectName, row.paper)
+        // `row.subjectName` here is from the fixed structure of `defaultSaDataBack`
+        faTotal200M: calculateFaTotal200MForRow(row.subjectName) 
       }))
     );
   }, [faMarks, calculateFaTotal200MForRow]); 
+
 
   const handleStudentDataChange = (field: keyof FrontStudentData, value: string) => {
     setStudentData(prev => ({ ...prev, [field]: value }));
@@ -227,7 +215,7 @@ export default function GenerateCBSEStateReportPage() {
 
   const handleFaMarksChange = (subjectIdentifier: string, faPeriod: keyof FrontSubjectFAData, toolKey: keyof FrontMarksEntry, value: string) => {
     const numValue = parseInt(value, 10);
-    const maxMark = toolKey === 'tool4' ? 20 : 10; // Assuming tool4 is 20 marks, others 10
+    const maxMark = toolKey === 'tool4' ? 20 : 10; 
     const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), maxMark);
     
     setFaMarks(prev => {
@@ -254,9 +242,9 @@ export default function GenerateCBSEStateReportPage() {
       const newCoMarks = prev.map((coSubj, idx) => {
         if (idx === subjectIndex) {
           const updatedSubj = { ...coSubj };
-          const keyToUpdate = \`\${saPeriod}\${type}\` as keyof FrontCoCurricularSAData;
+          const keyToUpdate = \`\${saPeriodKey}\${type}\` as keyof FrontCoCurricularSAData;
           if (type === 'Marks' && validatedValue !== null) {
-            const maxKey = \`\${saPeriod}Max\` as keyof FrontCoCurricularSAData;
+            const maxKey = \`\${saPeriodKey}Max\` as keyof FrontCoCurricularSAData;
             const currentMax = updatedSubj[maxKey] as number | null;
             if (currentMax !== null && validatedValue > currentMax) validatedValue = currentMax;
           }
@@ -336,7 +324,7 @@ export default function GenerateCBSEStateReportPage() {
     setFaMarks({});
     setCoMarks(coCurricularSubjectsListFront.map(() => getDefaultCoCurricularSaDataFront()));
     setFrontSecondLanguage('Hindi');
-    setFrontAcademicYear('2023-2024');
+    setFrontAcademicYear(`${new Date().getFullYear()}-${new Date().getFullYear() + 1}`);
     setSaData(defaultSaDataBack);
     setAttendanceData(defaultAttendanceDataBack);
     setFinalOverallGradeInput(null);
@@ -481,7 +469,7 @@ export default function GenerateCBSEStateReportPage() {
           <div className={\`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md \${!showBackSide ? 'hidden' : ''}\`}>
             <CBSEStateBack
               saData={saData} onSaDataChange={handleSaDataChange} 
-              onFaTotalChange={handleFaTotalChangeBack} 
+              onFaTotalChange={handleFaTotalChangeBack} // This prop allows manual override if needed
               attendanceData={attendanceData} onAttendanceDataChange={handleAttendanceDataChange}
               finalOverallGradeInput={finalOverallGradeInput} onFinalOverallGradeInputChange={setFinalOverallGradeInputChange}
               secondLanguageSubjectName={frontSecondLanguage} 
@@ -506,3 +494,4 @@ export default function GenerateCBSEStateReportPage() {
     </div>
   );
 }
+

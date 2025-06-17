@@ -17,7 +17,7 @@ export interface SARowData {
   paper: string;
   sa1Marks: SAPeriodMarksEntry;
   sa2Marks: SAPeriodMarksEntry;
-  faTotal200M: number | null; // This comes from the front side (sum of FA1, FA2, FA3, FA4 for the subject)
+  faTotal200M: number | null; 
 }
 
 // For attendance
@@ -29,19 +29,19 @@ export interface AttendanceMonthData {
 interface CBSEStateBackProps {
   saData: SARowData[];
   onSaDataChange: (rowIndex: number, period: 'sa1' | 'sa2', asKey: keyof SAPeriodMarksEntry, value: string) => void;
-  onFaTotalChange: (rowIndex: number, value: string) => void; // For the FA1-FA4 (200M) column
+  onFaTotalChange: (rowIndex: number, value: string) => void; 
   
-  attendanceData: AttendanceMonthData[]; // Array of 11 for months + 1 for total (index 11)
+  attendanceData: AttendanceMonthData[];
   onAttendanceDataChange: (monthIndex: number, type: 'workingDays' | 'presentDays', value: string) => void;
   
-  finalOverallGradeInput: string | null; // For the overall final grade input field
+  finalOverallGradeInput: string | null; 
   onFinalOverallGradeInputChange: (value: string) => void;
 
-  secondLanguageSubjectName?: string; // e.g., "Hindi" or "Telugu"
+  secondLanguageSubjectName?: string; 
 }
 
-// Grading Scales (as per HTML script)
-const saGradeScale = (marks: number, _is100Scale: boolean, _isSecondLang: boolean) => { // is100Scale & isSecondLang seem unused in original script's calculateGrade for SA
+// Grading Scales
+const saGradeScale = (marks: number, _is100Scale: boolean, _isSecondLang: boolean) => { 
   if (marks >= 73) return 'A1';
   if (marks >= 65) return 'A2';
   if (marks >= 57) return 'B1';
@@ -52,7 +52,7 @@ const saGradeScale = (marks: number, _is100Scale: boolean, _isSecondLang: boolea
   return 'D2';
 };
 
-const finalGradeScale = (marks: number, _isSecondLang: boolean) => { // isSecondLang seems unused for final 100M scale
+const finalGradeScale = (marks: number, _isSecondLang: boolean) => { 
   if (marks >= 91) return 'A1';
   if (marks >= 81) return 'A2';
   if (marks >= 71) return 'B1';
@@ -63,14 +63,27 @@ const finalGradeScale = (marks: number, _isSecondLang: boolean) => { // isSecond
   return 'D2';
 };
 
-const subjectStructure = [
+// This structure defines the fixed rows and papers for the SA table.
+const backSubjectStructure = [ 
   { name: "Telugu", papers: ["I", "II"] },
   { name: "Hindi", papers: ["I"] },
   { name: "English", papers: ["I", "II"] },
   { name: "Maths", papers: ["I", "II"] },
-  { name: "Science", papers: ["Physics", "Biology"] }, // Representing as Paper I (Physics), Paper II (Biology)
+  { name: "Science", papers: ["Physics", "Biology"] }, 
   { name: "Social", papers: ["I", "II"] },
 ];
+
+// Default SA data based on the fixed structure
+export const defaultSaDataBack: SARowData[] = backSubjectStructure.flatMap(subjectInfo => 
+  subjectInfo.papers.map(paperName => ({
+    subjectName: subjectInfo.name,
+    paper: paperName,
+    sa1Marks: { as1: null, as2: null, as3: null, as4: null, as5: null, as6: null },
+    sa2Marks: { as1: null, as2: null, as3: null, as4: null, as5: null, as6: null },
+    faTotal200M: null,
+  }))
+);
+
 
 const monthNames = ["June", "July", "August", "September", "October", "November", "December", "January", "February", "March", "April"];
 
@@ -149,9 +162,6 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const totalPresentDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month.presentDays || 0), 0);
   const attendancePercentage = totalWorkingDays > 0 ? Math.round((totalPresentDays / totalWorkingDays) * 100) : 0;
 
-
-  let currentRowIndex = -1;
-
   return (
     <>
       <style jsx global>{`
@@ -228,6 +238,9 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             font-weight: bold;
             border: 1px solid black !important;
          }
+         .report-card-back-container .fatotal-input {
+            width: 45px !important; /* Wider for 200M total */
+         }
       `}</style>
       <div className="report-card-back-container">
         <h2 style={{ textAlign: 'center' }}>SUMMATIVE ASSESSMENT</h2>
@@ -250,13 +263,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             </tr>
           </thead>
           <tbody>
-            {subjectStructure.map((subjectInfo) => 
-              subjectInfo.papers.map((paperName, paperIndex) => {
-                currentRowIndex++;
-                const rowIndex = currentRowIndex; 
-                const rowData = saData[rowIndex];
-                if (!rowData) return <tr key={`empty-${rowIndex}`}><td colSpan={23}>Error: Data missing for row {rowIndex + 1}</td></tr>;
-                
+            {saData.map((rowData, rowIndex) => {
                 const derived = calculateRowDerivedData(rowData, rowIndex);
                 const faTotal200M_display = rowData.faTotal200M ?? '';
                 
@@ -264,10 +271,15 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
                 const sa1_50_for_avg = (derived.sa1Total > 80 ? 80 : derived.sa1Total) * (50/80);
                 const faAvgPlusSa1_100M = Math.round(faAvg50 + sa1_50_for_avg);
 
+                // Find if this is the first paper for a multi-paper subject
+                const isFirstPaperOfSubject = rowIndex === 0 || saData[rowIndex-1].subjectName !== rowData.subjectName;
+                // Count how many papers this subject has
+                const subjectPaperCount = saData.filter(r => r.subjectName === rowData.subjectName).length;
+
                 return (
-                  <tr key={`${subjectInfo.name}-${paperName}`}>
-                    {paperIndex === 0 && <td rowSpan={subjectInfo.papers.length} className="subject-cell">{subjectInfo.name}</td>}
-                    <td className="paper-cell">{paperName}</td>
+                  <tr key={`${rowData.subjectName}-${rowData.paper}`}>
+                    {isFirstPaperOfSubject && <td rowSpan={subjectPaperCount} className="subject-cell">{rowData.subjectName}</td>}
+                    <td className="paper-cell">{rowData.paper}</td>
                     
                     {(Object.keys(rowData.sa1Marks) as Array<keyof SAPeriodMarksEntry>).map(asKey => (
                       <td key={`sa1-${asKey}`}><input type="number" value={rowData.sa1Marks[asKey] ?? ''} min="0" max="20" onChange={e => onSaDataChange(rowIndex, 'sa1', asKey, e.target.value)} /></td>
@@ -281,7 +293,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
                     <td className="sa2-total calculated">{derived.sa2Total}</td>
                     <td className="sa2-grade calculated">{derived.sa2Grade}</td>
 
-                    <td><input type="number" value={faTotal200M_display} min="0" max="200" onChange={e => onFaTotalChange(rowIndex, e.target.value)} /></td>
+                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} min="0" max="200" onChange={e => onFaTotalChange(rowIndex, e.target.value)} /></td>
                     <td className="calculated">{derived.sa1Total > 80 ? 80 : derived.sa1Total}</td>
                     <td className="calculated">{faAvgPlusSa1_100M}</td>
                     <td className="internal calculated">{derived.internalMarks}</td>
@@ -290,8 +302,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
                     <td className="final-grade calculated">{derived.finalGrade}</td>
                   </tr>
                 );
-              })
-            )}
+            })}
           </tbody>
         </table>
 
@@ -368,3 +379,4 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
 };
 
 export default CBSEStateBack;
+
