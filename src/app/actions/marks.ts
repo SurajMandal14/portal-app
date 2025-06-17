@@ -35,40 +35,53 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
         }
     }
 
+    // Prepare for bulk operations
+    const operations = studentMarks.map(sm => {
+      // Create the base mark object structure without _id, createdAt, updatedAt
+      const markFieldsToSet = {
+        studentId: new ObjectId(sm.studentId),
+        studentName: sm.studentName,
+        classId: classId, 
+        className: className,
+        subjectId: subjectId, 
+        subjectName: subjectName,
+        assessmentName: assessmentName,
+        term: term,
+        academicYear: academicYear,
+        marksObtained: sm.marksObtained,
+        maxMarks: sm.maxMarks,
+        markedByTeacherId: new ObjectId(markedByTeacherId),
+        schoolId: new ObjectId(schoolId),
+      };
 
-    const marksToUpsert: Omit<MarkEntry, '_id'>[] = studentMarks.map(sm => ({
-      studentId: new ObjectId(sm.studentId),
-      studentName: sm.studentName,
-      classId: classId, 
-      className: className,
-      subjectId: subjectId, // This is likely the subject name, used as an identifier
-      subjectName: subjectName,
-      assessmentName: assessmentName,
-      term: term,
-      academicYear: academicYear,
-      marksObtained: sm.marksObtained,
-      maxMarks: sm.maxMarks,
-      markedByTeacherId: new ObjectId(markedByTeacherId),
-      schoolId: new ObjectId(schoolId),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
-
-    const operations = marksToUpsert.map(mark => ({
-      updateOne: {
-        filter: {
-          studentId: mark.studentId,
-          classId: mark.classId, // Match based on the classId (actual ID)
-          subjectId: mark.subjectId,
-          assessmentName: mark.assessmentName,
-          term: mark.term,
-          academicYear: mark.academicYear,
-          schoolId: mark.schoolId,
+      return {
+        updateOne: {
+          filter: {
+            studentId: markFieldsToSet.studentId,
+            classId: markFieldsToSet.classId,
+            subjectId: markFieldsToSet.subjectId,
+            assessmentName: markFieldsToSet.assessmentName,
+            term: markFieldsToSet.term,
+            academicYear: markFieldsToSet.academicYear,
+            schoolId: markFieldsToSet.schoolId,
+          },
+          update: {
+            $set: {
+              ...markFieldsToSet, // Set all mutable fields
+              updatedAt: new Date(), // Always update this
+            },
+            $setOnInsert: {
+              createdAt: new Date(), // Set createdAt only when a new document is inserted
+            },
+          },
+          upsert: true,
         },
-        update: { $set: mark, $setOnInsert: { createdAt: new Date() } },
-        upsert: true,
-      },
-    }));
+      };
+    });
+    
+    if (operations.length === 0) {
+        return { success: true, message: "No marks data provided to submit.", count: 0};
+    }
 
     const result = await marksCollection.bulkWrite(operations);
 
@@ -78,8 +91,8 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
     }
     
     // Consider revalidating paths if marks are displayed elsewhere, e.g., student profile or admin reports
-    // revalidatePath('/dashboard/student/results'); // Example
-    // revalidatePath('/dashboard/admin/reports');  // Example
+    // revalidatePath('/dashboard/student/results'); 
+    // revalidatePath('/dashboard/admin/reports');  
 
     return {
       success: true,
@@ -113,7 +126,7 @@ export async function getMarksForAssessment(
     const marks = await marksCollection.find({
       schoolId: new ObjectId(schoolId),
       classId: classId, 
-      subjectId: subjectId, // Match subject by its name (or formal ID if that's what subjectId stores)
+      subjectId: subjectId, 
       assessmentName: assessmentName,
       term: term,
       academicYear: academicYear,
@@ -125,7 +138,6 @@ export async function getMarksForAssessment(
         studentId: mark.studentId.toString(),
         markedByTeacherId: mark.markedByTeacherId.toString(),
         schoolId: mark.schoolId.toString(),
-        // classId is already a string if fetched after conversion, or ensure it is.
         classId: mark.classId.toString(), 
     }));
 
@@ -140,11 +152,11 @@ export async function getMarksForAssessment(
 
 
 export interface SubjectForTeacher {
-  value: string; // Composite key: e.g., classId + "_" + subjectName
-  label: string; // e.g., "Mathematics (Grade 10A)"
-  classId: string; // ObjectId of the class as string
+  value: string; 
+  label: string; 
+  classId: string; 
   className: string;
-  subjectName: string; // Original subject name
+  subjectName: string; 
 }
 
 export async function getSubjectsForTeacher(teacherId: string, schoolId: string): Promise<SubjectForTeacher[]> {
@@ -154,7 +166,6 @@ export async function getSubjectsForTeacher(teacherId: string, schoolId: string)
     }
     try {
         const { db } = await connectToDatabase();
-        // Type assertion for documents from 'school_classes' collection
         const schoolClassesCollection = db.collection<Omit<SchoolClass, '_id' | 'schoolId'> & { _id: ObjectId; schoolId: ObjectId }>('school_classes'); 
         
         const teacherObjectId = new ObjectId(teacherId);
@@ -165,14 +176,13 @@ export async function getSubjectsForTeacher(teacherId: string, schoolId: string)
         const taughtSubjects: SubjectForTeacher[] = [];
 
         classesInSchool.forEach(cls => {
-            const classSubjects = (cls.subjects || []) as SchoolClassSubject[]; // Ensure cls.subjects is an array
+            const classSubjects = (cls.subjects || []) as SchoolClassSubject[]; 
 
             classSubjects.forEach(subject => {
                 let isMatch = false;
                 if (subject.teacherId) {
-                    // Standardize comparison to string form of ObjectId
                     const subjectTeacherIdStr = subject.teacherId.toString();
-                    isMatch = subjectTeacherIdStr === teacherId; // teacherId is already a string
+                    isMatch = subjectTeacherIdStr === teacherId; 
                 }
 
                 if (isMatch) {
@@ -197,3 +207,4 @@ export async function getSubjectsForTeacher(teacherId: string, schoolId: string)
         return [];
     }
 }
+
