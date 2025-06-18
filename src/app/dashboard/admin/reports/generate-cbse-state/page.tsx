@@ -17,10 +17,10 @@ import CBSEStateBack, {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Printer, RotateCcw, Eye, EyeOff, Save, Loader2, User, School as SchoolIconUI, Search as SearchIcon, AlertTriangle } from 'lucide-react';
+import { FileText, Printer, RotateCcw, Eye, EyeOff, Save, Loader2, User, School as SchoolIconUI, Search as SearchIcon, AlertTriangle, UploadCloud, XOctagon } from 'lucide-react'; // Added UploadCloud, XOctagon
 import { useToast } from '@/hooks/use-toast';
 import type { AuthUser, UserRole } from '@/types/user';
-import { saveReportCard } from '@/app/actions/reports';
+import { saveReportCard, getStudentReportCard, setReportCardPublicationStatus } from '@/app/actions/reports'; // Added setReportCardPublicationStatus
 import type { ReportCardData, FormativeAssessmentEntryForStorage } from '@/types/report';
 import { Input } from '@/components/ui/input'; 
 import { Label } from '@/components/ui/label'; 
@@ -29,13 +29,12 @@ import { getClassDetailsById } from '@/app/actions/classes';
 import { getSchoolById } from '@/app/actions/schools';
 import type { SchoolClassSubject } from '@/types/classes';
 import type { School } from '@/types/school';
-import { getStudentMarksForReportCard } from '@/app/actions/marks'; // Import new action
+import { getStudentMarksForReportCard } from '@/app/actions/marks'; 
 
 
 const getDefaultFaMarksEntryFront = (): FrontMarksEntry => ({ tool1: null, tool2: null, tool3: null, tool4: null });
 const getDefaultSubjectFaDataFront = (): Record<string, FrontSubjectFAData> => ({});
 
-// Co-curricular data is kept for potential future dynamic implementation, but rendering is removed.
 const defaultCoMarksFront: FrontCoCurricularSAData[] = []; 
 
 const defaultStudentDataFront: FrontStudentData = {
@@ -74,7 +73,7 @@ export default function GenerateCBSEStateReportPage() {
   const [admissionIdInput, setAdmissionIdInput] = useState<string>(""); 
   const [loadedStudent, setLoadedStudent] = useState<StudentDetailsForReportCard | null>(null);
   const [loadedClassSubjects, setLoadedClassSubjects] = useState<SchoolClassSubject[]>([]);
-  const [teacherEditableSubjects, setTeacherEditableSubjects] = useState<string[]>([]); // Still relevant for teacher role if they access this
+  const [teacherEditableSubjects, setTeacherEditableSubjects] = useState<string[]>([]);
   const [loadedSchool, setLoadedSchool] = useState<School | null>(null);
   const [isLoadingStudentAndClassData, setIsLoadingStudentAndClassData] = useState(false);
 
@@ -90,13 +89,17 @@ export default function GenerateCBSEStateReportPage() {
 
   const [showBackSide, setShowBackSide] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  const [loadedReportId, setLoadedReportId] = useState<string | null>(null);
+  const [loadedReportIsPublished, setLoadedReportIsPublished] = useState<boolean | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
       try {
         const parsedUser: AuthUser = JSON.parse(storedUser);
-        // Allow admin and teacher, but specific editability is handled by components
         if (parsedUser && (parsedUser.role === 'admin' || parsedUser.role === 'teacher') && parsedUser.schoolId) { 
           setAuthUser(parsedUser);
         } else {
@@ -108,26 +111,22 @@ export default function GenerateCBSEStateReportPage() {
     }
   }, [toast]);
 
-  const initializeMarksForSubjects = useCallback((subjects: SchoolClassSubject[]) => {
-    const newFaMarks: Record<string, FrontSubjectFAData> = {};
-    subjects.forEach(subject => {
-      newFaMarks[subject.name] = {
-        fa1: getDefaultFaMarksEntryFront(),
-        fa2: getDefaultFaMarksEntryFront(),
-        fa3: getDefaultFaMarksEntryFront(),
-        fa4: getDefaultFaMarksEntryFront(),
-      };
-    });
-    setFaMarks(newFaMarks);
-    // Re-initialize SA data with default FA totals as well, or ensure calculateFaTotal200MForRow is called
-     setSaData(prevSaData => 
-        defaultSaDataBack.map(defaultRow => ({
-            ...defaultRow,
-            faTotal200M: null // Reset FA total until marks are loaded/calculated
-        }))
-    );
-  }, []);
-
+  const initializeReportState = () => {
+    setLoadedStudent(null);
+    setLoadedClassSubjects([]);
+    setTeacherEditableSubjects([]);
+    setLoadedSchool(null);
+    setStudentData(defaultStudentDataFront);
+    setFaMarks(getDefaultSubjectFaDataFront());
+    setCoMarks(defaultCoMarksFront);
+    // setFrontSecondLanguage('Hindi'); // Keep user's choice for current session
+    // setFrontAcademicYear(getCurrentAcademicYear()); // Keep user's choice for current session
+    setSaData(defaultSaDataBack);
+    setAttendanceData(defaultAttendanceDataBack);
+    setFinalOverallGradeInput(null);
+    setLoadedReportId(null);
+    setLoadedReportIsPublished(null);
+  };
 
   const handleLoadStudentAndClassData = async () => {
     if (!admissionIdInput.trim()) {
@@ -140,17 +139,7 @@ export default function GenerateCBSEStateReportPage() {
     }
 
     setIsLoadingStudentAndClassData(true);
-    setLoadedStudent(null);
-    setLoadedClassSubjects([]);
-    setTeacherEditableSubjects([]);
-    setLoadedSchool(null);
-    setStudentData(defaultStudentDataFront);
-    setFaMarks(getDefaultSubjectFaDataFront());
-    setSaData(defaultSaDataBack); 
-    setCoMarks(defaultCoMarksFront);
-    setAttendanceData(defaultAttendanceDataBack);
-    setFinalOverallGradeInput(null);
-    // Keep frontAcademicYear as set by admin, don't reset to current every time
+    initializeReportState(); // Reset everything before loading new student
 
     try {
       const studentRes = await getStudentDetailsForReportCard(admissionIdInput, authUser.schoolId.toString());
@@ -160,7 +149,7 @@ export default function GenerateCBSEStateReportPage() {
         setIsLoadingStudentAndClassData(false);
         return;
       }
-      if (!studentRes.student.classId) {
+       if (!studentRes.student.classId) {
         toast({ variant: "destructive", title: "Class Assignment Missing", description: `Student ${studentRes.student.name} is not assigned to any class.` });
         setIsLoadingStudentAndClassData(false);
         return;
@@ -182,11 +171,11 @@ export default function GenerateCBSEStateReportPage() {
       const classRes = await getClassDetailsById(studentRes.student.classId, studentRes.student.schoolId);
       let currentLoadedClassSubjects: SchoolClassSubject[] = [];
       if (classRes.success && classRes.classDetails) {
-        currentLoadedClassSubjects = classRes.classDetails.subjects;
+        currentLoadedClassSubjects = classRes.classDetails.subjects || [];
         setLoadedClassSubjects(currentLoadedClassSubjects);
         
         if (authUser.role === 'teacher') {
-          const editableSubs = classRes.classDetails.subjects
+          const editableSubs = (classRes.classDetails.subjects || [])
             .filter(sub => sub.teacherId === authUser._id)
             .map(sub => sub.name);
           setTeacherEditableSubjects(editableSubs);
@@ -212,57 +201,103 @@ export default function GenerateCBSEStateReportPage() {
         setIsLoadingStudentAndClassData(false);
         return; 
       }
-
-      // Fetch and process marks
-      const marksResult = await getStudentMarksForReportCard(
-        studentRes.student._id,
-        studentRes.student.schoolId,
-        frontAcademicYear, // Use the year set on the page
-        studentRes.student.classId
+      
+      // Try to fetch existing report card first
+      const existingReportRes = await getStudentReportCard(
+          studentRes.student._id, 
+          studentRes.student.schoolId, 
+          frontAcademicYear,
+          undefined, // no term filter for admin loading
+          false // admin needs to see unpublished reports too
       );
 
-      const newFaMarksForState: Record<string, FrontSubjectFAData> = {};
-      currentLoadedClassSubjects.forEach(subject => {
-        newFaMarksForState[subject.name] = {
-          fa1: { tool1: null, tool2: null, tool3: null, tool4: null },
-          fa2: { tool1: null, tool2: null, tool3: null, tool4: null },
-          fa3: { tool1: null, tool2: null, tool3: null, tool4: null },
-          fa4: { tool1: null, tool2: null, tool3: null, tool4: null },
-        };
-      });
+      if (existingReportRes.success && existingReportRes.reportCard) {
+          const report = existingReportRes.reportCard;
+          toast({title: "Existing Report Loaded", description: `Report for ${report.studentInfo.studentName} (${report.academicYear}) loaded.`});
+          setStudentData(report.studentInfo);
+          setFrontSecondLanguage(report.secondLanguage || 'Hindi');
+          // setFrontAcademicYear(report.academicYear); // Keep the one admin set for fetching
 
-      if (marksResult.success && marksResult.marks) {
-        const allFetchedMarks = marksResult.marks;
-        
-        currentLoadedClassSubjects.forEach(subject => {
-          const subjectIdentifier = subject.name;
-          const subjectSpecificMarks = allFetchedMarks.filter(
-            mark => mark.subjectName === subjectIdentifier &&
-                    mark.academicYear === frontAcademicYear &&
-                    mark.classId === studentRes.student?.classId
+          const loadedFaMarks: Record<string, FrontSubjectFAData> = {};
+          currentLoadedClassSubjects.forEach(subject => {
+             const reportSubjectFa = report.formativeAssessments.find(fa => fa.subjectName === subject.name);
+             if (reportSubjectFa) {
+                loadedFaMarks[subject.name] = {
+                    fa1: reportSubjectFa.fa1, fa2: reportSubjectFa.fa2,
+                    fa3: reportSubjectFa.fa3, fa4: reportSubjectFa.fa4,
+                };
+             } else {
+                loadedFaMarks[subject.name] = getDefaultSubjectFaDataFront()[subject.name] || { fa1: getDefaultFaMarksEntryFront(), fa2: getDefaultFaMarksEntryFront(), fa3: getDefaultFaMarksEntryFront(), fa4: getDefaultFaMarksEntryFront() };
+             }
+          });
+          setFaMarks(loadedFaMarks);
+          setCoMarks(report.coCurricularAssessments || defaultCoMarksFront);
+          setSaData(report.summativeAssessments || defaultSaDataBack);
+          setAttendanceData(report.attendance || defaultAttendanceDataBack);
+          setFinalOverallGradeInput(report.finalOverallGrade);
+          setLoadedReportId(report._id!.toString());
+          setLoadedReportIsPublished(report.isPublished || false);
+
+      } else {
+          // No existing report, fetch raw marks
+          setLoadedReportId(null);
+          setLoadedReportIsPublished(null);
+          toast({title: "No Saved Report", description: "Fetching individual marks for new report."});
+
+          const marksResult = await getStudentMarksForReportCard(
+            studentRes.student._id,
+            studentRes.student.schoolId,
+            frontAcademicYear, 
+            studentRes.student.classId
           );
 
-          subjectSpecificMarks.forEach(mark => {
-            const assessmentNameParts = mark.assessmentName.split('-'); // e.g., "FA1-Tool1"
-            if (assessmentNameParts.length === 2) {
-              const faPeriodKey = assessmentNameParts[0].toLowerCase() as keyof FrontSubjectFAData; // "fa1"
-              const toolKeyRaw = assessmentNameParts[1]; // "Tool1"
-              const toolKey = (toolKeyRaw.charAt(0).toLowerCase() + toolKeyRaw.slice(1)) as keyof FrontMarksEntry;
-
-              if (newFaMarksForState[subjectIdentifier] &&
-                  newFaMarksForState[subjectIdentifier][faPeriodKey] &&
-                  toolKey in newFaMarksForState[subjectIdentifier][faPeriodKey]) {
-                (newFaMarksForState[subjectIdentifier][faPeriodKey] as any)[toolKey] = mark.marksObtained;
-              }
-            }
+          const newFaMarksForState: Record<string, FrontSubjectFAData> = {};
+          currentLoadedClassSubjects.forEach(subject => {
+            newFaMarksForState[subject.name] = {
+              fa1: getDefaultFaMarksEntryFront(),
+              fa2: getDefaultFaMarksEntryFront(),
+              fa3: getDefaultFaMarksEntryFront(),
+              fa4: getDefaultFaMarksEntryFront(),
+            };
           });
-        });
-      } else {
-        if (!marksResult.success) {
-            toast({ variant: "warning", title: "Marks Info", description: marksResult.message || "Could not load student marks for the report."});
-        }
+
+          if (marksResult.success && marksResult.marks) {
+            const allFetchedMarks = marksResult.marks;
+            currentLoadedClassSubjects.forEach(subject => {
+              const subjectIdentifier = subject.name;
+              const subjectSpecificMarks = allFetchedMarks.filter(
+                mark => mark.subjectName === subjectIdentifier &&
+                        mark.academicYear === frontAcademicYear &&
+                        mark.classId === studentRes.student?.classId
+              );
+
+              subjectSpecificMarks.forEach(mark => {
+                const assessmentNameParts = mark.assessmentName.split('-'); 
+                if (assessmentNameParts.length === 2) {
+                  const faPeriodKey = assessmentNameParts[0].toLowerCase() as keyof FrontSubjectFAData; 
+                  const toolKeyRaw = assessmentNameParts[1]; 
+                  const toolKey = (toolKeyRaw.charAt(0).toLowerCase() + toolKeyRaw.slice(1)) as keyof FrontMarksEntry;
+
+                  if (newFaMarksForState[subjectIdentifier] &&
+                      newFaMarksForState[subjectIdentifier][faPeriodKey] &&
+                      toolKey in newFaMarksForState[subjectIdentifier][faPeriodKey]) {
+                    (newFaMarksForState[subjectIdentifier][faPeriodKey] as any)[toolKey] = mark.marksObtained;
+                  }
+                }
+              });
+            });
+          } else {
+            if (!marksResult.success) {
+                toast({ variant: "warning", title: "Marks Info", description: marksResult.message || "Could not load student marks for the report."});
+            }
+          }
+          setFaMarks(newFaMarksForState); 
+          // Reset other parts if it's a new report being composed from raw marks
+          setCoMarks(defaultCoMarksFront);
+          setSaData(defaultSaDataBack);
+          setAttendanceData(defaultAttendanceDataBack);
+          setFinalOverallGradeInput(null);
       }
-      setFaMarks(newFaMarksForState); // Update the state
 
 
     } catch (error) {
@@ -274,29 +309,18 @@ export default function GenerateCBSEStateReportPage() {
   };
 
   const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string): number | null => {
-    // For Science on back, sum Physics and Biology from front
-    // This specific mapping logic for "Science" on the back page might need to be adjusted if
-    // Physics and Biology are separate academic subjects on the front.
-    // For now, assuming `faMarks` keys match the `subjectNameForBack` or there's a specific handling.
-    
-    // If the report card expects a single "Science" row on the back but FA marks are entered for "Physics" and "Biology" separately on the front,
-    // this calculation will need to be more complex, summing relevant totals from both.
-    // For simplicity, let's assume direct mapping or that "Science" is a subject in faMarks.
     const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
-    
     const subjectFaData = faMarks[faSubjectKey];
     if (!subjectFaData) return null;
-
     let overallTotal = 0;
     (['fa1', 'fa2', 'fa3', 'fa4'] as const).forEach(faPeriodKey => {
       const periodMarks = subjectFaData[faPeriodKey];
       overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
     });
-    return overallTotal > 200 ? 200 : overallTotal; // Cap at 200
+    return overallTotal > 200 ? 200 : overallTotal;
   }, [faMarks]);
 
   useEffect(() => {
-    // This effect updates the SA data's FA total column whenever faMarks (from front page) changes.
     setSaData(prevSaData => 
       prevSaData.map(row => ({
         ...row,
@@ -307,13 +331,13 @@ export default function GenerateCBSEStateReportPage() {
 
 
   const handleStudentDataChange = (field: keyof FrontStudentData, value: string) => {
-    if (authUser?.role === 'admin' && loadedStudent) return; // Admin cannot edit student details here
+    if (currentUserRole === 'admin' && loadedStudent) return; 
     setStudentData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleFaMarksChange = (subjectIdentifier: string, faPeriod: keyof FrontSubjectFAData, toolKey: keyof FrontMarksEntry, value: string) => {
-    if (authUser?.role === 'admin') return; // Admin cannot edit marks
-    if (authUser?.role === 'teacher' && !teacherEditableSubjects.includes(subjectIdentifier)) return; // Teacher can only edit assigned subjects
+    if (currentUserRole === 'admin' && loadedStudent) return; 
+    if (currentUserRole === 'teacher' && !teacherEditableSubjects.includes(subjectIdentifier)) return;
 
     const numValue = parseInt(value, 10);
     const maxMark = toolKey === 'tool4' ? 20 : 10; 
@@ -321,61 +345,44 @@ export default function GenerateCBSEStateReportPage() {
     
     setFaMarks(prev => {
       const currentSubjectMarks = prev[subjectIdentifier] || {
-        fa1: getDefaultFaMarksEntryFront(),
-        fa2: getDefaultFaMarksEntryFront(),
-        fa3: getDefaultFaMarksEntryFront(),
-        fa4: getDefaultFaMarksEntryFront(),
+        fa1: getDefaultFaMarksEntryFront(), fa2: getDefaultFaMarksEntryFront(),
+        fa3: getDefaultFaMarksEntryFront(), fa4: getDefaultFaMarksEntryFront(),
       };
       const updatedPeriodMarks = { 
         ...(currentSubjectMarks[faPeriod] || getDefaultFaMarksEntryFront()), 
         [toolKey]: validatedValue 
       };
-      return {
-        ...prev,
-        [subjectIdentifier]: {
-          ...currentSubjectMarks,
-          [faPeriod]: updatedPeriodMarks
-        }
-      };
+      return { ...prev, [subjectIdentifier]: { ...currentSubjectMarks, [faPeriod]: updatedPeriodMarks }};
     });
   };
 
   const handleCoMarksChange = (subjectIndex: number, saPeriodKey: 'sa1' | 'sa2' | 'sa3', type: 'Marks' | 'Max', value: string) => {
-    if (authUser?.role === 'admin' && loadedStudent) return; // Admin cannot edit co-curricular marks here
-    // Teachers generally don't handle co-curricular on this template, but check can be added if needed.
-    
+    if (currentUserRole === 'admin' && loadedStudent) return;
     const numValue = parseInt(value, 10);
     let validatedValue: number | null = isNaN(numValue) ? null : Math.max(numValue, 0);
-
-    setCoMarks(prev => {
-      const newCoMarks = prev.map((coSubj, idx) => {
-        if (idx === subjectIndex) {
-          const updatedSubj = { ...coSubj };
-          const keyToUpdate = `${saPeriodKey}${type}` as keyof FrontCoCurricularSAData;
-          if (type === 'Marks' && validatedValue !== null) {
-            const maxKey = `${saPeriodKey}Max` as keyof FrontCoCurricularSAData;
-            const currentMax = updatedSubj[maxKey] as number | null;
-            if (currentMax !== null && validatedValue > currentMax) validatedValue = currentMax;
-          }
-          if (type === 'Max' && validatedValue !== null && validatedValue < 1) validatedValue = 1;
-          (updatedSubj[keyToUpdate] as number | null) = validatedValue;
-          return updatedSubj;
+    setCoMarks(prev => prev.map((coSubj, idx) => {
+      if (idx === subjectIndex) {
+        const updatedSubj = { ...coSubj };
+        const keyToUpdate = `${saPeriodKey}${type}` as keyof FrontCoCurricularSAData;
+        if (type === 'Marks' && validatedValue !== null) {
+          const maxKey = `${saPeriodKey}Max` as keyof FrontCoCurricularSAData;
+          const currentMax = updatedSubj[maxKey] as number | null;
+          if (currentMax !== null && validatedValue > currentMax) validatedValue = currentMax;
         }
-        return coSubj;
-      });
-      return newCoMarks;
-    });
+        if (type === 'Max' && validatedValue !== null && validatedValue < 1) validatedValue = 1;
+        (updatedSubj[keyToUpdate] as number | null) = validatedValue;
+        return updatedSubj;
+      }
+      return coSubj;
+    }));
   };
 
   const handleSaDataChange = (rowIndex: number, period: 'sa1' | 'sa2', asKey: keyof BackSAPeriodMarksEntry, value: string) => {
-     if (authUser?.role === 'admin' && loadedStudent) return;
+     if (currentUserRole === 'admin' && loadedStudent) return;
      const subjectName = saData[rowIndex]?.subjectName;
-     if (authUser?.role === 'teacher' && subjectName && !isSubjectEditableForTeacher(subjectName)) return;
-
-
+     if (currentUserRole === 'teacher' && subjectName && !isSubjectEditableForTeacher(subjectName)) return;
     const numValue = parseInt(value, 10);
-    const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), 20); // Max for AS is 20
-
+    const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), 20); 
     setSaData(prev => prev.map((row, idx) => {
       if (idx === rowIndex) {
         const updatedRow = { ...row };
@@ -388,10 +395,9 @@ export default function GenerateCBSEStateReportPage() {
   };
   
   const handleFaTotalChangeBack = (rowIndex: number, value: string) => {
-    if (authUser?.role === 'admin' && loadedStudent) return; // Admins should not edit this directly, it's calculated
+    if (currentUserRole === 'admin' && loadedStudent) return; 
     const subjectName = saData[rowIndex]?.subjectName;
-    if (authUser?.role === 'teacher' && subjectName && !isSubjectEditableForTeacher(subjectName)) return;
-
+    if (currentUserRole === 'teacher' && subjectName && !isSubjectEditableForTeacher(subjectName)) return;
      const numValue = parseInt(value, 10);
      const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), 200);
      setSaData(prev => prev.map((row, idx) => 
@@ -400,10 +406,7 @@ export default function GenerateCBSEStateReportPage() {
   };
 
   const handleAttendanceDataChange = (monthIndex: number, type: 'workingDays' | 'presentDays', value: string) => {
-     if (authUser?.role === 'admin' && loadedStudent) return;
-     // Teachers generally don't handle attendance on this report form.
-     // If they do, a check for editable class would be needed.
-
+     if (currentUserRole === 'admin' && loadedStudent) return;
     const numValue = parseInt(value, 10);
     const validatedValue = isNaN(numValue) ? null : Math.max(numValue, 0);
     setAttendanceData(prev => prev.map((month, idx) => 
@@ -413,31 +416,21 @@ export default function GenerateCBSEStateReportPage() {
 
    const isSubjectEditableForTeacher = (subjectName: string): boolean => {
     if (currentUserRole === 'teacher') {
-      // For "Science" on the back, allow edit if teacher teaches Physics or Biology which map to Science FA.
       if (subjectName === "Science" && (editableSubjects.includes("Physics") || editableSubjects.includes("Biology"))) return true;
       return editableSubjects.includes(subjectName);
     }
-    return false; // Not a teacher, or no editable subjects
+    return true; // Not a teacher, or no editable subjects means admin can edit IF NOT loaded yet.
   };
 
   const handleLogData = () => {
     const formattedFaMarksForLog: FormativeAssessmentEntryForStorage[] = Object.entries(faMarks).map(([subjectName, marksData]) => ({
-        subjectName,
-        ...marksData,
+        subjectName, ...marksData,
     }));
     console.log("Report Card Data:", {
-      targetStudentId: loadedStudent?._id || admissionIdInput,
-      academicYear: frontAcademicYear,
-      secondLanguage: frontSecondLanguage,
-      studentInfo: studentData,
-      formativeAssessments: formattedFaMarksForLog, 
-      coCurricularAssessments: coMarks,
-      summativeAssessments: saData,
-      attendanceData,
-      finalOverallGrade: finalOverallGradeInput,
-      loadedClassSubjects,
-      teacherEditableSubjects, // For teacher role, if they use this page
-      currentUserRole: authUser?.role,
+      targetStudentId: loadedStudent?._id || admissionIdInput, academicYear: frontAcademicYear, secondLanguage: frontSecondLanguage,
+      studentInfo: studentData, formativeAssessments: formattedFaMarksForLog, coCurricularAssessments: coMarks,
+      summativeAssessments: saData, attendanceData, finalOverallGrade: finalOverallGradeInput, loadedClassSubjects,
+      teacherEditableSubjects, currentUserRole: authUser?.role, loadedReportId, loadedReportIsPublished,
     });
     toast({ title: "Data Logged", description: "Current report card data logged to console."});
   };
@@ -446,18 +439,7 @@ export default function GenerateCBSEStateReportPage() {
   
   const handleResetData = () => {
     setAdmissionIdInput("");
-    setLoadedStudent(null);
-    setLoadedClassSubjects([]);
-    setTeacherEditableSubjects([]);
-    setLoadedSchool(null);
-    setStudentData(defaultStudentDataFront);
-    setFaMarks(getDefaultSubjectFaDataFront());
-    setCoMarks(defaultCoMarksFront);
-    setFrontSecondLanguage('Hindi');
-    setFrontAcademicYear(getCurrentAcademicYear());
-    setSaData(defaultSaDataBack);
-    setAttendanceData(defaultAttendanceDataBack);
-    setFinalOverallGradeInput(null);
+    initializeReportState();
     toast({ title: "Data Reset", description: "All fields have been reset."});
   }
 
@@ -470,42 +452,49 @@ export default function GenerateCBSEStateReportPage() {
       toast({ variant: "destructive", title: "Missing Student ID", description: "Please load student data first using Admission ID." });
       return;
     }
-
     setIsSaving(true);
-
     const formativeAssessmentsForStorage: FormativeAssessmentEntryForStorage[] = Object.entries(faMarks)
-      .map(([subjectName, marksData]) => ({
-        subjectName,
-        ...marksData,
-      }));
-
-    const reportPayload: Omit<ReportCardData, '_id' | 'createdAt' | 'updatedAt'> = {
-      studentId: loadedStudent._id, 
-      schoolId: (loadedSchool?._id || authUser.schoolId).toString(),
-      academicYear: frontAcademicYear,
-      reportCardTemplateKey: 'cbse_state', 
-      studentInfo: studentData,
-      formativeAssessments: formativeAssessmentsForStorage, 
-      coCurricularAssessments: coMarks,
-      secondLanguage: frontSecondLanguage,
-      summativeAssessments: saData, 
-      attendance: attendanceData,
-      finalOverallGrade: finalOverallGradeInput, 
-      generatedByAdminId: authUser._id.toString(), // Assuming admin is saving
-      term: "Annual", // Example, can be made dynamic if needed
+      .map(([subjectName, marksData]) => ({ subjectName, ...marksData }));
+    const reportPayload: Omit<ReportCardData, '_id' | 'createdAt' | 'updatedAt' | 'isPublished'> = {
+      studentId: loadedStudent._id, schoolId: (loadedSchool?._id || authUser.schoolId).toString(),
+      academicYear: frontAcademicYear, reportCardTemplateKey: 'cbse_state', studentInfo: studentData,
+      formativeAssessments: formativeAssessmentsForStorage, coCurricularAssessments: coMarks,
+      secondLanguage: frontSecondLanguage, summativeAssessments: saData, attendance: attendanceData,
+      finalOverallGrade: finalOverallGradeInput, generatedByAdminId: authUser._id.toString(), term: "Annual",
     };
-
     const result = await saveReportCard(reportPayload);
     setIsSaving(false);
-
     if (result.success) {
       toast({ title: "Report Card Saved", description: result.message + (result.reportCardId ? ` ID: ${result.reportCardId}` : '') });
+      if(result.reportCardId) setLoadedReportId(result.reportCardId);
+      if(result.isPublished !== undefined) setLoadedReportIsPublished(result.isPublished);
     } else {
       toast({ variant: "destructive", title: "Save Failed", description: result.error || result.message });
     }
   };
 
+  const handleTogglePublish = async () => {
+    if (!loadedReportId || !authUser || !authUser.schoolId || loadedReportIsPublished === null) {
+        toast({ variant: "destructive", title: "Error", description: "No report loaded or publication status unknown."});
+        return;
+    }
+    setIsPublishing(true);
+    const result = await setReportCardPublicationStatus(loadedReportId, authUser.schoolId.toString(), !loadedReportIsPublished);
+    setIsPublishing(false);
+    if (result.success && result.isPublished !== undefined) {
+        setLoadedReportIsPublished(result.isPublished);
+        toast({ title: "Status Updated", description: result.message });
+    } else {
+        toast({ variant: "destructive", title: "Update Failed", description: result.error || result.message });
+    }
+  };
+
+
   const currentUserRole = authUser?.role as UserRole;
+  const isReportLoaded = !!loadedReportId;
+  const canSave = authUser?.role === 'admin' && loadedStudent && !isSaving;
+  const canPublish = authUser?.role === 'admin' && isReportLoaded && !isPublishing;
+
 
   return (
     <div className="space-y-6">
@@ -514,14 +503,8 @@ export default function GenerateCBSEStateReportPage() {
           body * { visibility: hidden; }
           .printable-report-card, .printable-report-card * { visibility: visible !important; }
           .printable-report-card { 
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            width: 100% !important; 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            transform: scale(0.95); 
-            transform-origin: top left;
+            position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; 
+            margin: 0 !important; padding: 0 !important; transform: scale(0.95); transform-origin: top left;
           }
           .no-print { display: none !important; }
           .page-break { page-break-after: always; }
@@ -535,7 +518,7 @@ export default function GenerateCBSEStateReportPage() {
           <CardDescription>
             Logged in as: <span className="font-semibold capitalize">{authUser?.role || 'N/A'}</span>. 
             Enter Student's Admission ID to load data.
-            {authUser?.role === 'admin' && " You can view and save the report card. Marks entry is done by teachers."}
+            {currentUserRole === 'admin' && " Marks entry and student details are generally managed by teachers and student profile updates."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -543,44 +526,52 @@ export default function GenerateCBSEStateReportPage() {
             <div className="w-full sm:w-auto">
               <Label htmlFor="admissionIdInput" className="mb-1 flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Enter Admission ID</Label>
               <Input 
-                id="admissionIdInput"
-                placeholder="Enter Admission ID"
-                value={admissionIdInput}
-                onChange={(e) => setAdmissionIdInput(e.target.value)}
-                className="w-full sm:min-w-[250px]"
-                disabled={isLoadingStudentAndClassData || isSaving}
+                id="admissionIdInput" placeholder="Enter Admission ID" value={admissionIdInput}
+                onChange={(e) => setAdmissionIdInput(e.target.value)} className="w-full sm:min-w-[200px]"
+                disabled={isLoadingStudentAndClassData || isSaving || isPublishing}
               />
             </div>
-             <Button onClick={handleLoadStudentAndClassData} disabled={isLoadingStudentAndClassData || isSaving || !admissionIdInput.trim() || !authUser || !authUser.schoolId}>
-                {isLoadingStudentAndClassData ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <SearchIcon className="mr-2 h-4 w-4"/>}
-                Load Student & Class Data
-            </Button>
-            {authUser?.schoolId && 
+             {authUser?.schoolId && 
               <div className="w-full sm:w-auto">
                 <Label className="mb-1 flex items-center"><SchoolIconUI className="mr-2 h-4 w-4 text-muted-foreground"/>School ID (Auto)</Label>
-                <Input value={authUser.schoolId.toString()} disabled className="w-full sm:min-w-[200px]" />
+                <Input value={authUser.schoolId.toString()} disabled className="w-full sm:min-w-[180px]" />
               </div>
             }
              <div className="w-full sm:w-auto">
               <Label htmlFor="academicYearInput" className="mb-1">Academic Year</Label>
               <Input
-                id="academicYearInput"
-                value={frontAcademicYear}
-                onChange={e => setFrontAcademicYear(e.target.value)}
-                placeholder="YYYY-YYYY"
+                id="academicYearInput" value={frontAcademicYear}
+                onChange={e => setFrontAcademicYear(e.target.value)} placeholder="YYYY-YYYY"
                 className="w-full sm:min-w-[150px]"
-                disabled={isSaving || (currentUserRole === 'admin' && !!loadedStudent)} // Admin cannot change after load
+                disabled={isSaving || isPublishing || (currentUserRole === 'admin' && !!loadedStudent)}
               />
             </div>
+            <Button onClick={handleLoadStudentAndClassData} disabled={isLoadingStudentAndClassData || isSaving || isPublishing || !admissionIdInput.trim() || !authUser || !authUser.schoolId}>
+                {isLoadingStudentAndClassData ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <SearchIcon className="mr-2 h-4 w-4"/>}
+                Load Student Data
+            </Button>
           </div>
+          {isReportLoaded && loadedReportIsPublished !== null && (
+             <p className="text-sm font-medium">
+                Current Report Status: <span className={loadedReportIsPublished ? "text-green-600 font-semibold" : "text-destructive font-semibold"}>
+                    {loadedReportIsPublished ? "Published" : "Not Published"}
+                </span>
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
-            <Button onClick={handleSaveReportCard} disabled={isSaving || !loadedStudent || isLoadingStudentAndClassData || currentUserRole === 'teacher'}>
+            <Button onClick={handleSaveReportCard} disabled={!canSave}>
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
               {isSaving ? "Saving..." : "Save Report Card"}
             </Button>
-            <Button onClick={handleLogData} variant="outline">Log Current Data</Button>
-            <Button onClick={handlePrint} variant="outline"><Printer className="mr-2 h-4 w-4"/> Print Preview</Button>
-            <Button onClick={() => setShowBackSide(prev => !prev)} variant="secondary" className="ml-auto mr-2">
+            {currentUserRole === 'admin' && (
+                <Button onClick={handleTogglePublish} disabled={!canPublish}>
+                    {isPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : (loadedReportIsPublished ? <XOctagon className="mr-2 h-4 w-4"/> : <UploadCloud className="mr-2 h-4 w-4"/>)}
+                    {isPublishing ? "Updating..." : (loadedReportIsPublished ? "Unpublish Report" : "Publish Report")}
+                </Button>
+            )}
+            {/* <Button onClick={handleLogData} variant="outline">Log Current Data</Button> */}
+            <Button onClick={handlePrint} variant="outline" disabled={!loadedStudent}><Printer className="mr-2 h-4 w-4"/> Print Preview</Button>
+            <Button onClick={() => setShowBackSide(prev => !prev)} variant="secondary" className="ml-auto mr-2" disabled={!loadedStudent}>
                 {showBackSide ? <Eye className="mr-2 h-4 w-4" /> : <EyeOff className="mr-2 h-4 w-4" />}
                 {showBackSide ? "View Front" : "View Back"}
             </Button>
@@ -603,9 +594,9 @@ export default function GenerateCBSEStateReportPage() {
               studentData={studentData} onStudentDataChange={handleStudentDataChange}
               academicSubjects={loadedClassSubjects} 
               faMarks={faMarks} onFaMarksChange={handleFaMarksChange} 
-              coMarks={coMarks} onCoMarksChange={handleCoMarksChange} // Kept for structure
-              secondLanguage={frontSecondLanguage} onSecondLanguageChange={(val) => { if(currentUserRole !== 'admin' || !loadedStudent) setFrontSecondLanguage(val)}}
-              academicYear={frontAcademicYear} onAcademicYearChange={(val) => {if(currentUserRole !== 'admin' || !loadedStudent) setFrontAcademicYear(val)}}
+              coMarks={coMarks} onCoMarksChange={handleCoMarksChange} 
+              secondLanguage={frontSecondLanguage} onSecondLanguageChange={(val) => { if(!(currentUserRole === 'admin' && loadedStudent)) setFrontSecondLanguage(val)}}
+              academicYear={frontAcademicYear} onAcademicYearChange={(val) => {if(!(currentUserRole === 'admin' && loadedStudent)) setFrontAcademicYear(val)}}
               currentUserRole={currentUserRole}
               editableSubjects={teacherEditableSubjects}
             />
@@ -621,7 +612,7 @@ export default function GenerateCBSEStateReportPage() {
               finalOverallGradeInput={finalOverallGradeInput} onFinalOverallGradeInputChange={setFinalOverallGradeInput}
               secondLanguageSubjectName={frontSecondLanguage} 
               currentUserRole={currentUserRole}
-              editableSubjects={teacherEditableSubjects} // This prop needs to be passed to CBSEStateBack as well
+              editableSubjects={teacherEditableSubjects} 
             />
           </div>
         </>
@@ -641,11 +632,10 @@ export default function GenerateCBSEStateReportPage() {
        {!isLoadingStudentAndClassData && !admissionIdInput && (
           <Card className="no-print">
             <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">Enter an Admission ID and Academic Year, then click "Load Student & Class Data" to begin.</p>
+                <p className="text-muted-foreground">Enter an Admission ID and Academic Year, then click "Load Student Data" to begin.</p>
             </CardContent>
           </Card>
       )}
     </div>
   );
 }
-

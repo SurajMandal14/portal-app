@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Award, Printer, RotateCcw, Loader2, Info, AlertTriangle } from 'lucide-react';
+import { Award, Printer, RotateCcw, Loader2, Info, AlertTriangle, Eye, EyeOff } from 'lucide-react'; // Added Eye, EyeOff
 import { useToast } from '@/hooks/use-toast';
 import type { AuthUser, UserRole } from '@/types/user';
 import { getStudentReportCard } from '@/app/actions/reports';
@@ -83,17 +83,16 @@ export default function StudentResultsPage() {
     setReportCardData(null);
 
     try {
-      const result = await getStudentReportCard(authUser._id, authUser.schoolId, targetAcademicYear);
+      // Students should only see published reports
+      const result = await getStudentReportCard(authUser._id, authUser.schoolId, targetAcademicYear, undefined, true); 
       if (result.success && result.reportCard) {
         setReportCardData(result.reportCard);
       } else {
         setReportCardData(null);
-        if (result.message !== 'No report card found for the specified criteria.') {
-          setError(result.message || "Failed to load report card.");
-        } else {
-          // No need to show error if just no report found, message handled in UI
+        setError(result.message || "Failed to load report card."); // Show message from action
+        if (result.message !== 'No report card found for the specified criteria.' && result.message !== 'Report card is not yet published or does not exist for the selected criteria.') {
+             toast({ variant: "info", title: "Report Card Status", description: result.message });
         }
-        toast({ variant: result.success ? "default" : "info", title: "Report Card Status", description: result.message });
       }
     } catch (e) {
       console.error("Fetch report error:", e);
@@ -108,7 +107,7 @@ export default function StudentResultsPage() {
     if (authUser?._id && authUser?.schoolId) {
       fetchReport();
     } else if (!authUser && localStorage.getItem('loggedInUser') === null){
-        setIsLoading(false); // If no authUser from start, stop loading
+        setIsLoading(false); 
     }
   }, [authUser, fetchReport]);
 
@@ -119,7 +118,6 @@ export default function StudentResultsPage() {
     }
   };
 
-  // Prepare props for CBSEStateFront and CBSEStateBack
   const frontProps = reportCardData ? {
     studentData: reportCardData.studentInfo,
     academicSubjects: (reportCardData.formativeAssessments || []).map(fa => ({ name: fa.subjectName, teacherId: undefined, teacherName: undefined })),
@@ -128,7 +126,7 @@ export default function StudentResultsPage() {
       return acc;
     }, {} as Record<string, FrontSubjectFAData>),
     coMarks: reportCardData.coCurricularAssessments,
-    secondLanguage: reportCardData.secondLanguage || 'Hindi', // Default if undefined
+    secondLanguage: reportCardData.secondLanguage || 'Hindi', 
     academicYear: reportCardData.academicYear,
     onStudentDataChange: () => {},
     onFaMarksChange: () => {},
@@ -136,6 +134,7 @@ export default function StudentResultsPage() {
     onSecondLanguageChange: () => {},
     onAcademicYearChange: () => {},
     currentUserRole: "student" as UserRole,
+    editableSubjects: [], // Students cannot edit
   } : null;
 
   const backProps = reportCardData ? {
@@ -148,6 +147,7 @@ export default function StudentResultsPage() {
     onAttendanceDataChange: () => {},
     onFinalOverallGradeInputChange: () => {},
     currentUserRole: "student" as UserRole,
+    editableSubjects: [], // Students cannot edit
   } : null;
 
 
@@ -174,7 +174,7 @@ export default function StudentResultsPage() {
             width: 100% !important; 
             margin: 0 !important; 
             padding: 0 !important; 
-            transform: scale(0.95); /* Adjust scale as needed */
+            transform: scale(0.95); 
             transform-origin: top left;
           }
           .no-print { display: none !important; }
@@ -199,6 +199,7 @@ export default function StudentResultsPage() {
                     onChange={(e) => setTargetAcademicYear(e.target.value)}
                     placeholder="YYYY-YYYY"
                     className="max-w-xs"
+                    disabled={isLoading}
                 />
             </div>
             <Button onClick={fetchReport} disabled={isLoading || !targetAcademicYear.match(/^\d{4}-\d{4}$/)}>
@@ -219,7 +220,7 @@ export default function StudentResultsPage() {
          <Card className="no-print border-destructive">
             <CardHeader className="flex-row items-center gap-2">
                 <AlertTriangle className="h-6 w-6 text-destructive"/>
-                <CardTitle className="text-destructive">Error Loading Report</CardTitle>
+                <CardTitle className="text-destructive">Report Not Available</CardTitle>
             </CardHeader>
             <CardContent>
                 <p>{error}</p>
@@ -227,14 +228,14 @@ export default function StudentResultsPage() {
          </Card>
       )}
 
-      {!isLoading && !error && !reportCardData && (
+      {!isLoading && !error && !reportCardData && authUser && ( // Only show "No Report Found" if user is logged in and no error
         <Card className="no-print">
           <CardContent className="p-10 text-center">
             <Info className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-lg font-semibold">No Report Card Found</p>
             <p className="text-muted-foreground">
-              A report card for the academic year '{targetAcademicYear}' could not be found.
-              Please check the year or contact your school administration if you believe this is an error.
+              Your report card for the academic year '{targetAcademicYear}' is not yet published or does not exist.
+              Please check back later or contact your school administration.
             </p>
           </CardContent>
         </Card>
@@ -244,6 +245,7 @@ export default function StudentResultsPage() {
         <>
           <div className="flex justify-end gap-2 no-print mb-4">
              <Button onClick={() => setShowBackSide(prev => !prev)} variant="outline">
+                {showBackSide ? <Eye className="mr-2 h-4 w-4" /> : <EyeOff className="mr-2 h-4 w-4" />}
                 {showBackSide ? "View Front" : "View Back"}
             </Button>
             <Button onClick={handlePrint}><Printer className="mr-2 h-4 w-4"/> Print Report Card</Button>

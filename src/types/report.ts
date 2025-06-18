@@ -31,6 +31,8 @@ export interface ReportCardData {
   attendance: BackAttendanceMonthData[];
   finalOverallGrade: string | null;
 
+  isPublished?: boolean; // New field to control student visibility
+
   // Meta
   generatedByAdminId?: ObjectId | string;
   createdAt?: Date;
@@ -43,5 +45,20 @@ export interface SaveReportCardResult {
   message: string;
   error?: string;
   reportCardId?: string;
+  isPublished?: boolean; // Optionally return current published status
+}
+
+export interface SetReportCardPublicationStatusResult {
+    success: boolean;
+    message: string;
+    error?: string;
+    isPublished?: boolean;
+}
+
+export interface GetStudentReportCardResult {
+  success: boolean;
+  reportCard?: ReportCardData;
+  message?: string;
+  error?: string;
 }
 
