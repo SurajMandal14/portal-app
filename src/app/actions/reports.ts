@@ -5,10 +5,9 @@ import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
 import type { ReportCardData, SaveReportCardResult, SetReportCardPublicationStatusResult, GetStudentReportCardResult } from '@/types/report';
 import { ObjectId } from 'mongodb';
-import type { User } from '@/types/user'; // For admin validation if needed
-import { getSchoolById } from './schools'; // To check school-level visibility
+import type { User } from '@/types/user'; 
+import { getSchoolById } from './schools'; 
 
-// Basic validation for the incoming payload - can be expanded
 const reportCardDataSchemaForSave = z.object({
   studentId: z.string().min(1, "Student ID is required."),
   schoolId: z.string().min(1, "School ID is required."),
@@ -40,7 +39,7 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
     const { studentId, schoolId: schoolIdStr, academicYear, reportCardTemplateKey, studentInfo, formativeAssessments, coCurricularAssessments, secondLanguage, summativeAssessments, attendance, finalOverallGrade, generatedByAdminId: adminIdStr, term } = validatedData.data;
     
     const reportBaseData = {
-        studentId,
+        studentId, // This is a string (User._id)
         schoolId: new ObjectId(schoolIdStr),
         academicYear,
         reportCardTemplateKey,
@@ -68,7 +67,7 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
     if (existingReport) {
         const result = await reportCardsCollection.updateOne(
             { _id: existingReport._id as ObjectId },
-            { $set: reportBaseData }
+            { $set: reportBaseData } // isPublished status is NOT changed here, only by setReportCardPublicationStatus
         );
         if (result.modifiedCount === 0 && result.matchedCount === 0) {
              return { success: false, message: 'Failed to update report card. Report not found after initial check, or no changes made.' };
@@ -125,7 +124,7 @@ export async function setReportCardPublicationStatus(
     });
 
     if (!reportToUpdate) {
-      return { success: false, message: 'Report card not found or access denied.' };
+      return { success: false, message: 'Report card not found or access denied for this school.' };
     }
 
     const result = await reportCardsCollection.updateOne(
@@ -158,18 +157,17 @@ export async function getStudentReportCard(
   publishedOnly?: boolean 
 ): Promise<GetStudentReportCardResult> {
   try {
-    if (!ObjectId.isValid(studentId) || !ObjectId.isValid(schoolId)) {
-      return { success: false, message: 'Invalid student or school ID format.' };
+    if (!ObjectId.isValid(schoolId)) { // StudentId is a string from User._id, no need to check here
+      return { success: false, message: 'Invalid school ID format.' };
     }
 
-    // If called by a student, check school-level visibility first
     if (publishedOnly) {
       const schoolResult = await getSchoolById(schoolId);
       if (!schoolResult.success || !schoolResult.school) {
-        return { success: false, message: 'Could not verify school settings for report visibility.' };
+        return { success: false, message: 'Could not verify school settings. Please try again later.' };
       }
       if (!schoolResult.school.allowStudentsToViewPublishedReports) {
-        return { success: false, message: 'Report card viewing is currently disabled by the school administration.' };
+        return { success: false, message: 'Report card viewing is currently disabled by the school administration for this academic year.' };
       }
     }
 
@@ -177,10 +175,10 @@ export async function getStudentReportCard(
     const reportCardsCollection = db.collection<ReportCardData>('report_cards');
 
     const query: any = {
-      studentId: studentId,
+      studentId: studentId, // studentId is stored as a string (User._id) in report_cards
       schoolId: new ObjectId(schoolId),
       academicYear: academicYear,
-      reportCardTemplateKey: 'cbse_state',
+      reportCardTemplateKey: 'cbse_state', 
     };
 
     if (term) {
@@ -197,7 +195,7 @@ export async function getStudentReportCard(
 
     if (!reportCardDoc) {
       if (publishedOnly) {
-        return { success: false, message: 'Report card is not yet published or does not exist for the selected criteria.' };
+        return { success: false, message: 'Your report card for this academic year has not been published yet or is not available. Please check back later or contact your school.' };
       }
       return { success: false, message: 'No report card found for the specified criteria.' };
     }
@@ -221,3 +219,4 @@ export async function getStudentReportCard(
     return { success: false, error: errorMessage, message: 'Failed to fetch student report card.' };
   }
 }
+
