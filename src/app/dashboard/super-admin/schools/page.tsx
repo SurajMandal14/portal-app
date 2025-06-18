@@ -4,8 +4,10 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label"; // Added import for Label
+import { Switch } from "@/components/ui/switch"; // Added import for Switch
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2, Bus } from "lucide-react";
+import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2, Bus, Eye, EyeOff } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import * as z from "zod";
@@ -44,6 +46,7 @@ export default function SchoolManagementPage() {
       busFeeStructures: [{ location: "", classCategory: "", terms: [...DEFAULT_TERMS] }],
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
+      allowStudentsToViewPublishedReports: false, // Default for new school
     },
   });
 
@@ -80,6 +83,7 @@ export default function SchoolManagementPage() {
     schoolName: school.schoolName,
     schoolLogoUrl: school.schoolLogoUrl || "", 
     reportCardTemplate: school.reportCardTemplate || 'none',
+    allowStudentsToViewPublishedReports: school.allowStudentsToViewPublishedReports || false,
     tuitionFees: school.tuitionFees?.length > 0 ? school.tuitionFees.map(tf => ({ 
       className: tf.className,
       terms: tf.terms && tf.terms.length === 3 ? tf.terms.map(t => ({term: t.term, amount: t.amount || 0})) : [...DEFAULT_TERMS],
@@ -105,6 +109,7 @@ export default function SchoolManagementPage() {
       busFeeStructures: [{ location: "", classCategory: "", terms: [...DEFAULT_TERMS] }],
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
+      allowStudentsToViewPublishedReports: false,
     });
   };
 
@@ -215,6 +220,30 @@ export default function SchoolManagementPage() {
                         </SelectContent>
                       </Select>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="allowStudentsToViewPublishedReports"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm md:col-span-1">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base flex items-center">
+                          <Eye className="mr-2 h-4 w-4"/>
+                          Student Report Visibility
+                        </FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          Allow students of this school to view their published report cards.
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
                     </FormItem>
                   )}
                 />
@@ -432,6 +461,11 @@ export default function SchoolManagementPage() {
                     {school.tuitionFees?.length || 0} tuition config(s), {school.busFeeStructures?.length || 0} bus fee config(s)
                   </p>
                   <p className="text-xs text-muted-foreground">Report Card: <span className="font-medium">{REPORT_CARD_TEMPLATES[school.reportCardTemplate || 'none']}</span></p>
+                  <p className="text-xs text-muted-foreground">Student Report View: 
+                    <span className={`font-medium ${school.allowStudentsToViewPublishedReports ? 'text-green-600' : 'text-red-600'}`}>
+                      {school.allowStudentsToViewPublishedReports ? ' Enabled' : ' Disabled'}
+                    </span>
+                  </p>
                   <p className="text-xs text-muted-foreground">Created: {new Date(school.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>

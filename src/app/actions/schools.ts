@@ -23,7 +23,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate, busFeeStructures } = validatedFields.data;
+    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate, busFeeStructures, allowStudentsToViewPublishedReports } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<Omit<School, '_id'>>('schools');
@@ -37,16 +37,17 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
           amount: termFee.amount,
         })),
       })),
-      busFeeStructures: busFeeStructures ? busFeeStructures.map(bfs => ({ // Handle optional busFeeStructures
+      busFeeStructures: busFeeStructures ? busFeeStructures.map(bfs => ({
         location: bfs.location,
         classCategory: bfs.classCategory,
         terms: bfs.terms.map(termFee => ({
           term: termFee.term,
           amount: termFee.amount,
         })),
-      })) : [], // Default to empty array if not provided
+      })) : [],
       schoolLogoUrl: schoolLogoUrl || undefined,
       reportCardTemplate: reportCardTemplate || 'none',
+      allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false, // Initialize new field
     };
 
     const schoolToInsert = {
@@ -69,7 +70,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
       school: { 
         ...schoolToInsert, 
         _id: result.insertedId.toString(),
-        createdAt: schoolToInsert.createdAt.toISOString(), // Serialize dates
+        createdAt: schoolToInsert.createdAt.toISOString(), 
         updatedAt: schoolToInsert.updatedAt.toISOString(),
       } as School,
     };
@@ -100,7 +101,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl, busFeeStructures } = validatedFields.data;
+    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl, busFeeStructures, allowStudentsToViewPublishedReports } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<School>('schools');
@@ -123,6 +124,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
         })),
       })) : [],
       reportCardTemplate: reportCardTemplate || 'none',
+      allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false, // Update new field
       updatedAt: new Date(),
     };
     
@@ -151,6 +153,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
         _id: updatedSchoolDoc._id.toString(),
         createdAt: new Date(updatedSchoolDoc.createdAt).toISOString(), 
         updatedAt: new Date(updatedSchoolDoc.updatedAt).toISOString(),
+        allowStudentsToViewPublishedReports: updatedSchoolDoc.allowStudentsToViewPublishedReports, // Ensure it's included
      };
 
     return {
@@ -189,12 +192,13 @@ export async function getSchools(): Promise<GetSchoolsResult> {
         className: tf.className,
         terms: (tf.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
-      busFeeStructures: (doc.busFeeStructures || []).map((bfs: any) => ({ // map busFeeStructures
+      busFeeStructures: (doc.busFeeStructures || []).map((bfs: any) => ({
         location: bfs.location,
         classCategory: bfs.classCategory,
         terms: (bfs.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
       reportCardTemplate: doc.reportCardTemplate,
+      allowStudentsToViewPublishedReports: doc.allowStudentsToViewPublishedReports === undefined ? false : doc.allowStudentsToViewPublishedReports, // Default to false if missing
       createdAt: new Date(doc.createdAt).toISOString(),
       updatedAt: new Date(doc.updatedAt).toISOString(),
     }));
@@ -237,12 +241,13 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
         className: tf.className,
         terms: (tf.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
-      busFeeStructures: (schoolDoc.busFeeStructures || []).map((bfs: any) => ({ // map busFeeStructures
+      busFeeStructures: (schoolDoc.busFeeStructures || []).map((bfs: any) => ({
         location: bfs.location,
         classCategory: bfs.classCategory,
         terms: (bfs.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
       reportCardTemplate: schoolDoc.reportCardTemplate,
+      allowStudentsToViewPublishedReports: schoolDoc.allowStudentsToViewPublishedReports === undefined ? false : schoolDoc.allowStudentsToViewPublishedReports, // Default to false if missing
       createdAt: new Date(schoolDoc.createdAt).toISOString(),
       updatedAt: new Date(schoolDoc.updatedAt).toISOString(),
     };
@@ -272,5 +277,53 @@ export async function getSchoolsCount(): Promise<GetSchoolsCountResult> {
     console.error('Get schools count server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch schools count.' };
+  }
+}
+
+// New action for School Admin to toggle visibility
+export async function setSchoolReportVisibility(schoolId: string, allowVisibility: boolean): Promise<UpdateSchoolResult> {
+  try {
+    if (!ObjectId.isValid(schoolId)) {
+      return { success: false, message: 'Invalid school ID format.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const schoolsCollection = db.collection<School>('schools');
+
+    const result = await schoolsCollection.updateOne(
+      { _id: new ObjectId(schoolId) as any },
+      { $set: { allowStudentsToViewPublishedReports: allowVisibility, updatedAt: new Date() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return { success: false, message: 'School not found.', error: 'No school matched the provided ID.' };
+    }
+    
+    revalidatePath(`/dashboard/admin/settings`); // Revalidate admin settings page
+    // Potentially revalidate student results pages indirectly if they were cached
+    revalidatePath('/dashboard/student/results', 'layout'); 
+
+
+    const updatedSchoolDoc = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
+    if (!updatedSchoolDoc) return { success: false, message: 'Failed to retrieve school after update.' };
+
+    const clientSchool: School = {
+      ...updatedSchoolDoc,
+      _id: updatedSchoolDoc._id.toString(),
+      createdAt: new Date(updatedSchoolDoc.createdAt).toISOString(),
+      updatedAt: new Date(updatedSchoolDoc.updatedAt).toISOString(),
+      allowStudentsToViewPublishedReports: updatedSchoolDoc.allowStudentsToViewPublishedReports,
+    };
+
+    return {
+      success: true,
+      message: `Student report card visibility ${allowVisibility ? 'enabled' : 'disabled'} successfully.`,
+      school: clientSchool,
+    };
+
+  } catch (error) {
+    console.error('Set school report visibility error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, message: 'An unexpected error occurred.', error: errorMessage };
   }
 }

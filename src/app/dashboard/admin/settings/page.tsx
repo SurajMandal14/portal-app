@@ -3,20 +3,23 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label"; // Added Label
+import { Switch } from "@/components/ui/switch"; // Added Switch
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"; 
-import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info, Image as ImageIcon, Settings as SettingsIcon, CalendarCog, Bus } from "lucide-react";
+import { Building, DollarSign, Edit, Loader2, AlertTriangle, Info, Image as ImageIcon, Settings as SettingsIcon, CalendarCog, Bus, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user";
 import type { School, TermFee, BusFeeLocationCategory } from "@/types/school";
-import { getSchoolById } from "@/app/actions/schools";
+import { getSchoolById, setSchoolReportVisibility } from "@/app/actions/schools"; // Added setSchoolReportVisibility
 
 export default function AdminSchoolSettingsPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -61,6 +64,24 @@ export default function AdminSchoolSettingsPage() {
       setIsLoading(false); 
     }
   }, [authUser, fetchSchoolDetails]);
+
+  const handleReportVisibilityToggle = async (checked: boolean) => {
+    if (!schoolDetails || !authUser?.schoolId) {
+      toast({ variant: "destructive", title: "Error", description: "School details not available."});
+      return;
+    }
+    setIsUpdatingVisibility(true);
+    const result = await setSchoolReportVisibility(authUser.schoolId.toString(), checked);
+    if (result.success && result.school) {
+      setSchoolDetails(result.school); // Update local state with the new setting
+      toast({ title: "Setting Updated", description: result.message });
+    } else {
+      toast({ variant: "destructive", title: "Update Failed", description: result.error || "Could not update report visibility." });
+      // Revert switch optimistic update if API call fails
+      setSchoolDetails(prev => prev ? {...prev, allowStudentsToViewPublishedReports: !checked} : null);
+    }
+    setIsUpdatingVisibility(false);
+  };
 
   const calculateAnnualTotal = (terms: TermFee[]): number => {
     return terms.reduce((sum, term) => sum + (term.amount || 0), 0);
@@ -110,7 +131,7 @@ export default function AdminSchoolSettingsPage() {
             <SettingsIcon className="mr-2 h-6 w-6" /> School Settings & Profile
           </CardTitle>
           <CardDescription>
-            Viewing profile details for {schoolDetails.schoolName}. Core profile (name, logo, fees) is managed by Super Admin.
+            Viewing profile details for {schoolDetails.schoolName}. Core profile (name, logo, fees) is managed by Super Admin. School-specific operational settings can be managed here.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -131,7 +152,7 @@ export default function AdminSchoolSettingsPage() {
             ) : (
                 <Avatar className="h-20 w-20">
                     <AvatarFallback className="text-2xl bg-muted border flex items-center justify-center">
-                        <ImageIcon className="h-10 w-10 text-muted-foreground" data-ai-hint="school campus" />
+                        <ImageIcon className="h-10 w-10 text-muted-foreground" data-ai-hint="school campus"/>
                     </AvatarFallback>
                 </Avatar>
             )}
@@ -230,7 +251,6 @@ export default function AdminSchoolSettingsPage() {
         </CardContent>
       </Card>
 
-
        <Card>
         <CardHeader>
           <CardTitle className="text-xl flex items-center">
@@ -238,11 +258,33 @@ export default function AdminSchoolSettingsPage() {
           </CardTitle>
           <CardDescription>Manage academic years, terms, and other school-specific operational settings.</CardDescription>
         </CardHeader>
-        <CardContent>
-            <div className="flex flex-col items-center justify-center h-40 border-2 border-dashed rounded-lg p-4">
+        <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg border p-4 shadow-sm">
+                <div className="space-y-0.5">
+                    <Label htmlFor="report-visibility-switch" className="text-base flex items-center">
+                       {schoolDetails.allowStudentsToViewPublishedReports ? <Eye className="mr-2 h-4 w-4 text-green-600"/> : <EyeOff className="mr-2 h-4 w-4 text-red-600"/>}
+                        Student Report Card Visibility
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                        {schoolDetails.allowStudentsToViewPublishedReports 
+                            ? "Students can view their published report cards." 
+                            : "Students cannot currently view their report cards, even if published individually."}
+                    </p>
+                </div>
+                <Switch
+                    id="report-visibility-switch"
+                    checked={schoolDetails.allowStudentsToViewPublishedReports}
+                    onCheckedChange={handleReportVisibilityToggle}
+                    disabled={isUpdatingVisibility}
+                    aria-label="Toggle student report card visibility"
+                />
+            </div>
+            {isUpdatingVisibility && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Updating status...</div>}
+
+            <div className="flex flex-col items-center justify-center h-40 border-2 border-dashed rounded-lg p-4 mt-6">
                 <Info className="h-12 w-12 text-muted-foreground mb-3" />
                 <h3 className="text-lg font-semibold text-muted-foreground">
-                    Coming Soon
+                    More Settings Coming Soon
                 </h3>
                 <p className="text-sm text-muted-foreground text-center">
                     Settings for academic year configuration, term dates, grading periods, and other operational parameters will be available here in a future update.

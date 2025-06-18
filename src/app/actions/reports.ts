@@ -6,6 +6,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import type { ReportCardData, SaveReportCardResult, SetReportCardPublicationStatusResult, GetStudentReportCardResult } from '@/types/report';
 import { ObjectId } from 'mongodb';
 import type { User } from '@/types/user'; // For admin validation if needed
+import { getSchoolById } from './schools'; // To check school-level visibility
 
 // Basic validation for the incoming payload - can be expanded
 const reportCardDataSchemaForSave = z.object({
@@ -22,8 +23,6 @@ const reportCardDataSchemaForSave = z.object({
   finalOverallGrade: z.string().nullable(),
   generatedByAdminId: z.string().optional(),
   term: z.string().optional(),
-  // isPublished is NOT part of the save payload from the UI directly,
-  // it's managed by a separate action or set to false on creation.
 });
 
 
@@ -67,7 +66,6 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
     });
 
     if (existingReport) {
-        // Update existing report - DO NOT change isPublished here
         const result = await reportCardsCollection.updateOne(
             { _id: existingReport._id as ObjectId },
             { $set: reportBaseData }
@@ -79,14 +77,13 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
             success: true, 
             message: 'Report card updated successfully!', 
             reportCardId: existingReport._id.toString(),
-            isPublished: (existingReport as ReportCardData).isPublished || false, // Return current status
+            isPublished: (existingReport as ReportCardData).isPublished || false,
         };
 
     } else {
-        // Insert new report with isPublished: false
         const reportToInsertWithStatus: Omit<ReportCardData, '_id'> = {
             ...reportBaseData,
-            isPublished: false, // Default to not published
+            isPublished: false, 
             createdAt: new Date(),
         };
         const result = await reportCardsCollection.insertOne(reportToInsertWithStatus as any);
@@ -111,7 +108,7 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
 
 export async function setReportCardPublicationStatus(
   reportCardId: string,
-  adminSchoolId: string, // The school ID of the admin performing the action
+  adminSchoolId: string, 
   isPublished: boolean
 ): Promise<SetReportCardPublicationStatusResult> {
   try {
@@ -124,7 +121,7 @@ export async function setReportCardPublicationStatus(
 
     const reportToUpdate = await reportCardsCollection.findOne({ 
       _id: new ObjectId(reportCardId),
-      schoolId: new ObjectId(adminSchoolId) // Ensure admin can only publish for their school
+      schoolId: new ObjectId(adminSchoolId) 
     });
 
     if (!reportToUpdate) {
@@ -157,12 +154,23 @@ export async function getStudentReportCard(
   studentId: string, 
   schoolId: string, 
   academicYear: string,
-  term?: string, // Optional term filter
-  publishedOnly?: boolean // New parameter
+  term?: string, 
+  publishedOnly?: boolean 
 ): Promise<GetStudentReportCardResult> {
   try {
     if (!ObjectId.isValid(studentId) || !ObjectId.isValid(schoolId)) {
       return { success: false, message: 'Invalid student or school ID format.' };
+    }
+
+    // If called by a student, check school-level visibility first
+    if (publishedOnly) {
+      const schoolResult = await getSchoolById(schoolId);
+      if (!schoolResult.success || !schoolResult.school) {
+        return { success: false, message: 'Could not verify school settings for report visibility.' };
+      }
+      if (!schoolResult.school.allowStudentsToViewPublishedReports) {
+        return { success: false, message: 'Report card viewing is currently disabled by the school administration.' };
+      }
     }
 
     const { db } = await connectToDatabase();
@@ -199,11 +207,10 @@ export async function getStudentReportCard(
         _id: reportCardDoc._id?.toString(),
         schoolId: reportCardDoc.schoolId.toString(),
         generatedByAdminId: reportCardDoc.generatedByAdminId?.toString(),
-        isPublished: reportCardDoc.isPublished === undefined ? false : reportCardDoc.isPublished, // Default to false if undefined
+        isPublished: reportCardDoc.isPublished === undefined ? false : reportCardDoc.isPublished, 
         createdAt: reportCardDoc.createdAt ? new Date(reportCardDoc.createdAt) : undefined,
         updatedAt: reportCardDoc.updatedAt ? new Date(reportCardDoc.updatedAt) : undefined,
     };
-
 
     return { success: true, reportCard };
 

@@ -37,8 +37,10 @@ export interface School {
   tuitionFees: ClassTuitionFeeConfig[];
   busFeeStructures?: BusFeeLocationCategory[]; // Added new field
   reportCardTemplate?: ReportCardTemplateKey;
+  allowStudentsToViewPublishedReports?: boolean; // New field
   createdAt: Date | string; // Allow string for client-side
   updatedAt: Date | string; // Allow string for client-side
+  academicYear?: string; // Added from student data context
 }
 
 // Zod schema for term fees
@@ -65,10 +67,12 @@ export const schoolFormSchema = z.object({
   schoolName: z.string().min(3, "School name must be at least 3 characters."),
   schoolLogoUrl: z.string().url({ message: "Please enter a valid URL for the school logo." }).optional().or(z.literal('')),
   tuitionFees: z.array(classTuitionFeeSchema).min(1, "At least one class tuition configuration is required."),
-  busFeeStructures: z.array(busFeeLocationCategorySchema).optional(), // Added busFeeStructures field
+  busFeeStructures: z.array(busFeeLocationCategorySchema).optional(),
   reportCardTemplate: z.custom<ReportCardTemplateKey>((val) => {
     return typeof val === 'string' && Object.keys(REPORT_CARD_TEMPLATES).includes(val);
   }, { message: "Invalid report card template selected." }).optional().default('none'),
+  allowStudentsToViewPublishedReports: z.boolean().default(false).optional(), // New field in schema
 });
 
 export type SchoolFormData = z.infer<typeof schoolFormSchema>;
+
