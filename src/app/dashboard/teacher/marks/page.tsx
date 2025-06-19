@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox
 import { BookCopy, Loader2, Save, Info, Filter } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -19,7 +20,6 @@ const ASSESSMENT_TYPES = ["FA1", "FA2", "FA3", "FA4", "SA1", "SA2"];
 const FA_ASSESSMENTS = ["FA1", "FA2", "FA3", "FA4"];
 const SA_ASSESSMENTS = ["SA1", "SA2"];
 
-// const TERMS = ["Term 1", "Term 2", "Term 3", "Annual"]; // Removed
 
 const FA_TOOLS = [
   { key: 'tool1', label: 'Tool 1', maxMarks: 10 },
@@ -66,16 +66,16 @@ export default function TeacherMarksEntryPage() {
   const [selectedSubject, setSelectedSubject] = useState<SubjectForTeacher | null>(null);
 
   const [selectedAssessment, setSelectedAssessment] = useState<string>("");
-  // const [selectedTerm, setSelectedTerm] = useState<string>(TERMS[0]); // Removed
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(getCurrentAcademicYear());
 
   const [studentsForMarks, setStudentsForMarks] = useState<AppUser[]>([]);
   const [studentMarks, setStudentMarks] = useState<Record<string, StudentMarksFAState | StudentMarksSAState>>({});
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Record<string, boolean>>({}); // For checkboxes
 
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(true);
   const [isLoadingStudentsAndMarks, setIsLoadingStudentsAndMarks] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [defaultMaxMarksSApaper, setDefaultMaxMarksSApaper] = useState<number>(80); // For SA papers
+  const [defaultMaxMarksSApaper, setDefaultMaxMarksSApaper] = useState<number>(80);
 
   const isCurrentAssessmentFA = FA_ASSESSMENTS.includes(selectedAssessment);
   const isCurrentAssessmentSA = SA_ASSESSMENTS.includes(selectedAssessment);
@@ -119,6 +119,7 @@ export default function TeacherMarksEntryPage() {
     if (!selectedSubject || !selectedSubject.classId || !selectedAssessment || !selectedAcademicYear || !authUser?.schoolId) {
       setStudentsForMarks([]);
       setStudentMarks({});
+      setSelectedStudentIds({});
       setIsLoadingStudentsAndMarks(false);
       return;
     }
@@ -127,13 +128,18 @@ export default function TeacherMarksEntryPage() {
       const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), selectedSubject.classId);
       if (studentsResult.success && studentsResult.users) {
         setStudentsForMarks(studentsResult.users);
+        
+        const initialSelections: Record<string, boolean> = {};
+        studentsResult.users.forEach(student => {
+            initialSelections[student._id!.toString()] = true; // Pre-select all
+        });
+        setSelectedStudentIds(initialSelections);
 
         const marksResult = await getMarksForAssessment(
           authUser.schoolId.toString(),
           selectedSubject.classId,
           selectedSubject.subjectName,
           selectedAssessment,
-          // selectedTerm, // Removed
           selectedAcademicYear
         );
 
@@ -196,12 +202,14 @@ export default function TeacherMarksEntryPage() {
         toast({ variant: "destructive", title: "Error", description: studentsResult.message || "Failed to load students."});
         setStudentsForMarks([]);
         setStudentMarks({});
+        setSelectedStudentIds({});
       }
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred fetching students or marks."});
       console.error("Error in fetchStudentsAndMarks:", error);
       setStudentsForMarks([]);
       setStudentMarks({});
+      setSelectedStudentIds({});
     } finally {
       setIsLoadingStudentsAndMarks(false);
     }
@@ -213,6 +221,7 @@ export default function TeacherMarksEntryPage() {
     } else {
       setStudentsForMarks([]);
       setStudentMarks({});
+      setSelectedStudentIds({});
     }
   }, [selectedSubject, selectedAssessment, selectedAcademicYear, fetchStudentsAndMarks]);
 
@@ -223,6 +232,7 @@ export default function TeacherMarksEntryPage() {
     setSelectedAssessment("");
     setStudentsForMarks([]);
     setStudentMarks({});
+    setSelectedStudentIds({});
   };
 
   const handleMarksChange = (studentId: string, fieldOrToolKey: FaToolKey | 'p1Marks' | 'p1Max' | 'p2Marks' | 'p2Max', value: string) => {
@@ -234,7 +244,7 @@ export default function TeacherMarksEntryPage() {
       if (isCurrentAssessmentFA) {
         const faMarks = currentStudentMarks as StudentMarksFAState;
         const toolKey = fieldOrToolKey as FaToolKey;
-        faMarks[toolKey] = validatedValue; // Max mark for FA tools is fixed from FA_TOOLS
+        faMarks[toolKey] = validatedValue; 
       } else if (isCurrentAssessmentSA) {
         const saMarks = currentStudentMarks as StudentMarksSAState;
         saMarks[fieldOrToolKey as keyof StudentMarksSAState] = validatedValue;
@@ -263,20 +273,54 @@ export default function TeacherMarksEntryPage() {
         });
       }
     } else if (value === "") {
-        setDefaultMaxMarksSApaper(80); // Default back if cleared
+        setDefaultMaxMarksSApaper(80);
     }
   };
+
+  const handleSelectAllChange = (checked: boolean | 'indeterminate') => {
+    if (checked === 'indeterminate') return; 
+    const newSelections: Record<string, boolean> = {};
+    studentsForMarks.forEach(student => {
+        newSelections[student._id!.toString()] = checked as boolean;
+    });
+    setSelectedStudentIds(newSelections);
+  };
+
+  const handleStudentSelectionChange = (studentId: string, checked: boolean | 'indeterminate') => {
+    if (checked === 'indeterminate') return;
+    setSelectedStudentIds(prev => ({
+        ...prev,
+        [studentId]: checked as boolean,
+    }));
+  };
+  
+  const allStudentsSelected = studentsForMarks.length > 0 && studentsForMarks.every(s => selectedStudentIds[s._id!.toString()]);
+  const someStudentsSelected = studentsForMarks.some(s => selectedStudentIds[s._id!.toString()]);
+  const selectAllCheckboxState = allStudentsSelected ? true : (someStudentsSelected ? 'indeterminate' : false);
+
 
   const handleSubmit = async () => {
     if (!authUser || !authUser._id || !authUser.schoolId || !selectedSubject || !selectedAssessment || !selectedAcademicYear || studentsForMarks.length === 0) {
       toast({ variant: "destructive", title: "Missing Information", description: "Please select all fields and ensure students are loaded." });
       return;
     }
+    
+    const finalSelectedStudentIds = Object.entries(selectedStudentIds)
+        .filter(([, isSelected]) => isSelected)
+        .map(([id]) => id);
+
+    if (finalSelectedStudentIds.length === 0) {
+        toast({ variant: "info", title: "No Students Selected", description: "Please select students to submit marks for." });
+        return;
+    }
+    
     setIsSubmitting(true);
 
     const marksToSubmit: StudentMarkInput[] = [];
+    const studentsToProcess = studentsForMarks.filter(student => finalSelectedStudentIds.includes(student._id!.toString()));
 
-    for (const student of studentsForMarks) {
+
+    for (const student of studentsToProcess) {
       const studentIdStr = student._id!.toString();
       const currentStudentMarkState = studentMarks[studentIdStr];
 
@@ -310,7 +354,6 @@ export default function TeacherMarksEntryPage() {
         }
       } else if (isCurrentAssessmentSA) {
         const saData = currentStudentMarkState as StudentMarksSAState;
-        // Paper 1
         if (typeof saData.p1Marks === 'number' && saData.p1Marks >= 0 && typeof saData.p1Max === 'number' && saData.p1Max > 0) {
             if (saData.p1Marks > saData.p1Max) {
                 toast({ variant: "destructive", title: "Marks Exceed Max", description: `Paper 1 marks for ${student.name} (${saData.p1Marks}) exceed max marks (${saData.p1Max}).`});
@@ -321,11 +364,10 @@ export default function TeacherMarksEntryPage() {
                 marksObtained: saData.p1Marks, maxMarks: saData.p1Max,
                 assessmentName: `${selectedAssessment}-Paper1`,
             });
-        } else if (saData.p1Marks !== null && saData.p1Marks !== undefined) { // Only error if partially entered
+        } else if (saData.p1Marks !== null && saData.p1Marks !== undefined) { 
             toast({ variant: "destructive", title: "Invalid Marks", description: `Paper 1 marks or max marks for ${student.name} are invalid.`});
             setIsSubmitting(false); return;
         }
-        // Paper 2
         if (typeof saData.p2Marks === 'number' && saData.p2Marks >= 0 && typeof saData.p2Max === 'number' && saData.p2Max > 0) {
              if (saData.p2Marks > saData.p2Max) {
                 toast({ variant: "destructive", title: "Marks Exceed Max", description: `Paper 2 marks for ${student.name} (${saData.p2Marks}) exceed max marks (${saData.p2Max}).`});
@@ -336,20 +378,20 @@ export default function TeacherMarksEntryPage() {
                 marksObtained: saData.p2Marks, maxMarks: saData.p2Max,
                 assessmentName: `${selectedAssessment}-Paper2`,
             });
-        } else if (saData.p2Marks !== null && saData.p2Marks !== undefined) { // Only error if partially entered
+        } else if (saData.p2Marks !== null && saData.p2Marks !== undefined) { 
              toast({ variant: "destructive", title: "Invalid Marks", description: `Paper 2 marks or max marks for ${student.name} are invalid.`});
             setIsSubmitting(false); return;
         }
       }
     }
 
-    if (marksToSubmit.length === 0 && studentsForMarks.length > 0) {
-        toast({ variant: "info", title: "No Valid Marks to Submit", description: "No marks were entered or all entries are invalid." });
+    if (marksToSubmit.length === 0 && studentsToProcess.length > 0) {
+        toast({ variant: "info", title: "No Valid Marks to Submit", description: "No marks were entered for selected students or all entries are invalid." });
         setIsSubmitting(false);
         return;
     }
-     if (marksToSubmit.length === 0 && studentsForMarks.length === 0) {
-        toast({ variant: "info", title: "No Students", description: "No students loaded to submit marks for." });
+     if (marksToSubmit.length === 0 && studentsToProcess.length === 0) { // Should be caught by finalSelectedStudentIds check earlier
+        toast({ variant: "info", title: "No Students", description: "No students selected to submit marks for." });
         setIsSubmitting(false);
         return;
     }
@@ -368,7 +410,7 @@ export default function TeacherMarksEntryPage() {
     const result = await submitMarks(payload);
     if (result.success) {
       toast({ title: "Marks Submitted", description: result.message });
-      fetchStudentsAndMarks();
+      fetchStudentsAndMarks(); // Refresh marks
     } else {
       toast({ variant: "destructive", title: "Submission Failed", description: result.error || result.message });
     }
@@ -427,7 +469,6 @@ export default function TeacherMarksEntryPage() {
               </SelectContent>
             </Select>
           </div>
-          {/* Term Select Removed */}
            <div>
             <Label htmlFor="academic-year-input">Academic Year</Label>
             <Input
@@ -478,6 +519,13 @@ export default function TeacherMarksEntryPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox 
+                            checked={selectAllCheckboxState} 
+                            onCheckedChange={handleSelectAllChange}
+                            aria-label="Select all students"
+                        />
+                      </TableHead>
                       <TableHead>Student Name</TableHead>
                       <TableHead>Admission ID</TableHead>
                       {isCurrentAssessmentFA ? (
@@ -498,6 +546,13 @@ export default function TeacherMarksEntryPage() {
                       const currentMarksState = studentMarks[studentIdStr];
                       return (
                         <TableRow key={studentIdStr}>
+                          <TableCell>
+                            <Checkbox 
+                                checked={!!selectedStudentIds[studentIdStr]}
+                                onCheckedChange={(checked) => handleStudentSelectionChange(studentIdStr, checked)}
+                                aria-label={`Select ${student.name}`}
+                            />
+                          </TableCell>
                           <TableCell>{student.name}</TableCell>
                           <TableCell>{student.admissionId || 'N/A'}</TableCell>
                           {isCurrentAssessmentFA && currentMarksState && (
@@ -575,7 +630,7 @@ export default function TeacherMarksEntryPage() {
                 <div className="mt-6 flex justify-end">
                   <Button type="submit" disabled={isSubmitting || isLoadingStudentsAndMarks || studentsForMarks.length === 0}>
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Save className="mr-2 h-4 w-4" /> Submit All Marks
+                    <Save className="mr-2 h-4 w-4" /> Submit Marks
                   </Button>
                 </div>
               </form>
@@ -590,3 +645,4 @@ export default function TeacherMarksEntryPage() {
     </div>
   );
 }
+
