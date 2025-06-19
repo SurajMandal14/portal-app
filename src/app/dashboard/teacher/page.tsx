@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { CheckSquare, BookOpen, MessageSquare, CalendarDays, User, Loader2, Info, Users } from "lucide-react";
 import { useState, useEffect } from "react";
-import type { AuthUser } from "@/types/user"; 
+import type { AuthUser } from "@/types/user";
 import { useToast } from "@/hooks/use-toast";
 import { getStudentCountByClass } from "@/app/actions/schoolUsers";
 
@@ -114,9 +114,9 @@ export default function TeacherDashboardPage() {
       </Card>
     );
   }
-  
+
   const teacherName = authUser.name || "Teacher";
-  const assignedClass = authUser.classId || "your assigned class";
+  const assignedClass = authUser.classId || "your assigned class"; // This might need to be fetched class name based on ID
 
   return (
     <div className="space-y-6">
@@ -125,11 +125,9 @@ export default function TeacherDashboardPage() {
           <CardTitle className="text-2xl font-headline">Teacher Dashboard</CardTitle>
           <CardDescription>Welcome, {teacherName}. Manage attendance and view information for {assignedClass}.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p>Use the sections below to manage your daily tasks and access class resources.</p>
-        </CardContent>
+         {/* Removed welcome paragraph from CardContent */}
       </Card>
-      
+
       {authUser.classId && (
         <div className="grid gap-4 md:grid-cols-3">
             <StatCard
@@ -137,11 +135,11 @@ export default function TeacherDashboardPage() {
                 value={studentCount ?? 'N/A'}
                 icon={Users}
                 isLoading={isLoadingStudentCount}
-                description={assignedClass}
+                description={assignedClass} // Consider fetching actual class name here
             />
              {/* Placeholder for more stats */}
-            <div /> 
-            <div /> 
+            <div />
+            <div />
         </div>
       )}
 
@@ -216,4 +214,3 @@ export default function TeacherDashboardPage() {
     </div>
   );
 }
-

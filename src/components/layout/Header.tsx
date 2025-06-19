@@ -12,12 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"; 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; 
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
-import type { AuthUser } from "@/types/user"; 
+import type { AuthUser } from "@/types/user";
 import { getSchoolById } from "@/app/actions/schools";
 
 const navLinksBase = {
@@ -39,7 +39,7 @@ const navLinksBase = {
   teacher: [
     { href: "/dashboard/teacher", label: "Teacher Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/teacher/attendance", label: "Mark Attendance", icon: CheckSquare },
-    { href: "/dashboard/teacher/marks", label: "Enter Marks", icon: BookCopy }, 
+    { href: "/dashboard/teacher/marks", label: "Enter Marks", icon: BookCopy },
     { href: "/dashboard/teacher/profile", label: "My Profile", icon: UserIcon },
   ],
   student: [
@@ -60,16 +60,13 @@ export function Header() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [displaySchoolName, setDisplaySchoolName] = useState<string | null>(null); 
+  const [displaySchoolName, setDisplaySchoolName] = useState<string | null>(null);
   const [displaySchoolLogoUrl, setDisplaySchoolLogoUrl] = useState<string | null | undefined>(null);
   const [isLoadingSchoolDetails, setIsLoadingSchoolDetails] = useState(false);
 
   const getShortSchoolName = (fullName: string | undefined): string | null => {
     if (!fullName) return null;
-    // Example: if you want to limit to first few words or characters
-    // For now, let's just use the full name if it's not too long, or a shortened version.
-    // This can be adjusted based on desired visual length.
-    return fullName.length > 30 ? fullName.substring(0, 27) + "..." : fullName;
+    return fullName.length > 25 ? fullName.substring(0, 22) + "..." : fullName;
   };
 
   const fetchSchoolDetails = useCallback(async (schoolId: string) => {
@@ -80,7 +77,7 @@ export function Header() {
       setDisplaySchoolLogoUrl(result.school.schoolLogoUrl);
     } else {
       toast({ variant: "warning", title: "School Info", description: "Could not load school details for header."});
-      setDisplaySchoolName(null); 
+      setDisplaySchoolName(null);
       setDisplaySchoolLogoUrl(null);
     }
     setIsLoadingSchoolDetails(false);
@@ -89,16 +86,16 @@ export function Header() {
   useEffect(() => {
     setIsLoadingUser(true);
     const storedUser = localStorage.getItem('loggedInUser');
-    
+
     if (storedUser && storedUser !== 'undefined' && storedUser !== 'null') {
       try {
-        const parsedUser: AuthUser = JSON.parse(storedUser); 
-        if (parsedUser && parsedUser.role) { 
+        const parsedUser: AuthUser = JSON.parse(storedUser);
+        if (parsedUser && parsedUser.role) {
           setAuthUser(parsedUser);
           if (parsedUser.schoolId && parsedUser.role !== 'superadmin') {
             fetchSchoolDetails(parsedUser.schoolId.toString());
           } else {
-            setDisplaySchoolName(null); 
+            setDisplaySchoolName(null);
             setDisplaySchoolLogoUrl(null);
             setIsLoadingSchoolDetails(false);
           }
@@ -107,6 +104,7 @@ export function Header() {
           setAuthUser(null);
           setDisplaySchoolName(null);
           setDisplaySchoolLogoUrl(null);
+          setIsLoadingSchoolDetails(false);
         }
       } catch (e) {
         console.error("Failed to parse user from localStorage in Header:", e);
@@ -114,11 +112,12 @@ export function Header() {
         setAuthUser(null);
         setDisplaySchoolName(null);
         setDisplaySchoolLogoUrl(null);
+        setIsLoadingSchoolDetails(false);
       } finally {
         setIsLoadingUser(false);
       }
     } else {
-      if (storedUser) { 
+      if (storedUser) {
         localStorage.removeItem('loggedInUser');
       }
       setAuthUser(null);
@@ -127,7 +126,7 @@ export function Header() {
       setIsLoadingUser(false);
       setIsLoadingSchoolDetails(false);
     }
-  }, [pathname, fetchSchoolDetails]); 
+  }, [pathname, fetchSchoolDetails]);
 
 
   const handleLogout = () => {
@@ -140,7 +139,7 @@ export function Header() {
       description: "You have been successfully logged out.",
     });
     router.push("/");
-    setIsSheetOpen(false); 
+    setIsSheetOpen(false);
   };
 
   const currentRole = authUser?.role as Role | undefined;
@@ -148,24 +147,39 @@ export function Header() {
 
   const HeaderTitleContent = () => (
     <>
-      {displaySchoolLogoUrl && authUser && authUser.role !== 'superadmin' ? (
-        <img 
-            src={displaySchoolLogoUrl} 
-            alt="School Logo" 
-            data-ai-hint="school logo"
-            className="h-8 w-8 rounded-sm object-contain"
-            onError={(e) => (e.currentTarget.style.display = 'none')} 
-        />
+      {authUser?.role !== 'superadmin' ? (
+        <>
+          {displaySchoolLogoUrl ? (
+            <img
+              src={displaySchoolLogoUrl}
+              alt={displaySchoolName || "School Logo"}
+              data-ai-hint="school logo"
+              className="h-8 w-8 rounded-sm object-contain"
+              onError={(e) => {
+                // If logo fails to load, hide the img tag and rely on ScholrIcon + SchoolName below
+                e.currentTarget.style.display = 'none';
+                // Force re-render or update a state to show ScholrIcon if logo fails?
+                // For simplicity, if logo URL is provided but fails, it might show nothing or just name.
+                // A more robust solution would involve state to toggle to ScholrIcon on error.
+              }}
+            />
+          ) : (
+            <ScholrIcon className="h-7 w-7 text-primary" />
+          )}
+          {displaySchoolName && (
+            <span className="ml-2 text-sm font-medium text-muted-foreground truncate max-w-[150px] sm:max-w-[200px] group-hover:text-primary transition-colors">
+              {displaySchoolName}
+            </span>
+          )}
+           {!displaySchoolLogoUrl && !displaySchoolName && authUser?.role !== 'superadmin' && (
+             <span className="ml-2 font-headline text-primary">Scholr</span> // Fallback for non-superadmin if no logo and no name
+           )}
+        </>
       ) : (
-        <ScholrIcon className="h-7 w-7 text-primary" />
-      )}
-      {authUser?.role !== 'superadmin' && displaySchoolName && (
-        <span className="ml-2 text-sm font-medium text-muted-foreground truncate max-w-[150px] sm:max-w-[200px]">
-          {displaySchoolName}
-        </span>
-      )}
-      {authUser?.role === 'superadmin' && (
-         <span className="ml-2 font-headline">Scholr</span>
+        <>
+          <ScholrIcon className="h-7 w-7 text-primary" />
+          <span className="ml-2 font-headline text-primary">Scholr</span>
+        </>
       )}
     </>
   );
@@ -176,7 +190,8 @@ export function Header() {
       <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
         <div className="container flex h-16 items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
-            <ScholrIcon className="h-7 w-7 text-primary" />
+            <ScholrIcon className="h-7 w-7 text-primary animate-pulse" />
+             <span className="ml-2 font-headline text-primary/80 animate-pulse">Loading...</span>
           </div>
           <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
         </div>
@@ -187,7 +202,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
       <div className="container flex h-16 items-center justify-between px-4 md:px-6">
-        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl" onClick={() => setIsSheetOpen(false)}>
+        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl group" onClick={() => setIsSheetOpen(false)}>
           <HeaderTitleContent />
         </Link>
 
@@ -207,7 +222,7 @@ export function Header() {
               ))}
             </nav>
 
-            <div className="flex items-center gap-2 md:gap-4"> 
+            <div className="flex items-center gap-2 md:gap-4">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-full">
@@ -258,7 +273,7 @@ export function Header() {
                 <SheetContent side="left" className="pt-10">
                   <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                   <nav className="grid gap-4 text-base font-medium">
-                    <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold mb-4" onClick={() => setIsSheetOpen(false)}>
+                    <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold mb-4 group" onClick={() => setIsSheetOpen(false)}>
                       <HeaderTitleContent />
                     </Link>
                     {currentNavLinks.map((link) => (
@@ -289,4 +304,3 @@ export function Header() {
     </header>
   );
 }
-

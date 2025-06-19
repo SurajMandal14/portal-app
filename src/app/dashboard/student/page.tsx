@@ -9,13 +9,13 @@ import Link from "next/link";
 import { StudentDataProvider, useStudentData } from '@/contexts/StudentDataContext';
 
 function StudentDashboardContent() {
-  const { 
-    authUser, 
-    attendanceSummary, 
-    feeSummary, 
-    isLoading, 
-    error, 
-    refreshData 
+  const {
+    authUser,
+    attendanceSummary,
+    feeSummary,
+    isLoading,
+    error,
+    refreshData
   } = useStudentData();
 
   if (isLoading) {
@@ -65,7 +65,7 @@ function StudentDashboardContent() {
           <div>
             <CardTitle className="text-2xl font-headline">Student Dashboard</CardTitle>
             <CardDescription>
-              Welcome, {authUser.name}! 
+              Welcome, {authUser.name}!
               {authUser.classId && ` (Class: ${authUser.classId})`}
             </CardDescription>
           </div>
@@ -74,9 +74,7 @@ function StudentDashboardContent() {
             Refresh Data
           </Button>
         </CardHeader>
-        <CardContent>
-          <p>Here's an overview of your academic information.</p>
-        </CardContent>
+        {/* Removed welcome paragraph from CardContent */}
       </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -135,7 +133,7 @@ function StudentDashboardContent() {
           </CardContent>
         </Card>
       </div>
-      
+
       <Card>
         <CardHeader>
             <CardTitle>Quick Links</CardTitle>

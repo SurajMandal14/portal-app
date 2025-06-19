@@ -53,7 +53,7 @@ export default function AdminDashboardPage() {
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [userCounts, setUserCounts] = useState<SchoolUserRoleCounts | null>(null);
   const [attendanceOverview, setAttendanceOverview] = useState<DailyAttendanceOverview | null>(null);
-  
+
   const [isLoadingSchoolName, setIsLoadingSchoolName] = useState(true);
   const [isLoadingUserCounts, setIsLoadingUserCounts] = useState(true);
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(true);
@@ -109,7 +109,7 @@ export default function AdminDashboardPage() {
         }
         setIsLoadingUserCounts(false);
       });
-      
+
       getDailyAttendanceOverviewForSchool(authUser.schoolId.toString(), new Date()).then(result => {
         if (result.success && result.summary) {
           setAttendanceOverview(result.summary);
@@ -129,7 +129,7 @@ export default function AdminDashboardPage() {
       setIsLoadingAttendance(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authUser, toast]); 
+  }, [authUser, toast]);
 
   const schoolName = schoolDetails?.schoolName || (isLoadingSchoolName ? "Loading..." : "Your School");
   const adminName = authUser?.name || "Administrator";
@@ -139,15 +139,13 @@ export default function AdminDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline">Admin Dashboard - {schoolName}</CardTitle>
-          <CardDescription>Manage student information, fees, attendance, and staff for your school.</CardDescription>
+          <CardDescription>Welcome, {adminName}. Manage student information, fees, attendance, and staff for your school.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p>Welcome, {adminName} of {schoolName}. Use the sections below to manage your school's operations.</p>
-        </CardContent>
+        {/* Removed welcome paragraph from CardContent */}
       </Card>
-      
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <StatCard 
+        <StatCard
             title="Total Students"
             value={userCounts?.students ?? 'N/A'}
             icon={BookOpen}
@@ -155,7 +153,7 @@ export default function AdminDashboardPage() {
             link="/dashboard/admin/users"
             linkText="Manage Students"
         />
-        <StatCard 
+        <StatCard
             title="Total Teachers"
             value={userCounts?.teachers ?? 'N/A'}
             icon={Briefcase}
@@ -163,7 +161,7 @@ export default function AdminDashboardPage() {
             link="/dashboard/admin/users"
             linkText="Manage Teachers"
         />
-        <StatCard 
+        <StatCard
             title="Today's Attendance"
             value={`${attendanceOverview?.percentage ?? 'N/A'}%`}
             icon={Percent}
@@ -227,7 +225,7 @@ export default function AdminDashboardPage() {
             </Button>
           </CardContent>
         </Card>
-        
+
         <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
                 <BarChart2 className="h-10 w-10 text-primary mb-2" />
@@ -257,4 +255,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
