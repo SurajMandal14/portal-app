@@ -3,10 +3,25 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { ReportCardData, SaveReportCardResult, SetReportCardPublicationStatusResult, GetStudentReportCardResult, BulkPublishReportInfo } from '@/types/report';
+import type { ReportCardData, SaveReportCardResult, SetReportCardPublicationStatusResult, GetStudentReportCardResult, BulkPublishReportInfo, ReportCardSASubjectEntry } from '@/types/report'; // Ensure ReportCardSASubjectEntry is imported
 import { ObjectId } from 'mongodb';
 import type { User } from '@/types/user'; 
 import { getSchoolById } from './schools'; 
+
+// Adjusted Zod schema for saving to match the new ReportCardSASubjectEntry structure
+const saPaperScoreSchemaForSave = z.object({
+  marks: z.number().nullable(),
+  maxMarks: z.number().nullable(),
+});
+
+const reportCardSASubjectEntrySchemaForSave = z.object({
+  subjectName: z.string(),
+  paper: z.string(),
+  sa1: saPaperScoreSchemaForSave,
+  sa2: saPaperScoreSchemaForSave,
+  faTotal200M: z.number().nullable(),
+});
+
 
 const reportCardDataSchemaForSave = z.object({
   studentId: z.string().min(1, "Student ID is required."),
@@ -17,7 +32,7 @@ const reportCardDataSchemaForSave = z.object({
   formativeAssessments: z.array(z.any()),
   coCurricularAssessments: z.array(z.any()),
   secondLanguage: z.enum(['Hindi', 'Telugu']).optional(),
-  summativeAssessments: z.array(z.any()),
+  summativeAssessments: z.array(reportCardSASubjectEntrySchemaForSave), // Use the new schema here
   attendance: z.array(z.any()),
   finalOverallGrade: z.string().nullable(),
   generatedByAdminId: z.string().optional(),
@@ -29,7 +44,7 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
   try {
     const validatedData = reportCardDataSchemaForSave.safeParse(data);
     if (!validatedData.success) {
-      const errors = validatedData.error.errors.map(e => e.message).join('; ');
+      const errors = validatedData.error.errors.map(e => `${e.path.join('.')} - ${e.message}`).join('; ');
       return { success: false, message: 'Validation failed', error: errors };
     }
 
@@ -44,10 +59,10 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
         academicYear,
         reportCardTemplateKey,
         studentInfo,
-        formativeAssessments,
+        formativeAssessments, // This structure from front-end has subjectName, fa1, fa2, fa3, fa4
         coCurricularAssessments,
         secondLanguage,
-        summativeAssessments,
+        summativeAssessments, // This now uses ReportCardSASubjectEntry structure
         attendance,
         finalOverallGrade,
         generatedByAdminId: adminIdStr ? new ObjectId(adminIdStr) : undefined,
@@ -241,7 +256,6 @@ export async function getReportCardsForClass(schoolId: string, classId: string, 
     const reportCardsCollection = db.collection<ReportCardData>('report_cards');
     const usersCollection = db.collection<User>('users');
     
-    // First, get all student IDs for the given classId and schoolId
     const studentsInClass = await usersCollection.find({
       schoolId: new ObjectId(schoolId),
       classId: classId, 
@@ -253,19 +267,17 @@ export async function getReportCardsForClass(schoolId: string, classId: string, 
     }
     const studentIds = studentsInClass.map(s => s._id.toString());
 
-    // Then, fetch report cards for these students for the given academic year
     const reportDocs = await reportCardsCollection.find({
       schoolId: new ObjectId(schoolId),
       studentId: { $in: studentIds },
       academicYear: academicYear,
-      reportCardTemplateKey: 'cbse_state', // Assuming 'cbse_state' template
+      reportCardTemplateKey: 'cbse_state',
     }).project({ _id: 1, studentId: 1, 'studentInfo.studentName': 1, isPublished: 1 }).toArray();
     
-    // Combine student info with their report status
     const reportsInfo: BulkPublishReportInfo[] = studentsInClass.map(student => {
       const report = reportDocs.find(r => r.studentId === student._id.toString());
       return {
-        reportId: report?._id.toString() || null, // Report ID if exists
+        reportId: report?._id.toString() || null,
         studentId: student._id.toString(),
         studentName: student.name,
         admissionId: student.admissionId || 'N/A',
@@ -273,7 +285,6 @@ export async function getReportCardsForClass(schoolId: string, classId: string, 
         hasReport: !!report,
       };
     }).sort((a, b) => a.studentName.localeCompare(b.studentName));
-
 
     return { success: true, reports: reportsInfo };
 
@@ -305,7 +316,6 @@ export async function setReportPublicationStatusForClass(schoolId: string, class
     const reportCardsCollection = db.collection<ReportCardData>('report_cards');
     const usersCollection = db.collection<User>('users');
 
-    // Get all student IDs for the given classId and schoolId
     const studentsInClass = await usersCollection.find({
       schoolId: new ObjectId(schoolId),
       classId: classId, 
