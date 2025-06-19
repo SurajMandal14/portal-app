@@ -3,9 +3,8 @@
 
 import React from 'react';
 import type { UserRole } from '@/types/user';
-import type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperScore } from '@/types/report'; // Import new types
+import type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperScore } from '@/types/report';
 
-// Re-define internal types to match ReportCardSASubjectEntry and ReportCardAttendanceMonth from report.ts
 export type { ReportCardSASubjectEntry as SARowData, ReportCardAttendanceMonth as AttendanceMonthData, SAPaperScore };
 
 
@@ -53,8 +52,8 @@ const finalGradeScale = (marks: number, _isSecondLang: boolean) => {
 };
 
 export const backSubjectStructure = [ 
-  { name: "Telugu", papers: ["I"] }, // Assuming Telugu is single paper for simplicity of structure
-  { name: "Hindi", papers: ["I"] },  // Assuming Hindi is single paper
+  { name: "Telugu", papers: ["I"] }, 
+  { name: "Hindi", papers: ["I"] },  
   { name: "English", papers: ["I", "II"] },
   { name: "Maths", papers: ["I", "II"] },
   { name: "Science", papers: ["Physics", "Biology"] }, 
@@ -103,38 +102,38 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const calculateRowDerivedData = (rowData: ReportCardSASubjectEntry) => {
     const isSecondLang = rowData.subjectName === secondLanguageSubjectName;
 
-    const sa1Total = rowData.sa1.marks || 0;
-    const sa1Max = rowData.sa1.maxMarks || 80; // Default to 80 if not set
-    const sa1Grade = saGradeScale(sa1Total, sa1Max, isSecondLang);
+    // Defensive checks for sa1 and sa2 and their properties
+    const sa1_actual = rowData.sa1 || { marks: null, maxMarks: 80 };
+    const sa2_actual = rowData.sa2 || { marks: null, maxMarks: 80 };
 
-    const sa2Total = rowData.sa2.marks || 0;
-    const sa2Max = rowData.sa2.maxMarks || 80; // Default to 80 if not set
-    const sa2Grade = saGradeScale(sa2Total, sa2Max, isSecondLang);
+    const sa1_marks_safe = sa1_actual.marks ?? 0;
+    const sa1_max_safe = sa1_actual.maxMarks ?? 80;
+
+    const sa2_marks_safe = sa2_actual.marks ?? 0;
+    const sa2_max_safe = sa2_actual.maxMarks ?? 80;
+
+    const sa1Grade = saGradeScale(sa1_marks_safe, sa1_max_safe, isSecondLang);
+    const sa2Grade = saGradeScale(sa2_marks_safe, sa2_max_safe, isSecondLang);
     
-    const faTotal200M_val = rowData.faTotal200M || 0;
+    const faTotal200M_val = rowData.faTotal200M ?? 0;
 
-    // Calculations need to be based on actual max marks if they vary from 80
-    const sa1ForCalc = sa1Max > 0 ? Math.min(sa1Total, sa1Max) : 0;
-    const sa2ForCalc = sa2Max > 0 ? Math.min(sa2Total, sa2Max) : 0;
+    const sa1ForCalc = sa1_max_safe > 0 ? Math.min(sa1_marks_safe, sa1_max_safe) : 0;
+    const sa2ForCalc = sa2_max_safe > 0 ? Math.min(sa2_marks_safe, sa2_max_safe) : 0;
 
     const faAvg50 = faTotal200M_val / 4; 
-    const sa1_50_for_avg = sa1Max > 0 ? sa1ForCalc * (50 / sa1Max) : 0;
+    const sa1_50_for_avg = sa1_max_safe > 0 ? sa1ForCalc * (50 / sa1_max_safe) : 0;
     const faAvgPlusSa1_100M = Math.round(faAvg50 + sa1_50_for_avg); 
     
-    const internalMarksDenominator = (faTotal200M_val > 0 ? 200 : 0) + (sa1Max > 0 ? sa1Max : 0) + (sa2Max > 0 ? sa2Max : 0);
-    const internalMarksTotalAchieved = faTotal200M_val + sa1ForCalc + sa2ForCalc;
-    // The internal marks calculation (divide by 18) assumes fixed max marks (200+80+80 = 360. 360/18 = 20).
-    // This needs adjustment if max marks are variable.
-    // For now, let's use the original logic and assume SA max is 80 for this specific calculation.
-    const internalMarks = Math.round((faTotal200M_val + (sa1Total > 80 ? 80 : sa1Total) + (sa2Total > 80 ? 80 : sa2Total) ) / 18);
+    const internalMarks_sa1_capped = sa1_marks_safe > 80 ? 80 : sa1_marks_safe;
+    const internalMarks_sa2_capped = sa2_marks_safe > 80 ? 80 : sa2_marks_safe;
+    const internalMarks = Math.round((faTotal200M_val + internalMarks_sa1_capped + internalMarks_sa2_capped ) / 18);
 
-
-    const finalTotal100M = internalMarks + sa2ForCalc; // This also assumes sa2ForCalc is out of 80 for direct addition.
+    const finalTotal100M = internalMarks + sa2ForCalc;
     const finalGrade = finalGradeScale(finalTotal100M, isSecondLang);
     
     return {
-      sa1Total, sa1Max, sa1Grade,
-      sa2Total, sa2Max, sa2Grade,
+      sa1Total: sa1_marks_safe, sa1Max: sa1_max_safe, sa1Grade,
+      sa2Total: sa2_marks_safe, sa2Max: sa2_max_safe, sa2Grade,
       faAvgPlusSa1_100M, internalMarks,
       finalTotal100M, finalGrade
     };
@@ -143,9 +142,12 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const calculateOverallFinalGrade = () => {
     const allFinalGrades: string[] = [];
     saData.forEach((rowData) => {
-      const derived = calculateRowDerivedData(rowData);
-      if (derived.finalGrade) {
-        allFinalGrades.push(derived.finalGrade);
+      // Ensure rowData itself is valid before passing to calculateRowDerivedData
+      if (rowData && typeof rowData === 'object') {
+        const derived = calculateRowDerivedData(rowData);
+        if (derived.finalGrade) {
+          allFinalGrades.push(derived.finalGrade);
+        }
       }
     });
 
@@ -167,8 +169,8 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
     return mostFrequentGrade;
   };
 
-  const totalWorkingDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month.workingDays || 0), 0);
-  const totalPresentDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month.presentDays || 0), 0);
+  const totalWorkingDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month?.workingDays || 0), 0);
+  const totalPresentDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month?.presentDays || 0), 0);
   const attendancePercentage = totalWorkingDays > 0 ? Math.round((totalPresentDays / totalWorkingDays) * 100) : 0;
   
   const isPageReadOnlyForAdmin = isAdmin && saData.some(row => 
@@ -286,6 +288,11 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           </thead>
           <tbody>
             {saData.map((rowData, rowIndex) => {
+                // Ensure rowData is valid before processing
+                if (!rowData || typeof rowData !== 'object') {
+                    console.warn(`Invalid rowData at index ${rowIndex}`, rowData);
+                    return <tr key={`invalid-row-${rowIndex}`}><td colSpan={15}>Invalid data for this row</td></tr>;
+                }
                 const derived = calculateRowDerivedData(rowData);
                 const faTotal200M_display = rowData.faTotal200M ?? '';
                 
@@ -299,22 +306,19 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
                     {isFirstPaperOfSubject && <td rowSpan={subjectPaperCount} className="subject-cell">{rowData.subjectName}</td>}
                     <td className="paper-cell">{rowData.paper}</td>
                     
-                    {/* SA1 */}
-                    <td><input type="number" value={rowData.sa1.marks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa1', 'marks', e.target.value)} disabled={isInputDisabled} /></td>
-                    <td><input type="number" value={rowData.sa1.maxMarks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa1', 'maxMarks', e.target.value)} disabled={isInputDisabled} /></td>
+                    <td><input type="number" value={rowData.sa1?.marks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa1', 'marks', e.target.value)} disabled={isInputDisabled} /></td>
+                    <td><input type="number" value={rowData.sa1?.maxMarks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa1', 'maxMarks', e.target.value)} disabled={isInputDisabled} /></td>
                     <td className="calculated">{derived.sa1Grade}</td>
 
-                    {/* SA2 */}
-                    <td><input type="number" value={rowData.sa2.marks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa2', 'marks', e.target.value)} disabled={isInputDisabled} /></td>
-                    <td><input type="number" value={rowData.sa2.maxMarks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa2', 'maxMarks', e.target.value)} disabled={isInputDisabled} /></td>
+                    <td><input type="number" value={rowData.sa2?.marks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa2', 'marks', e.target.value)} disabled={isInputDisabled} /></td>
+                    <td><input type="number" value={rowData.sa2?.maxMarks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa2', 'maxMarks', e.target.value)} disabled={isInputDisabled} /></td>
                     <td className="calculated">{derived.sa2Grade}</td>
 
-                    {/* Final Result Columns */}
-                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} onChange={e => onFaTotalChange(rowIndex, e.target.value)} disabled={isInputDisabled || (isTeacher && !isSubjectEditableForTeacher(rowData.subjectName)) /* FA total should be editable by subject teacher */} /></td>
-                    <td className="calculated">{derived.sa1Total}</td> {/* Display SA1 actual total or adjusted if needed */}
+                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} onChange={e => onFaTotalChange(rowIndex, e.target.value)} disabled={isInputDisabled || (isTeacher && !isSubjectEditableForTeacher(rowData.subjectName))} /></td>
+                    <td className="calculated">{derived.sa1Total}</td>
                     <td className="calculated">{derived.faAvgPlusSa1_100M}</td>
                     <td className="internal calculated">{derived.internalMarks}</td>
-                    <td className="calculated">{derived.sa2Total}</td> {/* Display SA2 actual total or adjusted */}
+                    <td className="calculated">{derived.sa2Total}</td>
                     <td className="final-total calculated">{derived.finalTotal100M}</td>
                     <td className="final-grade calculated">{derived.finalGrade}</td>
                   </tr>
@@ -337,8 +341,8 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           <tbody>
             <tr>
               <td>No. of Working days</td>
-              {attendanceData.slice(0,11).map((month, index) => (
-                <td key={`wd-${index}`}><input type="number" value={month.workingDays ?? ''} onChange={e => onAttendanceDataChange(index, 'workingDays', e.target.value)} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></td>
+              {attendanceData.map((month, index) => (
+                <td key={`wd-${index}`}><input type="number" value={month?.workingDays ?? ''} onChange={e => onAttendanceDataChange(index, 'workingDays', e.target.value)} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></td>
               ))}
               <td className="calculated">{totalWorkingDays}</td>
               <td rowSpan={2} className="calculated">{attendancePercentage}%</td>
@@ -346,8 +350,8 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             </tr>
             <tr>
               <td>No. of days present</td>
-              {attendanceData.slice(0,11).map((month, index) => (
-                <td key={`pd-${index}`}><input type="number" value={month.presentDays ?? ''} onChange={e => onAttendanceDataChange(index, 'presentDays', e.target.value)} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin}/></td>
+              {attendanceData.map((month, index) => (
+                <td key={`pd-${index}`}><input type="number" value={month?.presentDays ?? ''} onChange={e => onAttendanceDataChange(index, 'presentDays', e.target.value)} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin}/></td>
               ))}
               <td className="calculated">{totalPresentDays}</td>
             </tr>
