@@ -11,15 +11,15 @@ import { BookCopy, Loader2, Save, Info, Filter } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser, User as AppUser } from "@/types/user";
-import type { MarkEntry, StudentMarkInput, MarksSubmissionPayload } from "@/types/marks";
+import type { StudentMarkInput, MarksSubmissionPayload } from "@/types/marks";
 import { getSubjectsForTeacher, submitMarks, getMarksForAssessment, type SubjectForTeacher } from "@/app/actions/marks";
 import { getStudentsByClass } from "@/app/actions/schoolUsers";
 
-const ASSESSMENT_TYPES_NON_FA = ["Unit Test 1", "Unit Test 2", "Half Yearly", "Annual Exam", "SA1", "SA2"];
+const ASSESSMENT_TYPES = ["FA1", "FA2", "FA3", "FA4", "SA1", "SA2"];
 const FA_ASSESSMENTS = ["FA1", "FA2", "FA3", "FA4"];
-const ALL_ASSESSMENT_TYPES = [...FA_ASSESSMENTS, ...ASSESSMENT_TYPES_NON_FA];
+const SA_ASSESSMENTS = ["SA1", "SA2"];
 
-const TERMS = ["Term 1", "Term 2", "Term 3", "Annual"];
+// const TERMS = ["Term 1", "Term 2", "Term 3", "Annual"]; // Removed
 
 const FA_TOOLS = [
   { key: 'tool1', label: 'Tool 1', maxMarks: 10 },
@@ -40,19 +40,20 @@ interface StudentMarksFAState {
   maxTool4: number;
 }
 
-interface StudentMarksNonFAState {
-  marksObtained: number | null;
-  maxMarks: number | null;
+interface StudentMarksSAState {
+  p1Marks: number | null;
+  p1Max: number | null;
+  p2Marks: number | null;
+  p2Max: number | null;
 }
 
-// Helper to determine current academic year string (e.g., "2023-2024")
 const getCurrentAcademicYear = (): string => {
   const today = new Date();
-  const currentMonth = today.getMonth(); // 0 (Jan) to 11 (Dec)
+  const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
-  if (currentMonth >= 5) { 
+  if (currentMonth >= 5) {
     return `${currentYear}-${currentYear + 1}`;
-  } else { 
+  } else {
     return `${currentYear - 1}-${currentYear}`;
   }
 };
@@ -63,20 +64,21 @@ export default function TeacherMarksEntryPage() {
 
   const [availableSubjects, setAvailableSubjects] = useState<SubjectForTeacher[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<SubjectForTeacher | null>(null);
-  
+
   const [selectedAssessment, setSelectedAssessment] = useState<string>("");
-  const [selectedTerm, setSelectedTerm] = useState<string>(TERMS[0]);
+  // const [selectedTerm, setSelectedTerm] = useState<string>(TERMS[0]); // Removed
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(getCurrentAcademicYear());
-  
+
   const [studentsForMarks, setStudentsForMarks] = useState<AppUser[]>([]);
-  const [studentMarks, setStudentMarks] = useState<Record<string, StudentMarksFAState | StudentMarksNonFAState>>({});
+  const [studentMarks, setStudentMarks] = useState<Record<string, StudentMarksFAState | StudentMarksSAState>>({});
 
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(true);
   const [isLoadingStudentsAndMarks, setIsLoadingStudentsAndMarks] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [defaultMaxMarksNonFA, setDefaultMaxMarksNonFA] = useState<number>(50);
+  const [defaultMaxMarksSApaper, setDefaultMaxMarksSApaper] = useState<number>(80); // For SA papers
 
   const isCurrentAssessmentFA = FA_ASSESSMENTS.includes(selectedAssessment);
+  const isCurrentAssessmentSA = SA_ASSESSMENTS.includes(selectedAssessment);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -114,7 +116,7 @@ export default function TeacherMarksEntryPage() {
   }, [authUser, fetchSubjects]);
 
   const fetchStudentsAndMarks = useCallback(async () => {
-    if (!selectedSubject || !selectedSubject.classId || !selectedAssessment || !selectedTerm || !selectedAcademicYear || !authUser?.schoolId) {
+    if (!selectedSubject || !selectedSubject.classId || !selectedAssessment || !selectedAcademicYear || !authUser?.schoolId) {
       setStudentsForMarks([]);
       setStudentMarks({});
       setIsLoadingStudentsAndMarks(false);
@@ -126,18 +128,17 @@ export default function TeacherMarksEntryPage() {
       if (studentsResult.success && studentsResult.users) {
         setStudentsForMarks(studentsResult.users);
 
-        // This action now handles fetching individual tool marks if assessmentName is FA type
         const marksResult = await getMarksForAssessment(
           authUser.schoolId.toString(),
           selectedSubject.classId,
           selectedSubject.subjectName,
-          selectedAssessment, // Pass the base FA name like "FA1"
-          selectedTerm,
+          selectedAssessment,
+          // selectedTerm, // Removed
           selectedAcademicYear
         );
 
-        const initialMarks: Record<string, StudentMarksFAState | StudentMarksNonFAState> = {};
-        
+        const initialMarks: Record<string, StudentMarksFAState | StudentMarksSAState> = {};
+
         if (isCurrentAssessmentFA) {
             studentsResult.users.forEach(student => {
                 const studentIdStr = student._id!.toString();
@@ -151,11 +152,11 @@ export default function TeacherMarksEntryPage() {
             if (marksResult.success && marksResult.marks) {
                  marksResult.marks.forEach(mark => {
                     const studentIdStr = mark.studentId.toString();
-                    const assessmentNameParts = mark.assessmentName.split('-'); // e.g., "FA1-Tool1"
+                    const assessmentNameParts = mark.assessmentName.split('-');
                     if (assessmentNameParts.length === 2) {
-                        const faBaseName = assessmentNameParts[0]; // "FA1"
-                        const toolKeyRaw = assessmentNameParts[1]; // "Tool1"
-                        const toolKey = toolKeyRaw.toLowerCase().replace('tool', 'tool') as FaToolKey; // 'tool1'
+                        const faBaseName = assessmentNameParts[0];
+                        const toolKeyRaw = assessmentNameParts[1];
+                        const toolKey = toolKeyRaw.toLowerCase().replace('tool', 'tool') as FaToolKey;
 
                         if (faBaseName === selectedAssessment && initialMarks[studentIdStr] && toolKey in initialMarks[studentIdStr]!) {
                            (initialMarks[studentIdStr] as StudentMarksFAState)[toolKey] = mark.marksObtained;
@@ -164,27 +165,29 @@ export default function TeacherMarksEntryPage() {
                     }
                 });
             }
-        } else { // Non-FA
+        } else if (isCurrentAssessmentSA) {
             studentsResult.users.forEach(student => {
                 initialMarks[student._id!.toString()] = {
-                    marksObtained: null,
-                    maxMarks: defaultMaxMarksNonFA,
+                    p1Marks: null, p1Max: defaultMaxMarksSApaper,
+                    p2Marks: null, p2Max: defaultMaxMarksSApaper,
                 };
             });
-            if (marksResult.success && marksResult.marks && marksResult.marks.length > 0) {
-                 marksResult.marks.forEach(mark => {
+            if (marksResult.success && marksResult.marks) {
+                marksResult.marks.forEach(mark => {
                     const studentIdStr = mark.studentId.toString();
-                    if (mark.assessmentName === selectedAssessment) {
-                         initialMarks[studentIdStr] = {
-                            marksObtained: mark.marksObtained,
-                            maxMarks: mark.maxMarks,
-                        };
-                        // If loading existing non-FA marks, set defaultMaxMarksNonFA from the first one found.
-                        if (marksResult.marks && marksResult.marks[0]) {
-                            setDefaultMaxMarksNonFA(marksResult.marks[0].maxMarks);
-                        }
+                    if (mark.assessmentName === `${selectedAssessment}-Paper1`) {
+                        (initialMarks[studentIdStr] as StudentMarksSAState).p1Marks = mark.marksObtained;
+                        (initialMarks[studentIdStr] as StudentMarksSAState).p1Max = mark.maxMarks;
+                    } else if (mark.assessmentName === `${selectedAssessment}-Paper2`) {
+                        (initialMarks[studentIdStr] as StudentMarksSAState).p2Marks = mark.marksObtained;
+                        (initialMarks[studentIdStr] as StudentMarksSAState).p2Max = mark.maxMarks;
                     }
                 });
+                if (marksResult.marks.find(m => m.assessmentName === `${selectedAssessment}-Paper1`)) {
+                    setDefaultMaxMarksSApaper(marksResult.marks.find(m => m.assessmentName === `${selectedAssessment}-Paper1`)!.maxMarks);
+                } else if (marksResult.marks.find(m => m.assessmentName === `${selectedAssessment}-Paper2`)) {
+                     setDefaultMaxMarksSApaper(marksResult.marks.find(m => m.assessmentName === `${selectedAssessment}-Paper2`)!.maxMarks);
+                }
             }
         }
         setStudentMarks(initialMarks);
@@ -202,27 +205,27 @@ export default function TeacherMarksEntryPage() {
     } finally {
       setIsLoadingStudentsAndMarks(false);
     }
-  }, [authUser, selectedSubject, selectedAssessment, selectedTerm, selectedAcademicYear, toast, isCurrentAssessmentFA, defaultMaxMarksNonFA]);
-  
+  }, [authUser, selectedSubject, selectedAssessment, selectedAcademicYear, toast, isCurrentAssessmentFA, isCurrentAssessmentSA, defaultMaxMarksSApaper]);
+
   useEffect(() => {
-    if (selectedSubject && selectedSubject.classId && selectedAssessment && selectedTerm && selectedAcademicYear) {
+    if (selectedSubject && selectedSubject.classId && selectedAssessment && selectedAcademicYear) {
       fetchStudentsAndMarks();
     } else {
       setStudentsForMarks([]);
       setStudentMarks({});
     }
-  }, [selectedSubject, selectedAssessment, selectedTerm, selectedAcademicYear, fetchStudentsAndMarks]);
+  }, [selectedSubject, selectedAssessment, selectedAcademicYear, fetchStudentsAndMarks]);
 
 
-  const handleSubjectChange = (value: string) => { 
+  const handleSubjectChange = (value: string) => {
     const subjectInfo = availableSubjects.find(s => s.value === value);
     setSelectedSubject(subjectInfo || null);
-    setSelectedAssessment(""); 
+    setSelectedAssessment("");
     setStudentsForMarks([]);
     setStudentMarks({});
   };
 
-  const handleMarksChange = (studentId: string, fieldOrToolKey: keyof StudentMarksNonFAState | FaToolKey, value: string, isMaxMarkField = false) => {
+  const handleMarksChange = (studentId: string, fieldOrToolKey: FaToolKey | 'p1Marks' | 'p1Max' | 'p2Marks' | 'p2Max', value: string) => {
     const numValue = parseInt(value, 10);
     const validatedValue = isNaN(numValue) ? null : numValue;
 
@@ -231,43 +234,41 @@ export default function TeacherMarksEntryPage() {
       if (isCurrentAssessmentFA) {
         const faMarks = currentStudentMarks as StudentMarksFAState;
         const toolKey = fieldOrToolKey as FaToolKey;
-        if (isMaxMarkField) {
-            (faMarks[`max${toolKey.charAt(0).toUpperCase() + toolKey.slice(1)}` as keyof StudentMarksFAState] as number | null) = validatedValue;
-        } else {
-            faMarks[toolKey] = validatedValue;
-        }
-      } else {
-        const nonFaMarks = currentStudentMarks as StudentMarksNonFAState;
-        if (fieldOrToolKey === 'marksObtained') nonFaMarks.marksObtained = validatedValue;
-        else if (fieldOrToolKey === 'maxMarks') nonFaMarks.maxMarks = validatedValue;
+        faMarks[toolKey] = validatedValue; // Max mark for FA tools is fixed from FA_TOOLS
+      } else if (isCurrentAssessmentSA) {
+        const saMarks = currentStudentMarks as StudentMarksSAState;
+        saMarks[fieldOrToolKey as keyof StudentMarksSAState] = validatedValue;
       }
       return { ...prev, [studentId]: currentStudentMarks };
     });
   };
-  
-  const handleDefaultMaxMarksNonFAChange = (value: string) => {
+
+  const handleDefaultMaxMarksSApaperChange = (value: string) => {
     const newMax = parseInt(value, 10);
     if (!isNaN(newMax) && newMax > 0) {
-      setDefaultMaxMarksNonFA(newMax);
-      if (!isCurrentAssessmentFA) {
+      setDefaultMaxMarksSApaper(newMax);
+      if (isCurrentAssessmentSA) {
         setStudentMarks(prev => {
           const updated = { ...prev };
           Object.keys(updated).forEach(studentId => {
-             const current = updated[studentId] as StudentMarksNonFAState;
-             if (current.maxMarks === defaultMaxMarksNonFA || current.maxMarks === undefined || current.maxMarks === null) {
-                current.maxMarks = newMax;
+             const current = updated[studentId] as StudentMarksSAState;
+             if (current.p1Max === defaultMaxMarksSApaper || current.p1Max === undefined || current.p1Max === null) {
+                current.p1Max = newMax;
+             }
+             if (current.p2Max === defaultMaxMarksSApaper || current.p2Max === undefined || current.p2Max === null) {
+                current.p2Max = newMax;
              }
           });
           return updated;
         });
       }
     } else if (value === "") {
-        setDefaultMaxMarksNonFA(50); // Default back if cleared
+        setDefaultMaxMarksSApaper(80); // Default back if cleared
     }
   };
 
   const handleSubmit = async () => {
-    if (!authUser || !authUser._id || !authUser.schoolId || !selectedSubject || !selectedAssessment || !selectedTerm || !selectedAcademicYear || studentsForMarks.length === 0) {
+    if (!authUser || !authUser._id || !authUser.schoolId || !selectedSubject || !selectedAssessment || !selectedAcademicYear || studentsForMarks.length === 0) {
       toast({ variant: "destructive", title: "Missing Information", description: "Please select all fields and ensure students are loaded." });
       return;
     }
@@ -285,7 +286,7 @@ export default function TeacherMarksEntryPage() {
         const faData = currentStudentMarkState as StudentMarksFAState;
         for (const tool of FA_TOOLS) {
           const marksObtained = faData[tool.key];
-          const maxMarks = faData[`max${tool.key.charAt(0).toUpperCase() + tool.key.slice(1)}` as keyof StudentMarksFAState] as number; // e.g. maxTool1
+          const maxMarks = faData[`max${tool.key.charAt(0).toUpperCase() + tool.key.slice(1)}` as keyof StudentMarksFAState] as number;
 
           if (typeof marksObtained !== 'number' || marksObtained < 0) {
             toast({ variant: "destructive", title: "Invalid Marks", description: `Marks for ${student.name} (${tool.label}) cannot be negative or empty.`});
@@ -304,37 +305,44 @@ export default function TeacherMarksEntryPage() {
             studentName: student.name || "N/A",
             marksObtained: marksObtained,
             maxMarks: maxMarks,
-            // The assessmentName for DB will include the tool
-            _internalAssessmentName: `${selectedAssessment}-${tool.key.charAt(0).toUpperCase() + tool.key.slice(1)}`, // e.g., FA1-Tool1
+            assessmentName: `${selectedAssessment}-${tool.key.charAt(0).toUpperCase() + tool.key.slice(1)}`,
           });
         }
-      } else { // Non-FA
-        const nonFaData = currentStudentMarkState as StudentMarksNonFAState;
-        const marksObtained = nonFaData.marksObtained;
-        const maxMarks = nonFaData.maxMarks;
-
-        if (typeof marksObtained !== 'number' || marksObtained < 0) {
-            toast({ variant: "destructive", title: "Invalid Marks", description: `Marks for ${student.name} cannot be negative or empty.`});
+      } else if (isCurrentAssessmentSA) {
+        const saData = currentStudentMarkState as StudentMarksSAState;
+        // Paper 1
+        if (typeof saData.p1Marks === 'number' && saData.p1Marks >= 0 && typeof saData.p1Max === 'number' && saData.p1Max > 0) {
+            if (saData.p1Marks > saData.p1Max) {
+                toast({ variant: "destructive", title: "Marks Exceed Max", description: `Paper 1 marks for ${student.name} (${saData.p1Marks}) exceed max marks (${saData.p1Max}).`});
+                setIsSubmitting(false); return;
+            }
+            marksToSubmit.push({
+                studentId: studentIdStr, studentName: student.name || "N/A",
+                marksObtained: saData.p1Marks, maxMarks: saData.p1Max,
+                assessmentName: `${selectedAssessment}-Paper1`,
+            });
+        } else if (saData.p1Marks !== null && saData.p1Marks !== undefined) { // Only error if partially entered
+            toast({ variant: "destructive", title: "Invalid Marks", description: `Paper 1 marks or max marks for ${student.name} are invalid.`});
             setIsSubmitting(false); return;
         }
-        if (typeof maxMarks !== 'number' || maxMarks <= 0) {
-            toast({ variant: "destructive", title: "Invalid Max Marks", description: `Max marks for ${student.name} must be positive.`});
+        // Paper 2
+        if (typeof saData.p2Marks === 'number' && saData.p2Marks >= 0 && typeof saData.p2Max === 'number' && saData.p2Max > 0) {
+             if (saData.p2Marks > saData.p2Max) {
+                toast({ variant: "destructive", title: "Marks Exceed Max", description: `Paper 2 marks for ${student.name} (${saData.p2Marks}) exceed max marks (${saData.p2Max}).`});
+                setIsSubmitting(false); return;
+            }
+            marksToSubmit.push({
+                studentId: studentIdStr, studentName: student.name || "N/A",
+                marksObtained: saData.p2Marks, maxMarks: saData.p2Max,
+                assessmentName: `${selectedAssessment}-Paper2`,
+            });
+        } else if (saData.p2Marks !== null && saData.p2Marks !== undefined) { // Only error if partially entered
+             toast({ variant: "destructive", title: "Invalid Marks", description: `Paper 2 marks or max marks for ${student.name} are invalid.`});
             setIsSubmitting(false); return;
         }
-        if (marksObtained > maxMarks) {
-            toast({ variant: "destructive", title: "Marks Exceed Max", description: `Marks for ${student.name} (${marksObtained}) exceed max marks (${maxMarks}).`});
-            setIsSubmitting(false); return;
-        }
-        marksToSubmit.push({
-          studentId: studentIdStr,
-          studentName: student.name || "N/A",
-          marksObtained: marksObtained,
-          maxMarks: maxMarks,
-          _internalAssessmentName: selectedAssessment, // For non-FA, it's just the assessment name
-        });
       }
     }
-    
+
     if (marksToSubmit.length === 0 && studentsForMarks.length > 0) {
         toast({ variant: "info", title: "No Valid Marks to Submit", description: "No marks were entered or all entries are invalid." });
         setIsSubmitting(false);
@@ -349,30 +357,18 @@ export default function TeacherMarksEntryPage() {
     const payload: MarksSubmissionPayload = {
       classId: selectedSubject.classId,
       className: selectedSubject.className,
-      subjectId: selectedSubject.subjectName, // Storing subject name as subjectId in marks collection
+      subjectId: selectedSubject.subjectName,
       subjectName: selectedSubject.subjectName,
-      // assessmentName is now part of each StudentMarkInput via _internalAssessmentName
-      // term, academicYear, markedByTeacherId, schoolId are top-level
-      term: selectedTerm,
       academicYear: selectedAcademicYear,
       markedByTeacherId: authUser._id.toString(),
       schoolId: authUser.schoolId.toString(),
-      studentMarks: marksToSubmit.map(m => ({ // Map to remove _internalAssessmentName before sending
-          studentId: m.studentId,
-          studentName: m.studentName,
-          marksObtained: m.marksObtained,
-          maxMarks: m.maxMarks,
-          assessmentName: m._internalAssessmentName, // This is the key change for payload
-      })),
+      studentMarks: marksToSubmit,
     };
-    
-    // Remove the temporary _internalAssessmentName from the top-level payload.studentMarks and ensure assessmentName is set
-    // The server action will read `assessmentName` from each item in `studentMarks` array.
 
     const result = await submitMarks(payload);
     if (result.success) {
       toast({ title: "Marks Submitted", description: result.message });
-      fetchStudentsAndMarks(); 
+      fetchStudentsAndMarks();
     } else {
       toast({ variant: "destructive", title: "Submission Failed", description: result.error || result.message });
     }
@@ -389,7 +385,7 @@ export default function TeacherMarksEntryPage() {
     );
   }
 
-  const canLoadStudents = !!(selectedSubject && selectedSubject.classId && selectedAssessment && selectedTerm && selectedAcademicYear);
+  const canLoadStudents = !!(selectedSubject && selectedSubject.classId && selectedAssessment && selectedAcademicYear);
 
   return (
     <div className="space-y-6">
@@ -399,7 +395,7 @@ export default function TeacherMarksEntryPage() {
             <BookCopy className="mr-2 h-6 w-6" /> Enter Student Marks
           </CardTitle>
           <CardDescription>
-            Select the subject, assessment, term, and academic year to enter marks for students.
+            Select the subject, assessment, and academic year to enter marks for students.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -408,7 +404,7 @@ export default function TeacherMarksEntryPage() {
         <CardHeader>
           <CardTitle>Selection Criteria</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
           <div>
             <Label htmlFor="subject-select">Subject (Class)</Label>
             <Select onValueChange={handleSubjectChange} value={selectedSubject?.value || ""} disabled={isLoadingSubjects || availableSubjects.length === 0}>
@@ -427,32 +423,24 @@ export default function TeacherMarksEntryPage() {
             <Select onValueChange={setSelectedAssessment} value={selectedAssessment} disabled={!selectedSubject}>
               <SelectTrigger id="assessment-select"><SelectValue placeholder="Select assessment" /></SelectTrigger>
               <SelectContent>
-                {ALL_ASSESSMENT_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                {ASSESSMENT_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label htmlFor="term-select">Term</Label>
-            <Select onValueChange={setSelectedTerm} value={selectedTerm} disabled={!selectedSubject}>
-              <SelectTrigger id="term-select"><SelectValue placeholder="Select term" /></SelectTrigger>
-              <SelectContent>
-                {TERMS.map(term => <SelectItem key={term} value={term}>{term}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Term Select Removed */}
            <div>
             <Label htmlFor="academic-year-input">Academic Year</Label>
-            <Input 
+            <Input
                 id="academic-year-input"
-                value={selectedAcademicYear} 
+                value={selectedAcademicYear}
                 onChange={(e) => setSelectedAcademicYear(e.target.value)}
                 placeholder="e.g., 2023-2024"
                 disabled={!selectedSubject}
             />
           </div>
-           <div className="lg:col-start-4">
-            <Button 
-              onClick={fetchStudentsAndMarks} 
+           <div className="md:col-start-3">
+            <Button
+              onClick={fetchStudentsAndMarks}
               disabled={isLoadingStudentsAndMarks || !canLoadStudents}
               className="w-full"
             >
@@ -463,22 +451,22 @@ export default function TeacherMarksEntryPage() {
         </CardContent>
       </Card>
 
-      {selectedSubject && selectedAssessment && selectedTerm && selectedAcademicYear && (
+      {selectedSubject && selectedAssessment && selectedAcademicYear && (
         <Card>
           <CardHeader>
-            <CardTitle>Enter Marks for: {selectedSubject.label} - {selectedAssessment} - {selectedTerm} ({selectedAcademicYear})</CardTitle>
-            {!isCurrentAssessmentFA && (
+            <CardTitle>Enter Marks for: {selectedSubject.label} - {selectedAssessment} ({selectedAcademicYear})</CardTitle>
+            {isCurrentAssessmentSA && (
              <div className="mt-2">
-                <Label htmlFor="default-max-marks">Default Max Marks for this Assessment</Label>
-                <Input 
-                    id="default-max-marks"
-                    type="number" 
+                <Label htmlFor="default-max-marks-sa">Default Max Marks per SA Paper</Label>
+                <Input
+                    id="default-max-marks-sa"
+                    type="number"
                     className="w-32"
-                    value={defaultMaxMarksNonFA}
-                    onChange={(e) => handleDefaultMaxMarksNonFAChange(e.target.value)}
+                    value={defaultMaxMarksSApaper}
+                    onChange={(e) => handleDefaultMaxMarksSApaperChange(e.target.value)}
                     disabled={isSubmitting || isLoadingStudentsAndMarks}
                 />
-                 <p className="text-xs text-muted-foreground mt-1">Set this before entering marks if it's different from individual entries.</p>
+                 <p className="text-xs text-muted-foreground mt-1">Set this for SA papers if different from individual entries.</p>
             </div>
             )}
           </CardHeader>
@@ -494,12 +482,14 @@ export default function TeacherMarksEntryPage() {
                       <TableHead>Admission ID</TableHead>
                       {isCurrentAssessmentFA ? (
                         FA_TOOLS.map(tool => <TableHead key={tool.key} className="w-28 text-center">{tool.label} ({tool.maxMarks}M)</TableHead>)
-                      ) : (
+                      ) : isCurrentAssessmentSA ? (
                         <>
-                          <TableHead className="w-36 text-center">Marks Obtained</TableHead>
-                          <TableHead className="w-32 text-center">Max Marks</TableHead>
+                          <TableHead className="w-36 text-center">P1 Marks</TableHead>
+                          <TableHead className="w-32 text-center">P1 Max</TableHead>
+                          <TableHead className="w-36 text-center">P2 Marks</TableHead>
+                          <TableHead className="w-32 text-center">P2 Max</TableHead>
                         </>
-                      )}
+                      ) : null }
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -510,7 +500,7 @@ export default function TeacherMarksEntryPage() {
                         <TableRow key={studentIdStr}>
                           <TableCell>{student.name}</TableCell>
                           <TableCell>{student.admissionId || 'N/A'}</TableCell>
-                          {isCurrentAssessmentFA ? (
+                          {isCurrentAssessmentFA && currentMarksState && (
                             FA_TOOLS.map(tool => {
                               const faData = currentMarksState as StudentMarksFAState;
                               const toolValue = faData ? faData[tool.key] : null;
@@ -530,15 +520,16 @@ export default function TeacherMarksEntryPage() {
                                 </TableCell>
                               );
                             })
-                          ) : (
+                          )}
+                          {isCurrentAssessmentSA && currentMarksState && (
                             <>
                               <TableCell className="text-center">
                                 <Input
                                   type="number"
-                                  value={(currentMarksState as StudentMarksNonFAState)?.marksObtained ?? ""}
-                                  onChange={e => handleMarksChange(studentIdStr, 'marksObtained', e.target.value)}
+                                  value={(currentMarksState as StudentMarksSAState)?.p1Marks ?? ""}
+                                  onChange={e => handleMarksChange(studentIdStr, 'p1Marks', e.target.value)}
                                   disabled={isSubmitting}
-                                  max={(currentMarksState as StudentMarksNonFAState)?.maxMarks ?? defaultMaxMarksNonFA}
+                                  max={(currentMarksState as StudentMarksSAState)?.p1Max ?? defaultMaxMarksSApaper}
                                   min="0"
                                   className="mx-auto"
                                 />
@@ -546,8 +537,29 @@ export default function TeacherMarksEntryPage() {
                               <TableCell className="text-center">
                                 <Input
                                   type="number"
-                                  value={(currentMarksState as StudentMarksNonFAState)?.maxMarks ?? defaultMaxMarksNonFA}
-                                  onChange={e => handleMarksChange(studentIdStr, 'maxMarks', e.target.value, true)}
+                                  value={(currentMarksState as StudentMarksSAState)?.p1Max ?? defaultMaxMarksSApaper}
+                                  onChange={e => handleMarksChange(studentIdStr, 'p1Max', e.target.value)}
+                                  disabled={isSubmitting}
+                                  min="1"
+                                  className="mx-auto"
+                                />
+                              </TableCell>
+                               <TableCell className="text-center">
+                                <Input
+                                  type="number"
+                                  value={(currentMarksState as StudentMarksSAState)?.p2Marks ?? ""}
+                                  onChange={e => handleMarksChange(studentIdStr, 'p2Marks', e.target.value)}
+                                  disabled={isSubmitting}
+                                  max={(currentMarksState as StudentMarksSAState)?.p2Max ?? defaultMaxMarksSApaper}
+                                  min="0"
+                                  className="mx-auto"
+                                />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Input
+                                  type="number"
+                                  value={(currentMarksState as StudentMarksSAState)?.p2Max ?? defaultMaxMarksSApaper}
+                                  onChange={e => handleMarksChange(studentIdStr, 'p2Max', e.target.value)}
                                   disabled={isSubmitting}
                                   min="1"
                                   className="mx-auto"

@@ -11,7 +11,6 @@ import type { SchoolClass, SchoolClassSubject } from '@/types/classes';
 
 export async function submitMarks(payload: MarksSubmissionPayload): Promise<SubmitMarksResult> {
   try {
-    // Validation of the overall payload structure
     const validatedPayloadStructure = marksSubmissionPayloadSchema.safeParse(payload);
     if (!validatedPayloadStructure.success) {
       const errors = validatedPayloadStructure.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ');
@@ -19,8 +18,8 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
     }
 
     const {
-      classId, className, subjectId, subjectName, term,
-      academicYear, markedByTeacherId, schoolId, studentMarks 
+      classId, className, subjectId, subjectName,
+      academicYear, markedByTeacherId, schoolId, studentMarks
     } = validatedPayloadStructure.data;
 
     const { db } = await connectToDatabase();
@@ -37,17 +36,17 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
             return { success: false, message: `Assessment name missing for student ${sm.studentName}.`, error: 'Missing assessment name in student marks.'}
         }
     }
-    
+
     const operations = studentMarks.map(sm => {
       const markFieldsToSet = {
         studentId: new ObjectId(sm.studentId),
         studentName: sm.studentName,
-        classId: classId, 
+        classId: classId,
         className: className,
-        subjectId: subjectId, 
+        subjectId: subjectId,
         subjectName: subjectName,
         assessmentName: sm.assessmentName, // Use specific assessment name from each mark entry
-        term: term,
+        // term: term, // Removed
         academicYear: academicYear,
         marksObtained: sm.marksObtained,
         maxMarks: sm.maxMarks,
@@ -61,13 +60,13 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
             studentId: markFieldsToSet.studentId,
             classId: markFieldsToSet.classId,
             subjectId: markFieldsToSet.subjectId,
-            assessmentName: markFieldsToSet.assessmentName, // Filter by specific assessment name
-            term: markFieldsToSet.term,
+            assessmentName: markFieldsToSet.assessmentName,
+            // term: markFieldsToSet.term, // Removed
             academicYear: markFieldsToSet.academicYear,
             schoolId: markFieldsToSet.schoolId,
           },
           update: {
-            $set: { // Set all mutable fields except createdAt
+            $set: {
               studentName: markFieldsToSet.studentName,
               className: markFieldsToSet.className,
               subjectName: markFieldsToSet.subjectName,
@@ -76,12 +75,12 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
               markedByTeacherId: markFieldsToSet.markedByTeacherId,
               updatedAt: new Date(),
             },
-            $setOnInsert: { // These fields are set only if a new document is inserted
+            $setOnInsert: {
               studentId: markFieldsToSet.studentId,
               classId: markFieldsToSet.classId,
               subjectId: markFieldsToSet.subjectId,
               assessmentName: markFieldsToSet.assessmentName,
-              term: markFieldsToSet.term,
+              // term: markFieldsToSet.term, // Removed
               academicYear: markFieldsToSet.academicYear,
               schoolId: markFieldsToSet.schoolId,
               createdAt: new Date(),
@@ -91,16 +90,15 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
         },
       };
     });
-    
+
     if (operations.length === 0) {
         return { success: true, message: "No marks data provided to submit.", count: 0};
     }
 
     const result = await marksCollection.bulkWrite(operations);
     let processedCount = result.upsertedCount + result.modifiedCount;
-    
+
     revalidatePath('/dashboard/teacher/marks');
-    // Consider revalidating other paths if marks are displayed elsewhere
     revalidatePath('/dashboard/admin/reports/generate-cbse-state');
 
     return {
@@ -118,10 +116,10 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
 
 export async function getMarksForAssessment(
   schoolId: string,
-  classId: string, 
-  subjectNameParam: string, // Changed from subjectId to subjectNameParam for clarity
-  assessmentNameBase: string, // e.g., "FA1", "Unit Test 1"
-  term: string,
+  classId: string,
+  subjectNameParam: string,
+  assessmentNameBase: string, // e.g., "FA1", "SA1"
+  // term: string, // Removed
   academicYear: string
 ): Promise<GetMarksResult> {
   try {
@@ -132,32 +130,33 @@ export async function getMarksForAssessment(
     const { db } = await connectToDatabase();
     const marksCollection = db.collection<MarkEntry>('marks');
 
-    let queryAssessmentNames: string[] | { $regex: string };
+    let queryAssessmentFilter: { $regex: string } | { $in: string[] };
 
     if (["FA1", "FA2", "FA3", "FA4"].includes(assessmentNameBase)) {
-      // For FAs, fetch all tool-specific marks
-      queryAssessmentNames = { $regex: `^${assessmentNameBase}-Tool` };
+      queryAssessmentFilter = { $regex: `^${assessmentNameBase}-Tool` };
+    } else if (["SA1", "SA2"].includes(assessmentNameBase)) {
+      queryAssessmentFilter = { $regex: `^${assessmentNameBase}-Paper` };
     } else {
-      // For other assessments, fetch the exact name
-      queryAssessmentNames = [assessmentNameBase];
+      // For any other specific assessment names (though current UI won't use this path)
+      queryAssessmentFilter = { $in: [assessmentNameBase] };
     }
-    
+
     const marks = await marksCollection.find({
       schoolId: new ObjectId(schoolId),
-      classId: classId, 
+      classId: classId,
       subjectId: subjectNameParam, // Querying by subjectName (which is stored in subjectId field in DB)
-      assessmentName: Array.isArray(queryAssessmentNames) ? { $in: queryAssessmentNames } : queryAssessmentNames,
-      term: term,
+      assessmentName: queryAssessmentFilter,
+      // term: term, // Removed
       academicYear: academicYear,
     }).toArray();
 
     const marksWithStrId = marks.map(mark => ({
         ...mark,
-        _id: mark._id!.toString(), // Ensure _id is present and convert
+        _id: mark._id!.toString(),
         studentId: mark.studentId.toString(),
         markedByTeacherId: mark.markedByTeacherId.toString(),
         schoolId: mark.schoolId.toString(),
-        classId: mark.classId.toString(), 
+        classId: mark.classId.toString(),
     }));
 
     return { success: true, marks: marksWithStrId };
@@ -171,11 +170,11 @@ export async function getMarksForAssessment(
 
 
 export interface SubjectForTeacher {
-  value: string; 
-  label: string; 
-  classId: string; 
+  value: string;
+  label: string;
+  classId: string;
   className: string;
-  subjectName: string; 
+  subjectName: string;
 }
 
 export async function getSubjectsForTeacher(teacherId: string, schoolId: string): Promise<SubjectForTeacher[]> {
@@ -185,33 +184,32 @@ export async function getSubjectsForTeacher(teacherId: string, schoolId: string)
     }
     try {
         const { db } = await connectToDatabase();
-        const schoolClassesCollection = db.collection<Omit<SchoolClass, '_id' | 'schoolId'> & { _id: ObjectId; schoolId: ObjectId }>('school_classes'); 
-        
+        const schoolClassesCollection = db.collection<Omit<SchoolClass, '_id' | 'schoolId'> & { _id: ObjectId; schoolId: ObjectId }>('school_classes');
+
         const teacherObjectId = new ObjectId(teacherId);
         const schoolObjectId = new ObjectId(schoolId);
 
         const classesInSchool = await schoolClassesCollection.find({ schoolId: schoolObjectId }).toArray();
-        
+
         const taughtSubjects: SubjectForTeacher[] = [];
 
         classesInSchool.forEach(cls => {
-            const classSubjects = (cls.subjects || []) as SchoolClassSubject[]; 
+            const classSubjects = (cls.subjects || []) as SchoolClassSubject[];
 
             classSubjects.forEach(subject => {
                 let isMatch = false;
                 if (subject.teacherId) {
-                    // Ensure subject.teacherId is treated as ObjectId or string of ObjectId for comparison
                     const subjectTeacherIdStr = typeof subject.teacherId === 'string' ? subject.teacherId : subject.teacherId?.toString();
-                    isMatch = subjectTeacherIdStr === teacherId; // Compare string versions if teacherId is ObjectId string
+                    isMatch = subjectTeacherIdStr === teacherId;
                 }
 
                 if (isMatch) {
-                    const uniqueValue = `${cls._id.toString()}_${subject.name}`; // Use class _id and subject name for unique value
+                    const uniqueValue = `${cls._id.toString()}_${subject.name}`;
                     if (!taughtSubjects.some(ts => ts.value === uniqueValue)) {
                         taughtSubjects.push({
                             value: uniqueValue,
-                            label: `${subject.name} (${cls.name})`,
-                            classId: cls._id.toString(), // This is the Class _id
+                            label: `${subject.name} (${cls.name}${cls.section ? ` - ${cls.section}` : ''})`, // Include section in label
+                            classId: cls._id.toString(),
                             className: cls.name,
                             subjectName: subject.name
                         });
@@ -219,7 +217,7 @@ export async function getSubjectsForTeacher(teacherId: string, schoolId: string)
                 }
             });
         });
-        
+
         return taughtSubjects.sort((a, b) => a.label.localeCompare(b.label));
 
     } catch (error) {
@@ -240,7 +238,7 @@ export async function getStudentMarksForReportCard(studentId: string, schoolId: 
     const marks = await marksCollection.find({
       studentId: new ObjectId(studentId),
       schoolId: new ObjectId(schoolId),
-      classId: classId, 
+      classId: classId,
       academicYear: academicYear,
     }).toArray();
 
