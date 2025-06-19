@@ -9,9 +9,9 @@ import CBSEStateFront, {
 } from '@/components/report-cards/CBSEStateFront';
 import CBSEStateBack, { 
     backSubjectStructure, 
-    type ReportCardSASubjectEntry, // Import new type
-    type ReportCardAttendanceMonth, // Import new type
-    type SAPaperScore // Import new type
+    type ReportCardSASubjectEntry, 
+    type ReportCardAttendanceMonth, 
+    type SAPaperScore 
 } from '@/components/report-cards/CBSEStateBack';
 
 
@@ -84,8 +84,6 @@ const getCurrentAcademicYear = (): string => {
   }
 };
 
-// Define calculateFaTotal200MForRow outside useCallback if its definition doesn't depend on component scope variables that change
-// Or include its dependencies if it does. For now, removing useCallback.
 const calculateFaTotal200MForRow = (subjectNameForBack: string, currentFaMarks: Record<string, FrontSubjectFAData>): number | null => {
   const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
   const subjectFaData = currentFaMarks[faSubjectKey];
@@ -97,7 +95,7 @@ const calculateFaTotal200MForRow = (subjectNameForBack: string, currentFaMarks: 
       overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
     }
   });
-  return overallTotal > 200 ? 200 : overallTotal; // Capping at 200
+  return overallTotal > 200 ? 200 : overallTotal; 
 };
 
 
@@ -173,7 +171,6 @@ export default function GenerateCBSEStateReportPage() {
 
     setIsLoadingStudentAndClassData(true);
     
-
     try {
       const studentRes = await getStudentDetailsForReportCard(admissionIdInput, authUser.schoolId.toString());
       
@@ -194,11 +191,9 @@ export default function GenerateCBSEStateReportPage() {
       }
 
       let currentLoadedClassSubjects: SchoolClassSubject[] = [];
-      let currentClassDetails = null;
       if (currentStudent.classId) {
         const classRes = await getClassDetailsById(currentStudent.classId, currentStudent.schoolId!);
         if (classRes.success && classRes.classDetails) {
-          currentClassDetails = classRes.classDetails;
           currentLoadedClassSubjects = classRes.classDetails.subjects || [];
           setLoadedClassSubjects(currentLoadedClassSubjects);
           
@@ -282,7 +277,7 @@ export default function GenerateCBSEStateReportPage() {
           );
 
           const newFaMarksForState: Record<string, FrontSubjectFAData> = getDefaultSubjectFaDataFront(currentLoadedClassSubjects);
-          const newSaDataForState: ReportCardSASubjectEntry[] = initializeDefaultSaDataBack();
+          let newSaDataForState = initializeDefaultSaDataBack();
 
           if (marksResult.success && marksResult.marks) {
             const allFetchedMarks = marksResult.marks;
@@ -311,40 +306,43 @@ export default function GenerateCBSEStateReportPage() {
                 }
               });
             });
-            setFaMarks(newFaMarksForState);
+            setFaMarks(newFaMarksForState); // Set FA marks to trigger useEffect for FA totals
 
+            // Process SA marks
             allFetchedMarks.forEach((mark: MarkEntryType) => {
                 if (mark.assessmentName.startsWith("SA1") || mark.assessmentName.startsWith("SA2")) {
                     const [saPeriod, paperTypeWithSuffix] = mark.assessmentName.split('-'); 
                     if (!paperTypeWithSuffix) return;
 
-                    let targetSubjectName = mark.subjectName;
-                    let targetPaper = paperTypeWithSuffix; 
+                    let targetSubjectNameInReport = mark.subjectName;
+                    let targetPaperTypeOnReport: string;
 
                     if (mark.subjectName === "Science") {
-                        targetSubjectName = "Science"; 
-                        targetPaper = paperTypeWithSuffix === "Paper1" ? "Physics" : "Biology";
+                        targetSubjectNameInReport = "Science";
+                        targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "Physics" : "Biology";
                     } else {
-                        targetPaper = paperTypeWithSuffix === "Paper1" ? "I" : "II";
-                         if(targetPaper === "II" && !backSubjectStructure.find(s => s.name === mark.subjectName && s.papers.includes("II"))){
-                            targetPaper = "I"; 
+                        targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "I" : "II";
+                        const subjectDef = backSubjectStructure.find(s => s.name === mark.subjectName);
+                        if (targetPaperTypeOnReport === "II" && !(subjectDef && subjectDef.papers.includes("II"))) {
+                            targetPaperTypeOnReport = "I";
                         }
                     }
                     
-                    const saRowIndex = newSaDataForState.findIndex(row => row.subjectName === targetSubjectName && row.paper === targetPaper);
-
-                    if (saRowIndex !== -1) {
-                        if (saPeriod === "SA1") {
-                            newSaDataForState[saRowIndex].sa1.marks = mark.marksObtained;
-                            newSaDataForState[saRowIndex].sa1.maxMarks = mark.maxMarks;
-                        } else if (saPeriod === "SA2") {
-                            newSaDataForState[saRowIndex].sa2.marks = mark.marksObtained;
-                            newSaDataForState[saRowIndex].sa2.maxMarks = mark.maxMarks;
+                    newSaDataForState = newSaDataForState.map(row => {
+                        if (row.subjectName === targetSubjectNameInReport && row.paper === targetPaperTypeOnReport) {
+                            const newRow = { ...row }; 
+                            if (saPeriod === "SA1") {
+                                newRow.sa1 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
+                            } else if (saPeriod === "SA2") {
+                                newRow.sa2 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
+                            }
+                            return newRow;
                         }
-                    }
+                        return row;
+                    });
                 }
             });
-            setSaData(newSaDataForState);
+            setSaData(newSaDataForState); // SA marks are set. FA totals will be merged by useEffect.
 
           } else { 
             if (!marksResult.success && marksResult.message) {
@@ -372,13 +370,15 @@ export default function GenerateCBSEStateReportPage() {
 
 
   useEffect(() => {
+    // This useEffect updates saData with calculated faTotal200M whenever faMarks changes.
+    // It ensures that faTotal200M is based on the latest faMarks.
     setSaData(prevSaData =>
       prevSaData.map(row => ({
         ...row,
         faTotal200M: calculateFaTotal200MForRow(row.subjectName === "Science" ? row.paper : row.subjectName, faMarks)
       }))
     );
-  }, [faMarks]);
+  }, [faMarks]); // Removed calculateFaTotal200MForRow from dependency array as it's stable if defined outside or memoized correctly if it had complex deps.
 
 
   const handleStudentDataChange = (field: keyof FrontStudentData, value: string) => {
@@ -451,7 +451,7 @@ export default function GenerateCBSEStateReportPage() {
   
   const isFieldDisabledForRole = (subjectName?: string): boolean => {
     if (currentUserRole === 'student') return true;
-    if (currentUserRole === 'admin' && !!loadedStudent) return true;
+    if (currentUserRole === 'admin' && !!loadedStudent) return true; // Admin view is read-only for marks once loaded
     if (currentUserRole === 'teacher') {
       if (!subjectName) return true; 
       if (subjectName === "Science" && (teacherEditableSubjects.includes("Physics") || teacherEditableSubjects.includes("Biology"))) return false;
@@ -680,3 +680,5 @@ export default function GenerateCBSEStateReportPage() {
     </div>
   );
 }
+
+    
