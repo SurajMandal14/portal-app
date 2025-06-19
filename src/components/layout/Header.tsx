@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2 } from "lucide-react";
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,7 +29,8 @@ const navLinksBase = {
   ],
   admin: [
     { href: "/dashboard/admin", label: "Admin Dashboard", icon: LayoutDashboard },
-    { href: "/dashboard/admin/users", label: "Users", icon: Users },
+    { href: "/dashboard/admin/students", label: "Students", icon: BookUser },
+    { href: "/dashboard/admin/teachers", label: "Teachers", icon: Briefcase },
     { href: "/dashboard/admin/classes", label: "Classes", icon: BookCopy },
     { href: "/dashboard/admin/fees", label: "Fees", icon: DollarSign },
     { href: "/dashboard/admin/attendance", label: "Attendance", icon: CheckSquare },
@@ -156,11 +157,39 @@ export function Header() {
               data-ai-hint="school logo"
               className="h-8 w-8 rounded-sm object-contain"
               onError={(e) => {
-                // If logo fails to load, hide the img tag and rely on ScholrIcon + SchoolName below
-                e.currentTarget.style.display = 'none';
-                // Force re-render or update a state to show ScholrIcon if logo fails?
-                // For simplicity, if logo URL is provided but fails, it might show nothing or just name.
-                // A more robust solution would involve state to toggle to ScholrIcon on error.
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                // Create a span to show ScholrIcon as a fallback if image errors
+                const fallbackIcon = document.createElement('span');
+                fallbackIcon.id="logo-fallback-icon";
+                const svgNS = "http://www.w3.org/2000/svg";
+                const svg = document.createElementNS(svgNS, "svg");
+                  svg.setAttribute("width", "28");
+                  svg.setAttribute("height", "28");
+                  svg.setAttribute("viewBox", "0 0 24 24");
+                  svg.setAttribute("fill", "none");
+                  svg.setAttribute("stroke", "currentColor");
+                  svg.setAttribute("stroke-width", "2");
+                  svg.setAttribute("stroke-linecap", "round");
+                  svg.setAttribute("stroke-linejoin", "round");
+                  const path1 = document.createElementNS(svgNS, "path");
+                  path1.setAttribute("d", "M14 22v-4a2 2 0 1 0-4 0v4");
+                  const path2 = document.createElementNS(svgNS, "path");
+                  path2.setAttribute("d", "m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2");
+                  const path3 = document.createElementNS(svgNS, "path");
+                  path3.setAttribute("d", "M18 5v17");
+                  const path4 = document.createElementNS(svgNS, "path");
+                  path4.setAttribute("d", "m4 6 8-4 8 4");
+                  const path5 = document.createElementNS(svgNS, "path");
+                  path5.setAttribute("d", "M6 5v17");
+                  svg.appendChild(path1);
+                  svg.appendChild(path2);
+                  svg.appendChild(path3);
+                  svg.appendChild(path4);
+                  svg.appendChild(path5);
+                fallbackIcon.appendChild(svg);
+                if (e.currentTarget.parentNode && !document.getElementById("logo-fallback-icon")) {
+                    e.currentTarget.parentNode.insertBefore(fallbackIcon, e.currentTarget.nextSibling);
+                }
               }}
             />
           ) : (
@@ -172,7 +201,7 @@ export function Header() {
             </span>
           )}
            {!displaySchoolLogoUrl && !displaySchoolName && authUser?.role !== 'superadmin' && (
-             <span className="ml-2 font-headline text-primary">Scholr</span> // Fallback for non-superadmin if no logo and no name
+             <span className="ml-2 font-headline text-primary">Scholr</span>
            )}
         </>
       ) : (

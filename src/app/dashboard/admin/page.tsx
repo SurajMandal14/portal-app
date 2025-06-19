@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, DollarSign, CheckSquare, BarChart2, Settings, Briefcase, BookOpen, Percent, Loader2, BookCopy } from "lucide-react";
+import { Users, DollarSign, CheckSquare, BarChart2, Settings, Briefcase, BookOpen, Percent, Loader2, BookCopy, BookUser } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { AuthUser } from "@/types/user";
 import type { School } from "@/types/school";
@@ -139,9 +139,8 @@ export default function AdminDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline">Admin Dashboard - {schoolName}</CardTitle>
-          <CardDescription>Welcome, {adminName}. Manage student information, fees, attendance, and staff for your school.</CardDescription>
+          <CardDescription>Welcome, {adminName}. Manage student information, fees, attendance, and staff for {schoolName}.</CardDescription>
         </CardHeader>
-        {/* Removed welcome paragraph from CardContent */}
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -150,7 +149,7 @@ export default function AdminDashboardPage() {
             value={userCounts?.students ?? 'N/A'}
             icon={BookOpen}
             isLoading={isLoadingUserCounts}
-            link="/dashboard/admin/users"
+            link="/dashboard/admin/students"
             linkText="Manage Students"
         />
         <StatCard
@@ -158,7 +157,7 @@ export default function AdminDashboardPage() {
             value={userCounts?.teachers ?? 'N/A'}
             icon={Briefcase}
             isLoading={isLoadingUserCounts}
-            link="/dashboard/admin/users"
+            link="/dashboard/admin/teachers"
             linkText="Manage Teachers"
         />
         <StatCard
@@ -176,13 +175,26 @@ export default function AdminDashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pt-4">
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
-            <Users className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>User Management</CardTitle>
+            <BookUser className="h-10 w-10 text-primary mb-2" />
+            <CardTitle>Student Management</CardTitle>
           </CardHeader>
           <CardContent>
-            <CardDescription>Add, edit, and manage student, teacher, and other staff accounts.</CardDescription>
+            <CardDescription>Add, edit, and manage student accounts and details.</CardDescription>
             <Button asChild className="mt-4">
-              <Link href="/dashboard/admin/users">Manage Users</Link>
+              <Link href="/dashboard/admin/students">Manage Students</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <Briefcase className="h-10 w-10 text-primary mb-2" />
+            <CardTitle>Teacher Management</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription>Add, edit, and manage teacher accounts and assignments.</CardDescription>
+            <Button asChild className="mt-4">
+              <Link href="/dashboard/admin/teachers">Manage Teachers</Link>
             </Button>
           </CardContent>
         </Card>
