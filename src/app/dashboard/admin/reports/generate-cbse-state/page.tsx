@@ -8,7 +8,6 @@ import CBSEStateFront, {
     type MarksEntry as FrontMarksEntryTypeImport, 
 } from '@/components/report-cards/CBSEStateFront';
 import CBSEStateBack, { 
-    backSubjectStructure, 
     type ReportCardSASubjectEntry, 
     type ReportCardAttendanceMonth, 
     type SAPaperScore 
@@ -35,17 +34,33 @@ import type { MarkEntry as MarkEntryType } from '@/types/marks';
 
 type FrontMarksEntry = FrontMarksEntryTypeImport;
 
+// Helper function to determine paper names for common subjects
+const getPapersForSubject = (subjectName: string): string[] => {
+    if (subjectName === "Science") return ["Physics", "Biology"];
+    if (["English", "Maths", "Social"].includes(subjectName)) return ["I", "II"]; // Assuming "Social" is Social Studies
+    return ["I"]; // Default to one paper for other subjects (Telugu, Hindi, etc.)
+};
 
-const initializeDefaultSaDataBack = (): ReportCardSASubjectEntry[] => {
-  return backSubjectStructure.flatMap(subjectInfo => 
-    subjectInfo.papers.map(paperName => ({
-      subjectName: subjectInfo.name,
-      paper: paperName,
-      sa1: { marks: null, maxMarks: 80 }, 
-      sa2: { marks: null, maxMarks: 80 }, 
-      faTotal200M: null,
-    }))
-  );
+const initializeSaDataFromClassSubjects = (
+    classSubjects: SchoolClassSubject[],
+    defaultMaxSA: number = 80 // Default SA max marks
+): ReportCardSASubjectEntry[] => {
+    if (!classSubjects || classSubjects.length === 0) return [];
+    
+    const saStructure: ReportCardSASubjectEntry[] = [];
+    classSubjects.forEach(subject => {
+        const papers = getPapersForSubject(subject.name);
+        papers.forEach(paperName => {
+            saStructure.push({
+                subjectName: subject.name,
+                paper: paperName,
+                sa1: { marks: null, maxMarks: defaultMaxSA },
+                sa2: { marks: null, maxMarks: defaultMaxSA },
+                faTotal200M: null,
+            });
+        });
+    });
+    return saStructure;
 };
 
 
@@ -84,11 +99,8 @@ const getCurrentAcademicYear = (): string => {
   }
 };
 
-// This function can be defined within the component or passed if memoized correctly with dependencies
-const calculateFaTotal200MForRow = (subjectNameForBack: string, currentFaMarks: Record<string, FrontSubjectFAData>): number | null => {
-  // If subjectNameForBack is "Physics" or "Biology", it means we are calculating for a Science paper.
-  // The FA marks are stored under the "Science" key.
-  const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
+const calculateFaTotal200MForRow = (subjectNameForBack: string, paperNameForBack: string, currentFaMarks: Record<string, FrontSubjectFAData>): number | null => {
+  const faSubjectKey = (subjectNameForBack === "Science") ? "Science" : subjectNameForBack;
   const subjectFaData = currentFaMarks[faSubjectKey];
 
   if (!subjectFaData) return null;
@@ -97,11 +109,12 @@ const calculateFaTotal200MForRow = (subjectNameForBack: string, currentFaMarks: 
   (['fa1', 'fa2', 'fa3', 'fa4'] as const).forEach(faPeriodKey => {
     const periodMarks = subjectFaData[faPeriodKey];
     if (periodMarks) {
-      // Sum up all tool marks for the period
       overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
     }
   });
-  // Cap at 200 as per requirement, though individual tool max marks should prevent this if validated.
+  
+  // For Science, if it's Physics or Biology, the FA total is for the entire Science subject,
+  // so it should be shown for both.
   return overallTotal > 200 ? 200 : overallTotal; 
 };
 
@@ -123,7 +136,7 @@ export default function GenerateCBSEStateReportPage() {
   const [frontSecondLanguage, setFrontSecondLanguage] = useState<'Hindi' | 'Telugu'>('Hindi');
   const [frontAcademicYear, setFrontAcademicYear] = useState<string>(getCurrentAcademicYear());
 
-  const [saData, setSaData] = useState<ReportCardSASubjectEntry[]>(initializeDefaultSaDataBack()); 
+  const [saData, setSaData] = useState<ReportCardSASubjectEntry[]>([]); 
   const [attendanceData, setAttendanceData] = useState<ReportCardAttendanceMonth[]>(defaultAttendanceDataBack);
   const [finalOverallGradeInput, setFinalOverallGradeInput] = useState<string | null>(null);
 
@@ -133,6 +146,7 @@ export default function GenerateCBSEStateReportPage() {
   const [loadedReportId, setLoadedReportId] = useState<string | null>(null);
   const [loadedReportIsPublished, setLoadedReportIsPublished] = useState<boolean | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [defaultSaMaxMarks, setDefaultSaMaxMarks] = useState(80); // Default SA max from teacher page
 
 
   useEffect(() => {
@@ -159,7 +173,7 @@ export default function GenerateCBSEStateReportPage() {
     setStudentData(defaultStudentDataFront);
     setFaMarks(getDefaultSubjectFaDataFront(subjects));
     setCoMarks(defaultCoMarksFront);
-    setSaData(initializeDefaultSaDataBack());
+    setSaData(initializeSaDataFromClassSubjects(subjects, defaultSaMaxMarks));
     setAttendanceData(defaultAttendanceDataBack);
     setFinalOverallGradeInput(null);
     setLoadedReportId(null);
@@ -203,6 +217,7 @@ export default function GenerateCBSEStateReportPage() {
         if (classRes.success && classRes.classDetails) {
           currentLoadedClassSubjects = classRes.classDetails.subjects || [];
           setLoadedClassSubjects(currentLoadedClassSubjects);
+          setFrontSecondLanguage(classRes.classDetails.secondLanguageSubjectName === "Telugu" ? "Telugu" : "Hindi");
           
           if (authUser.role === 'teacher' && classRes.classDetails.subjects) {
             const editableSubs = classRes.classDetails.subjects
@@ -265,7 +280,25 @@ export default function GenerateCBSEStateReportPage() {
           });
           setFaMarks(loadedFaMarksState);
           setCoMarks(report.coCurricularAssessments || defaultCoMarksFront);
-          setSaData(report.summativeAssessments.length > 0 ? report.summativeAssessments : initializeDefaultSaDataBack());
+          
+          // Ensure saData uses the dynamically determined subjects if the saved report is old.
+          // If the saved report already has the new structure, use it. Otherwise, initialize and map.
+          if (report.summativeAssessments && report.summativeAssessments.every(sa => 'paper' in sa && 'faTotal200M' in sa)) {
+            setSaData(report.summativeAssessments);
+          } else {
+            // If old structure, initialize based on class subjects and try to map (might be lossy)
+            let tempSaData = initializeSaDataFromClassSubjects(currentLoadedClassSubjects, defaultSaMaxMarks);
+            // Attempt to map old SA data to new structure if possible (this part is complex and error-prone)
+            // For simplicity, if old data is found, we might just initialize fresh.
+            // The key is that new saves will use the ReportCardSASubjectEntry structure.
+             tempSaData = tempSaData.map(row => ({
+                ...row,
+                faTotal200M: calculateFaTotal200MForRow(row.subjectName, row.paper, loadedFaMarksState)
+             }));
+            setSaData(tempSaData);
+            toast({variant: "info", title: "SA Data Mapped", description: "SA data from an older report format was mapped. Please review."});
+          }
+
           setAttendanceData(report.attendance.length > 0 ? report.attendance : defaultAttendanceDataBack);
           setFinalOverallGradeInput(report.finalOverallGrade);
           setLoadedReportId(report._id!.toString());
@@ -284,7 +317,7 @@ export default function GenerateCBSEStateReportPage() {
           );
 
           const newFaMarksForState: Record<string, FrontSubjectFAData> = getDefaultSubjectFaDataFront(currentLoadedClassSubjects);
-          let tempSaData = initializeDefaultSaDataBack();
+          let tempSaDataForNewReport = initializeSaDataFromClassSubjects(currentLoadedClassSubjects, defaultSaMaxMarks);
 
           if (marksResult.success && marksResult.marks) {
             const allFetchedMarks = marksResult.marks;
@@ -314,7 +347,6 @@ export default function GenerateCBSEStateReportPage() {
               });
             });
             
-            // Process SA marks into tempSaData
             allFetchedMarks.forEach((mark: MarkEntryType) => {
                 if (mark.assessmentName.startsWith("SA1") || mark.assessmentName.startsWith("SA2")) {
                     const [saPeriod, paperTypeWithSuffix] = mark.assessmentName.split('-'); 
@@ -326,38 +358,28 @@ export default function GenerateCBSEStateReportPage() {
                     if (mark.subjectName === "Science") {
                         targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "Physics" : "Biology";
                     } else {
-                        targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "I" : "II";
-                        const subjectDef = backSubjectStructure.find(s => s.name === mark.subjectName);
-                        if (targetPaperTypeOnReport === "II" && !(subjectDef && subjectDef.papers.includes("II"))) {
-                            targetPaperTypeOnReport = "I"; 
+                        const papersForThisSubject = getPapersForSubject(mark.subjectName);
+                        if (papersForThisSubject.length === 1) {
+                            targetPaperTypeOnReport = papersForThisSubject[0]; // Should be "I"
+                        } else { // Assumed 2 papers
+                            targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "I" : "II";
                         }
                     }
                     
-                    const rowIndex = tempSaData.findIndex(row => row.subjectName === targetSubjectNameInReport && row.paper === targetPaperTypeOnReport);
+                    const rowIndex = tempSaDataForNewReport.findIndex(row => row.subjectName === targetSubjectNameInReport && row.paper === targetPaperTypeOnReport);
 
                     if (rowIndex !== -1) {
-                        // Create a new row object for immutability
-                        const updatedRow = { ...tempSaData[rowIndex] }; 
+                        const updatedRow = { ...tempSaDataForNewReport[rowIndex] }; 
                         if (saPeriod === "SA1") {
                             updatedRow.sa1 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
                         } else if (saPeriod === "SA2") {
                             updatedRow.sa2 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
                         }
-                        // Replace the old row with the updated one
-                        tempSaData = tempSaData.map((row, idx) => idx === rowIndex ? updatedRow : row);
+                        tempSaDataForNewReport = tempSaDataForNewReport.map((row, idx) => idx === rowIndex ? updatedRow : row);
                     }
                 }
             });
-             // Now, incorporate faTotal200M into this tempSaData using newFaMarksForState
-            const finalSaDataWithFaTotals = tempSaData.map(row => ({
-                ...row,
-                faTotal200M: calculateFaTotal200MForRow(row.subjectName === "Science" ? row.paper : row.subjectName, newFaMarksForState)
-            }));
-
             setFaMarks(newFaMarksForState);
-            setSaData(finalSaDataWithFaTotals);
-
-
           } else { 
             if (!marksResult.success && marksResult.message) {
                 toast({ variant: "info", title: "Marks Info", description: marksResult.message });
@@ -365,14 +387,17 @@ export default function GenerateCBSEStateReportPage() {
                  toast({ variant: "warning", title: "Marks Info", description: "Could not load student marks for the report."});
             }
             setFaMarks(getDefaultSubjectFaDataFront(currentLoadedClassSubjects)); 
-            setSaData(initializeDefaultSaDataBack());
           }
+          
+          tempSaDataForNewReport = tempSaDataForNewReport.map(row => ({
+              ...row,
+              faTotal200M: calculateFaTotal200MForRow(row.subjectName, row.paper, newFaMarksForState)
+          }));
+          setSaData(tempSaDataForNewReport);
           setCoMarks(defaultCoMarksFront);
           setAttendanceData(defaultAttendanceDataBack);
           setFinalOverallGradeInput(null);
       }
-
-
     } catch (error) {
       toast({ variant: "destructive", title: "Error Loading Data", description: "An unexpected error occurred."});
       console.error("Error loading student/class data:", error);
@@ -395,8 +420,8 @@ export default function GenerateCBSEStateReportPage() {
     const maxMark = toolKey === 'tool4' ? 20 : 10; 
     const validatedValue = isNaN(numValue) ? null : Math.min(Math.max(numValue, 0), maxMark);
     
-    setFaMarks(prev => {
-      const currentSubjectMarks = prev[subjectIdentifier] || {
+    setFaMarks(prevFaMarks => {
+      const currentSubjectMarks = prevFaMarks[subjectIdentifier] || {
         fa1: getDefaultFaMarksEntryFront(), fa2: getDefaultFaMarksEntryFront(),
         fa3: getDefaultFaMarksEntryFront(), fa4: getDefaultFaMarksEntryFront(),
       };
@@ -404,13 +429,12 @@ export default function GenerateCBSEStateReportPage() {
         ...(currentSubjectMarks[faPeriod] || getDefaultFaMarksEntryFront()), 
         [toolKey]: validatedValue 
       };
-      const newFaMarks = { ...prev, [subjectIdentifier]: { ...currentSubjectMarks, [faPeriod]: updatedPeriodMarks }};
+      const newFaMarks = { ...prevFaMarks, [subjectIdentifier]: { ...currentSubjectMarks, [faPeriod]: updatedPeriodMarks }};
       
-      // When FA marks change, also update faTotal200M in saData
       setSaData(currentSaData =>
         currentSaData.map(row => ({
           ...row,
-          faTotal200M: calculateFaTotal200MForRow(row.subjectName === "Science" ? row.paper : row.subjectName, newFaMarks)
+          faTotal200M: calculateFaTotal200MForRow(row.subjectName, row.paper, newFaMarks)
         }))
       );
       return newFaMarks;
@@ -462,7 +486,7 @@ export default function GenerateCBSEStateReportPage() {
   
   const isFieldDisabledForRole = (subjectName?: string): boolean => {
     if (currentUserRole === 'student') return true;
-    if (currentUserRole === 'admin' && !!loadedStudent) return true; // Admin view is read-only for marks once loaded
+    if (currentUserRole === 'admin' && !!loadedStudent) return true; 
     if (currentUserRole === 'teacher') {
       if (!subjectName) return true; 
       if (subjectName === "Science" && (teacherEditableSubjects.includes("Physics") || teacherEditableSubjects.includes("Biology"))) return false;
@@ -691,7 +715,5 @@ export default function GenerateCBSEStateReportPage() {
     </div>
   );
 }
-
     
-
     

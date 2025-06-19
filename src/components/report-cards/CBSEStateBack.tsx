@@ -5,7 +5,7 @@ import React from 'react';
 import type { UserRole } from '@/types/user';
 import type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperScore } from '@/types/report';
 
-export type { ReportCardSASubjectEntry as SARowData, ReportCardAttendanceMonth as AttendanceMonthData, SAPaperScore };
+export type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperScore };
 
 
 interface CBSEStateBackProps {
@@ -27,20 +27,20 @@ interface CBSEStateBackProps {
 
 // Grading Scales
 const saGradeScale = (marks: number, maxMarks: number, _isSecondLang: boolean) => { 
-  if (maxMarks === 0) return 'N/A';
+  if (maxMarks === 0 || marks === null || maxMarks === null) return 'N/A';
   const percentage = (marks / maxMarks) * 100;
-  // Simplified scale based on typical 80M total -> 100% assumption
-  if (percentage >= 91.25) return 'A1'; // 73/80
-  if (percentage >= 81.25) return 'A2'; // 65/80
-  if (percentage >= 71.25) return 'B1'; // 57/80
-  if (percentage >= 61.25) return 'B2'; // 49/80
-  if (percentage >= 51.25) return 'C1'; // 41/80
-  if (percentage >= 41.25) return 'C2'; // 33/80
-  if (percentage >= 35) return 'D1';    // 28/80
+  if (percentage >= 91.25) return 'A1'; 
+  if (percentage >= 81.25) return 'A2'; 
+  if (percentage >= 71.25) return 'B1'; 
+  if (percentage >= 61.25) return 'B2'; 
+  if (percentage >= 51.25) return 'C1'; 
+  if (percentage >= 41.25) return 'C2'; 
+  if (percentage >= 35) return 'D1';    
   return 'D2';
 };
 
 const finalGradeScale = (marks: number, _isSecondLang: boolean) => { 
+  if (marks === null) return 'N/A';
   if (marks >= 91) return 'A1';
   if (marks >= 81) return 'A2';
   if (marks >= 71) return 'B1';
@@ -50,25 +50,6 @@ const finalGradeScale = (marks: number, _isSecondLang: boolean) => {
   if (marks >= 35) return 'D1';
   return 'D2';
 };
-
-export const backSubjectStructure = [ 
-  { name: "Telugu", papers: ["I"] }, 
-  { name: "Hindi", papers: ["I"] },  
-  { name: "English", papers: ["I", "II"] },
-  { name: "Maths", papers: ["I", "II"] },
-  { name: "Science", papers: ["Physics", "Biology"] }, 
-  { name: "Social", papers: ["I", "II"] },
-];
-
-export const defaultSaDataBack: ReportCardSASubjectEntry[] = backSubjectStructure.flatMap(subjectInfo => 
-  subjectInfo.papers.map(paperName => ({
-    subjectName: subjectInfo.name,
-    paper: paperName,
-    sa1: { marks: null, maxMarks: null },
-    sa2: { marks: null, maxMarks: null },
-    faTotal200M: null,
-  }))
-);
 
 const monthNames = ["June", "July", "August", "September", "October", "November", "December", "January", "February", "March", "April"];
 
@@ -102,7 +83,6 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const calculateRowDerivedData = (rowData: ReportCardSASubjectEntry) => {
     const isSecondLang = rowData.subjectName === secondLanguageSubjectName;
 
-    // Defensive checks for sa1 and sa2 and their properties
     const sa1_actual = rowData.sa1 || { marks: null, maxMarks: 80 };
     const sa2_actual = rowData.sa2 || { marks: null, maxMarks: 80 };
 
@@ -126,9 +106,27 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
     
     const internalMarks_sa1_capped = sa1_marks_safe > 80 ? 80 : sa1_marks_safe;
     const internalMarks_sa2_capped = sa2_marks_safe > 80 ? 80 : sa2_marks_safe;
-    const internalMarks = Math.round((faTotal200M_val + internalMarks_sa1_capped + internalMarks_sa2_capped ) / 18);
 
-    const finalTotal100M = internalMarks + sa2ForCalc;
+    // The logic: (FA_Total/200 * 20) + (SA1_Marks/80 * 20) + (SA2_Marks/80 * 20) should be for INTERNAL MARKS of 20.
+    // The CBSE state pattern as implemented here calculates internal marks as sum of FA (200M), SA1 (80M), SA2 (80M) scaled to 18% or 20%.
+    // Given the table has "Internal (20M)", let's assume FA contributes 10M, SA1 contributes 5M, SA2 contributes 5M to this.
+    // FA (200M) -> 10M is (FA_Total / 20)
+    // SA1 (80M) -> 5M is (SA1_Marks / 16)
+    // SA2 (80M) -> 5M is (SA2_Marks / 16)
+    // This is one interpretation if "Internal (20M)" is a distinct component.
+    // However, the provided image and common CBSE patterns often sum FA + SA1 + SA2 and then derive a final total and grade.
+    // The row "Internal (20M)" in the image refers to the average of (FA1+FA2+FA3+FA4 converted to 20M).
+    // The total (100M) is Internal(20M) + External/Written Exam (80M).
+    // The specific structure "FA(Avg)+SA1 (100M)" followed by "Internal (20M)" and then "SA2 (Adj.)" and "TOTAL (100M)"
+    // suggests:
+    // 1. FA Avg (50M) + SA1 (50M for avg) = 100M -> This is likely for Term 1 type summary.
+    // 2. Internal (20M): This should be the 20% weight of FA marks (i.e., FA Total / 10).
+    // 3. SA2 (Adj.): This is the SA2 marks (80M).
+    // 4. TOTAL (100M): Internal (20M) + SA2 (80M).
+    // This is a common pattern for final assessment if SA1 is formative and SA2 is summative.
+
+    const internalMarks = Math.round(faTotal200M_val / 10); // FA total / 10 for 20M internal
+    const finalTotal100M = internalMarks + sa2ForCalc; // SA2 is considered the 80M external exam
     const finalGrade = finalGradeScale(finalTotal100M, isSecondLang);
     
     return {
@@ -142,7 +140,6 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const calculateOverallFinalGrade = () => {
     const allFinalGrades: string[] = [];
     saData.forEach((rowData) => {
-      // Ensure rowData itself is valid before passing to calculateRowDerivedData
       if (rowData && typeof rowData === 'object') {
         const derived = calculateRowDerivedData(rowData);
         if (derived.finalGrade) {
@@ -203,7 +200,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
         }
         .report-card-back-container th {
           background-color: #f0f0f0;
-          font-size: 9px; /* Adjusted for more columns */
+          font-size: 9px; 
         }
         .report-card-back-container td {
             font-size: 10px; 
@@ -218,7 +215,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           white-space: nowrap;
         }
         .report-card-back-container input[type="number"], .report-card-back-container input[type="text"] {
-          width: 30px; /* Adjusted for more columns */
+          width: 30px; 
           text-align: center;
           border: 1px solid #ccc;
           font-size: 10px; 
@@ -253,7 +250,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
          .report-card-back-container .paper-cell {
             font-style: italic;
             vertical-align: middle;
-            font-size: 9px; /* Slightly smaller for paper names */
+            font-size: 9px; 
         }
         .report-card-back-container .attendance-table input[type="number"] {
             width: 40px; 
@@ -288,7 +285,6 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
           </thead>
           <tbody>
             {saData.map((rowData, rowIndex) => {
-                // Ensure rowData is valid before processing
                 if (!rowData || typeof rowData !== 'object') {
                     console.warn(`Invalid rowData at index ${rowIndex}`, rowData);
                     return <tr key={`invalid-row-${rowIndex}`}><td colSpan={15}>Invalid data for this row</td></tr>;
@@ -400,3 +396,4 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
 };
 
 export default CBSEStateBack;
+
