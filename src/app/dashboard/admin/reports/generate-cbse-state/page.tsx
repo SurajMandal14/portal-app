@@ -5,13 +5,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import CBSEStateFront, { 
     type StudentData as FrontStudentData, 
     type SubjectFAData as FrontSubjectFAData, 
-    type MarksEntry as FrontMarksEntryTypeImport, // Aliased import
+    type MarksEntry as FrontMarksEntryTypeImport, 
 } from '@/components/report-cards/CBSEStateFront';
 import CBSEStateBack, { 
     backSubjectStructure, 
-    // defaultSaDataBack as initialDefaultSaDataBack 
+    type ReportCardSASubjectEntry, // Import new type
+    type ReportCardAttendanceMonth, // Import new type
+    type SAPaperScore // Import new type
 } from '@/components/report-cards/CBSEStateBack';
-import type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperScore } from '@/types/report'; // Import new types
 
 
 import { Button } from '@/components/ui/button';
@@ -29,21 +30,19 @@ import { getSchoolById } from '@/app/actions/schools';
 import type { SchoolClassSubject } from '@/types/classes';
 import type { School } from '@/types/school';
 import { getStudentMarksForReportCard } from '@/app/actions/marks'; 
-import type { MarkEntry as MarkEntryType } from '@/types/marks'; // Explicit import for MarkEntry from marks.ts
+import type { MarkEntry as MarkEntryType } from '@/types/marks'; 
 
 
-// Use the aliased import for MarksEntry from CBSEStateFront
 type FrontMarksEntry = FrontMarksEntryTypeImport;
 
 
-// Re-create defaultSaDataBack logic here based on ReportCardSASubjectEntry
 const initializeDefaultSaDataBack = (): ReportCardSASubjectEntry[] => {
   return backSubjectStructure.flatMap(subjectInfo => 
     subjectInfo.papers.map(paperName => ({
       subjectName: subjectInfo.name,
       paper: paperName,
-      sa1: { marks: null, maxMarks: 80 }, // Default maxMarks
-      sa2: { marks: null, maxMarks: 80 }, // Default maxMarks
+      sa1: { marks: null, maxMarks: 80 }, 
+      sa2: { marks: null, maxMarks: 80 }, 
       faTotal200M: null,
     }))
   );
@@ -53,7 +52,7 @@ const initializeDefaultSaDataBack = (): ReportCardSASubjectEntry[] => {
 const getDefaultFaMarksEntryFront = (): FrontMarksEntry => ({ tool1: null, tool2: null, tool3: null, tool4: null });
 const getDefaultSubjectFaDataFront = (subjects: SchoolClassSubject[]): Record<string, FrontSubjectFAData> => {
     const initialFaMarks: Record<string, FrontSubjectFAData> = {};
-    subjects.forEach(subject => {
+    (subjects || []).forEach(subject => {
         initialFaMarks[subject.name] = {
             fa1: getDefaultFaMarksEntryFront(),
             fa2: getDefaultFaMarksEntryFront(),
@@ -64,7 +63,7 @@ const getDefaultSubjectFaDataFront = (subjects: SchoolClassSubject[]): Record<st
     return initialFaMarks;
 };
 
-const defaultCoMarksFront: any[] = []; // Adjusted to any[] as per types/report.ts change
+const defaultCoMarksFront: any[] = []; 
 
 const defaultStudentDataFront: FrontStudentData = {
   udiseCodeSchoolName: '', studentName: '', fatherName: '', motherName: '',
@@ -85,6 +84,23 @@ const getCurrentAcademicYear = (): string => {
   }
 };
 
+// Define calculateFaTotal200MForRow outside useCallback if its definition doesn't depend on component scope variables that change
+// Or include its dependencies if it does. For now, removing useCallback.
+const calculateFaTotal200MForRow = (subjectNameForBack: string, currentFaMarks: Record<string, FrontSubjectFAData>): number | null => {
+  const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
+  const subjectFaData = currentFaMarks[faSubjectKey];
+  if (!subjectFaData) return null;
+  let overallTotal = 0;
+  (['fa1', 'fa2', 'fa3', 'fa4'] as const).forEach(faPeriodKey => {
+    const periodMarks = subjectFaData[faPeriodKey];
+    if (periodMarks) {
+      overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
+    }
+  });
+  return overallTotal > 200 ? 200 : overallTotal; // Capping at 200
+};
+
+
 export default function GenerateCBSEStateReportPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -97,7 +113,7 @@ export default function GenerateCBSEStateReportPage() {
   const [isLoadingStudentAndClassData, setIsLoadingStudentAndClassData] = useState(false);
 
   const [studentData, setStudentData] = useState<FrontStudentData>(defaultStudentDataFront);
-  const [faMarks, setFaMarks] = useState<Record<string, FrontSubjectFAData>>({}); 
+  const [faMarks, setFaMarks] = useState<Record<string, FrontSubjectFAData>>(getDefaultSubjectFaDataFront([])); 
   const [coMarks, setCoMarks] = useState<any[]>(defaultCoMarksFront); 
   const [frontSecondLanguage, setFrontSecondLanguage] = useState<'Hindi' | 'Telugu'>('Hindi');
   const [frontAcademicYear, setFrontAcademicYear] = useState<string>(getCurrentAcademicYear());
@@ -156,7 +172,7 @@ export default function GenerateCBSEStateReportPage() {
     }
 
     setIsLoadingStudentAndClassData(true);
-    initializeReportState(); 
+    
 
     try {
       const studentRes = await getStudentDetailsForReportCard(admissionIdInput, authUser.schoolId.toString());
@@ -164,6 +180,7 @@ export default function GenerateCBSEStateReportPage() {
       if (!studentRes.success || !studentRes.student) {
         toast({ variant: "destructive", title: "Student Not Found", description: studentRes.message || `Could not find student with Admission ID: ${admissionIdInput}.` });
         setIsLoadingStudentAndClassData(false);
+        initializeReportState(); 
         return;
       }
       const currentStudent = studentRes.student;
@@ -210,11 +227,13 @@ export default function GenerateCBSEStateReportPage() {
         } else {
           toast({ variant: "destructive", title: "Class Details Error", description: classRes.message || `Could not load class details for class ID: ${currentStudent.classId}.`});
           setIsLoadingStudentAndClassData(false);
+          initializeReportState();
           return; 
         }
       } else {
          toast({ variant: "destructive", title: "Class Missing", description: `Student ${currentStudent.name} is not assigned to a class.`});
          setIsLoadingStudentAndClassData(false);
+         initializeReportState();
          return;
       }
       
@@ -250,7 +269,7 @@ export default function GenerateCBSEStateReportPage() {
           setLoadedReportId(report._id!.toString());
           setLoadedReportIsPublished(report.isPublished || false);
 
-      } else { // No existing report, fetch individual marks
+      } else { 
           setLoadedReportId(null);
           setLoadedReportIsPublished(null);
           toast({title: "No Saved Report", description: "Fetching individual marks for new report."});
@@ -268,9 +287,8 @@ export default function GenerateCBSEStateReportPage() {
           if (marksResult.success && marksResult.marks) {
             const allFetchedMarks = marksResult.marks;
 
-            // Process FA Marks
             currentLoadedClassSubjects.forEach(subject => {
-              const subjectIdentifier = subject.name; // e.g., "English"
+              const subjectIdentifier = subject.name; 
               const subjectSpecificFaMarks = allFetchedMarks.filter(
                 mark => mark.subjectName === subjectIdentifier &&
                         mark.academicYear === frontAcademicYear &&
@@ -295,23 +313,21 @@ export default function GenerateCBSEStateReportPage() {
             });
             setFaMarks(newFaMarksForState);
 
-            // Process SA Marks
             allFetchedMarks.forEach((mark: MarkEntryType) => {
                 if (mark.assessmentName.startsWith("SA1") || mark.assessmentName.startsWith("SA2")) {
-                    const [saPeriod, paperTypeWithSuffix] = mark.assessmentName.split('-'); // e.g., SA1, Paper1
+                    const [saPeriod, paperTypeWithSuffix] = mark.assessmentName.split('-'); 
                     if (!paperTypeWithSuffix) return;
 
                     let targetSubjectName = mark.subjectName;
-                    let targetPaper = paperTypeWithSuffix; // Initially "Paper1" or "Paper2"
+                    let targetPaper = paperTypeWithSuffix; 
 
                     if (mark.subjectName === "Science") {
-                        targetSubjectName = "Science"; // Keep it as "Science" for grouping
+                        targetSubjectName = "Science"; 
                         targetPaper = paperTypeWithSuffix === "Paper1" ? "Physics" : "Biology";
                     } else {
-                        // For other subjects, "Paper1" -> "I", "Paper2" -> "II"
                         targetPaper = paperTypeWithSuffix === "Paper1" ? "I" : "II";
                          if(targetPaper === "II" && !backSubjectStructure.find(s => s.name === mark.subjectName && s.papers.includes("II"))){
-                            targetPaper = "I"; // If subject doesn't have Paper II, assume it's for Paper I
+                            targetPaper = "I"; 
                         }
                     }
                     
@@ -330,15 +346,14 @@ export default function GenerateCBSEStateReportPage() {
             });
             setSaData(newSaDataForState);
 
-          } else { // No marks fetched or error fetching marks
+          } else { 
             if (!marksResult.success && marksResult.message) {
                 toast({ variant: "info", title: "Marks Info", description: marksResult.message });
             } else if (!marksResult.success) {
                  toast({ variant: "warning", title: "Marks Info", description: "Could not load student marks for the report."});
             }
-            // Keep default/empty structures if no marks
-            setFaMarks(newFaMarksForState); 
-            setSaData(newSaDataForState);
+            setFaMarks(getDefaultSubjectFaDataFront(currentLoadedClassSubjects)); 
+            setSaData(initializeDefaultSaDataBack());
           }
           setCoMarks(defaultCoMarksFront);
           setAttendanceData(defaultAttendanceDataBack);
@@ -349,34 +364,21 @@ export default function GenerateCBSEStateReportPage() {
     } catch (error) {
       toast({ variant: "destructive", title: "Error Loading Data", description: "An unexpected error occurred."});
       console.error("Error loading student/class data:", error);
+      initializeReportState();
     } finally {
       setIsLoadingStudentAndClassData(false);
     }
   };
 
-  const calculateFaTotal200MForRow = useCallback((subjectNameForBack: string, currentFaMarks: Record<string, FrontSubjectFAData>): number | null => {
-    const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
-    const subjectFaData = currentFaMarks[faSubjectKey];
-    if (!subjectFaData) return null;
-    let overallTotal = 0;
-    (['fa1', 'fa2', 'fa3', 'fa4'] as const).forEach(faPeriodKey => {
-      const periodMarks = subjectFaData[faPeriodKey];
-      if (periodMarks) {
-        overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
-      }
-    });
-    return overallTotal > 200 ? 200 : overallTotal;
-  }, []);
 
   useEffect(() => {
-    // This effect updates faTotal200M in saData whenever faMarks changes
-    setSaData(prevSaData => 
+    setSaData(prevSaData =>
       prevSaData.map(row => ({
         ...row,
-        faTotal200M: calculateFaTotal200MForRow(row.subjectName === "Science" ? row.paper : row.subjectName, faMarks) 
+        faTotal200M: calculateFaTotal200MForRow(row.subjectName === "Science" ? row.paper : row.subjectName, faMarks)
       }))
     );
-  }, [faMarks, calculateFaTotal200MForRow]);
+  }, [faMarks]);
 
 
   const handleStudentDataChange = (field: keyof FrontStudentData, value: string) => {
@@ -384,7 +386,7 @@ export default function GenerateCBSEStateReportPage() {
     setStudentData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleFaMarksChange = (subjectIdentifier: string, faPeriod: keyof FrontSubjectFAData, toolKey: keyof FrontMarksEntry, value: string) => {
+  const handleFaMarksChange = (subjectIdentifier: string, faPeriod: keyof SubjectFAData, toolKey: keyof FrontMarksEntry, value: string) => {
     if (isFieldDisabledForRole(subjectIdentifier)) return; 
 
     const numValue = parseInt(value, 10);
@@ -406,22 +408,21 @@ export default function GenerateCBSEStateReportPage() {
 
   const handleCoMarksChange = (subjectIndex: number, saPeriodKey: 'sa1' | 'sa2' | 'sa3', type: 'Marks' | 'Max', value: string) => {
     if (isFieldDisabledForRole("CoCurricular")) return;
-    // Co-curricular logic remains complex due to its original structure, needs review if used
   };
 
   const handleSaDataChange = (rowIndex: number, period: 'sa1' | 'sa2', field: 'marks' | 'maxMarks', value: string) => {
     const subjectName = saData[rowIndex]?.subjectName;
     if (isFieldDisabledForRole(subjectName)) return;
     const numValue = parseInt(value, 10);
-    const validatedValue = isNaN(numValue) ? null : Math.max(numValue, 0); // Max validation happens on submit
+    const validatedValue = isNaN(numValue) ? null : Math.max(numValue, 0); 
     
     setSaData(prev => prev.map((row, idx) => {
         if (idx === rowIndex) {
             const updatedRow = { ...row };
             if (period === 'sa1') {
-                updatedRow.sa1 = { ...updatedRow.sa1, [field]: validatedValue };
+                updatedRow.sa1 = { ...(updatedRow.sa1 || {marks: null, maxMarks: null}), [field]: validatedValue };
             } else if (period === 'sa2') {
-                updatedRow.sa2 = { ...updatedRow.sa2, [field]: validatedValue };
+                updatedRow.sa2 = { ...(updatedRow.sa2 || {marks: null, maxMarks: null}), [field]: validatedValue };
             }
             return updatedRow;
         }
@@ -480,7 +481,6 @@ export default function GenerateCBSEStateReportPage() {
     const formativeAssessmentsForStorage: FormativeAssessmentEntryForStorage[] = Object.entries(faMarks)
       .map(([subjectName, marksData]) => ({ subjectName, ...marksData }));
     
-    // Validate SA marks against maxMarks
     for (const saEntry of saData) {
         if (saEntry.sa1.marks !== null && saEntry.sa1.maxMarks !== null && saEntry.sa1.marks > saEntry.sa1.maxMarks) {
             toast({ variant: "destructive", title: "Validation Error", description: `${saEntry.subjectName} (${saEntry.paper}) SA1 marks (${saEntry.sa1.marks}) exceed max marks (${saEntry.sa1.maxMarks}).` });
