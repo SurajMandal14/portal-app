@@ -26,7 +26,7 @@ export interface User {
   fatherName?: string;
   motherName?: string;
   dob?: string; // Store as string for simplicity, can be Date if strict typing needed
-  section?: string;
+  section?: string; // Student's section, potentially derived from class
   rollNo?: string;
   examNo?: string;
   aadharNo?: string;
@@ -62,11 +62,13 @@ export const createStudentFormSchema = z.object({
   // New fields for student
   fatherName: z.string().optional(),
   motherName: z.string().optional(),
-  dob: z.string().optional(), // Consider date validation if needed: .refine(val => !val || !isNaN(Date.parse(val)), { message: "Invalid date format" })
-  section: z.string().optional(),
+  dob: z.string().optional(), 
+  section: z.string().optional(), // Section might be auto-populated based on class
   rollNo: z.string().optional(),
   examNo: z.string().optional(),
-  aadharNo: z.string().optional(),
+  aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
+    message: "Aadhar Number must be exactly 12 digits.",
+  }),
 }).refine(data => {
   if (data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
     return false;
@@ -105,7 +107,9 @@ export const createSchoolUserFormSchema = z.object({
   section: z.string().optional(),
   rollNo: z.string().optional(),
   examNo: z.string().optional(),
-  aadharNo: z.string().optional(),
+  aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
+    message: "Aadhar Number must be exactly 12 digits.",
+  }),
 }).refine(data => {
   if (data.role === 'student' && (!data.admissionId || data.admissionId.trim() === "")) {
     return false;
@@ -136,7 +140,9 @@ export const updateSchoolUserFormSchema = z.object({
   section: z.string().optional(),
   rollNo: z.string().optional(),
   examNo: z.string().optional(),
-  aadharNo: z.string().optional(),
+  aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
+    message: "Aadhar Number must be exactly 12 digits.",
+  }),
 }).refine(data => {
   if (data.role === 'student' && data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
     return false;
@@ -163,7 +169,7 @@ export interface CreateSchoolUserServerActionFormData {
   fatherName?: string;
   motherName?: string;
   dob?: string;
-  section?: string;
+  section?: string; // From class
   rollNo?: string;
   examNo?: string;
   aadharNo?: string;

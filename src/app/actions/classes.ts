@@ -43,15 +43,15 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
       return { success: false, message: 'Validation failed', error: errors };
     }
 
-    const { name, classTeacherId, subjects } = validatedFields.data;
+    const { name, section, classTeacherId, subjects, secondLanguageSubjectName } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const classesCollection = db.collection('school_classes'); 
     const usersCollection = db.collection<User>('users');
 
-    const existingClass = await classesCollection.findOne({ name, schoolId: new ObjectId(schoolId) });
+    const existingClass = await classesCollection.findOne({ name, section, schoolId: new ObjectId(schoolId) });
     if (existingClass) {
-      return { success: false, message: `Class with name "${name}" already exists in this school.` };
+      return { success: false, message: `Class with name "${name}" and section "${section}" already exists in this school.` };
     }
 
     let validTeacherObjectId: ObjectId | undefined = undefined;
@@ -93,13 +93,19 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
         }
         processedSubjects.push({ name: s.name.trim(), teacherId: subjectTeacherObjectId });
     }
+    
+    if (secondLanguageSubjectName && !subjects.find(s => s.name === secondLanguageSubjectName)) {
+        return { success: false, message: "Designated second language subject must be one of the offered subjects." };
+    }
 
 
     const newClassDataForDb = {
       schoolId: new ObjectId(schoolId),
       name,
+      section,
       classTeacherId: validTeacherObjectId, 
       subjects: processedSubjects, 
+      secondLanguageSubjectName: secondLanguageSubjectName || undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -120,11 +126,13 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
     const clientCreatedClass: SchoolClass = {
         _id: createdClassId.toString(),
         name: newClassDataForDb.name,
+        section: newClassDataForDb.section,
         schoolId: newClassDataForDb.schoolId.toString(),
         subjects: newClassDataForDb.subjects.map(s => ({
             name: s.name,
             teacherId: s.teacherId ? s.teacherId.toString() : undefined,
         })),
+        secondLanguageSubjectName: newClassDataForDb.secondLanguageSubjectName,
         createdAt: newClassDataForDb.createdAt.toISOString(),
         updatedAt: newClassDataForDb.updatedAt.toISOString(),
         classTeacherId: newClassDataForDb.classTeacherId ? newClassDataForDb.classTeacherId.toString() : undefined,
@@ -132,7 +140,7 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
 
     return {
       success: true,
-      message: `Class "${name}" created successfully!`,
+      message: `Class "${name} - ${section}" created successfully!`,
       class: clientCreatedClass,
     };
 
@@ -179,9 +187,11 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
         $group: { 
           _id: '$_id',
           name: { $first: '$name' },
+          section: { $first: '$section'},
           schoolId: { $first: '$schoolId' },
           classTeacherId: { $first: '$classTeacherId' },
           classTeacherName: { $first: '$classTeacherInfo.name' },
+          secondLanguageSubjectName: { $first: '$secondLanguageSubjectName' },
           createdAt: { $first: '$createdAt' },
           updatedAt: { $first: '$updatedAt' },
           subjects: { 
@@ -195,7 +205,7 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
       },
       {
         $project: { 
-          _id: 1, name: 1, schoolId: 1, classTeacherId: 1, classTeacherName: 1, createdAt: 1, updatedAt: 1,
+          _id: 1, name: 1, section:1, schoolId: 1, classTeacherId: 1, classTeacherName: 1, secondLanguageSubjectName: 1, createdAt: 1, updatedAt: 1,
           subjects: {
             $filter: { 
                  input: "$subjects",
@@ -205,19 +215,21 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
           }
         }
       },
-      { $sort: { name: 1 } }
+      { $sort: { name: 1, section: 1 } }
     ]).toArray();
 
 
     const classes: SchoolClass[] = classesWithDetails.map(cls => ({
       _id: (cls._id as ObjectId).toString(),
       name: cls.name || '',
+      section: cls.section || '',
       schoolId: (cls.schoolId as ObjectId).toString(),
       subjects: (cls.subjects || []).map((s: any) => ({
         name: s.name,
         teacherId: s.teacherId ? s.teacherId.toString() : undefined,
         teacherName: s.teacherName || undefined,
       })),
+      secondLanguageSubjectName: cls.secondLanguageSubjectName || undefined,
       createdAt: cls.createdAt ? new Date(cls.createdAt).toISOString() : new Date().toISOString(),
       updatedAt: cls.updatedAt ? new Date(cls.updatedAt).toISOString() : new Date().toISOString(),
       classTeacherId: cls.classTeacherId ? (cls.classTeacherId as ObjectId).toString() : undefined,
@@ -244,7 +256,7 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
       return { success: false, message: 'Validation failed', error: errors };
     }
 
-    const { name, classTeacherId, subjects } = validatedFields.data;
+    const { name, section, classTeacherId, subjects, secondLanguageSubjectName } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const classesCollection = db.collection('school_classes'); 
@@ -255,10 +267,10 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
       return { success: false, message: 'Class not found or does not belong to this school.' };
     }
 
-    if (name !== existingClassDoc.name) {
-      const conflictingClass = await classesCollection.findOne({ name, schoolId: new ObjectId(schoolId), _id: { $ne: new ObjectId(classId) } });
+    if (name !== existingClassDoc.name || section !== existingClassDoc.section) {
+      const conflictingClass = await classesCollection.findOne({ name, section, schoolId: new ObjectId(schoolId), _id: { $ne: new ObjectId(classId) } });
       if (conflictingClass) {
-        return { success: false, message: `Another class with name "${name}" already exists in this school.` };
+        return { success: false, message: `Another class with name "${name}" and section "${section}" already exists in this school.` };
       }
     }
 
@@ -303,11 +315,17 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
         }
         processedSubjectsForUpdate.push({ name: s.name.trim(), teacherId: subjectTeacherObjectId });
     }
+    
+    if (secondLanguageSubjectName && !subjects.find(s => s.name === secondLanguageSubjectName)) {
+        return { success: false, message: "Designated second language subject must be one of the offered subjects." };
+    }
 
     const updateDataForDb: Partial<any> = {
       name,
+      section,
       subjects: processedSubjectsForUpdate,
       classTeacherId: newTeacherObjectIdForClass, 
+      secondLanguageSubjectName: secondLanguageSubjectName || undefined,
       updatedAt: new Date(),
     };
 
@@ -342,11 +360,13 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
     const clientUpdatedClass: SchoolClass = {
         _id: updatedClassDocAfterDb._id.toString(),
         name: updatedClassDocAfterDb.name,
+        section: updatedClassDocAfterDb.section,
         schoolId: (updatedClassDocAfterDb.schoolId as ObjectId).toString(),
         subjects: (updatedClassDocAfterDb.subjects as any[]).map(s => ({
             name: s.name,
             teacherId: s.teacherId ? s.teacherId.toString() : undefined,
         })),
+        secondLanguageSubjectName: updatedClassDocAfterDb.secondLanguageSubjectName,
         createdAt: new Date(updatedClassDocAfterDb.createdAt).toISOString(),
         updatedAt: new Date(updatedClassDocAfterDb.updatedAt).toISOString(),
         classTeacherId: updatedClassDocAfterDb.classTeacherId ? (updatedClassDocAfterDb.classTeacherId as ObjectId).toString() : undefined,
@@ -375,9 +395,11 @@ export async function deleteSchoolClass(classId: string, schoolId: string): Prom
       return { success: false, message: 'Class not found or does not belong to this school.' };
     }
 
+    // When deleting a class, we should update students assigned to this class's _id.
+    // The student's classId field stores the SchoolClass _id string.
     await usersCollection.updateMany(
-      { schoolId: new ObjectId(schoolId), role: 'student', classId: classToDelete.name },
-      { $set: { classId: undefined, updatedAt: new Date() } }
+      { schoolId: new ObjectId(schoolId), role: 'student', classId: classToDelete._id.toString() },
+      { $set: { classId: undefined, section: undefined, updatedAt: new Date() } } // Also clear section
     );
     
     if (classToDelete.classTeacherId) {
@@ -395,9 +417,10 @@ export async function deleteSchoolClass(classId: string, schoolId: string): Prom
     
     revalidatePath('/dashboard/admin/classes');
     revalidatePath('/dashboard/admin/users'); 
+    revalidatePath('/dashboard/admin/students');
     revalidatePath('/dashboard/teacher/attendance'); 
 
-    return { success: true, message: `Class "${classToDelete.name}" deleted successfully.` };
+    return { success: true, message: `Class "${classToDelete.name} - ${classToDelete.section}" deleted successfully.` };
 
   } catch (error) {
     console.error('Delete school class server action error:', error);
@@ -405,7 +428,7 @@ export async function deleteSchoolClass(classId: string, schoolId: string): Prom
   }
 }
 
-export async function getClassesForSchoolAsOptions(schoolId: string): Promise<{ value: string; label: string }[]> {
+export async function getClassesForSchoolAsOptions(schoolId: string): Promise<{ value: string; label: string; section?: string; name?: string; }[]> {
   if (!ObjectId.isValid(schoolId)) {
     return [];
   }
@@ -413,11 +436,16 @@ export async function getClassesForSchoolAsOptions(schoolId: string): Promise<{ 
     const { db } = await connectToDatabase();
     const classes = await db.collection('school_classes') 
       .find({ schoolId: new ObjectId(schoolId) })
-      .project({ _id: 1, name: 1 })
-      .sort({ name: 1 })
+      .project({ _id: 1, name: 1, section: 1 })
+      .sort({ name: 1, section: 1 })
       .toArray();
     
-    return classes.map(cls => ({ value: (cls._id as ObjectId).toString(), label: cls.name as string }));
+    return classes.map(cls => ({ 
+        value: (cls._id as ObjectId).toString(), 
+        label: `${cls.name}${cls.section ? ` - ${cls.section}` : ''}`,
+        name: cls.name as string, // Store original name
+        section: cls.section as string | undefined // Store section
+    }));
   } catch (error) {
     console.error("Error fetching classes for options:", error);
     return [];
@@ -468,9 +496,11 @@ export async function getClassDetailsById(classId: string, schoolId: string): Pr
         $group: {
           _id: '$_id',
           name: { $first: '$name' },
+          section: { $first: '$section' },
           schoolId: { $first: '$schoolId' },
           classTeacherId: { $first: '$classTeacherId' },
           classTeacherName: { $first: '$classTeacherInfo.name' },
+          secondLanguageSubjectName: { $first: '$secondLanguageSubjectName' },
           createdAt: { $first: '$createdAt' },
           updatedAt: { $first: '$updatedAt' },
           subjects: { 
@@ -484,7 +514,7 @@ export async function getClassDetailsById(classId: string, schoolId: string): Pr
       },
       {
         $project: {
-          _id: 1, name: 1, schoolId: 1, classTeacherId: 1, classTeacherName: 1, createdAt: 1, updatedAt: 1,
+          _id: 1, name: 1, section: 1, schoolId: 1, classTeacherId: 1, classTeacherName: 1, secondLanguageSubjectName: 1, createdAt: 1, updatedAt: 1,
           subjects: {
             $filter: {
                  input: "$subjects",
@@ -504,12 +534,14 @@ export async function getClassDetailsById(classId: string, schoolId: string): Pr
     const classDetails: SchoolClass = {
       _id: (cls._id as ObjectId).toString(),
       name: cls.name || '',
+      section: cls.section || '',
       schoolId: (cls.schoolId as ObjectId).toString(),
       subjects: (cls.subjects || []).map((s: any) => ({
         name: s.name,
         teacherId: s.teacherId ? s.teacherId.toString() : undefined,
         teacherName: s.teacherName || undefined,
       })),
+      secondLanguageSubjectName: cls.secondLanguageSubjectName || undefined,
       createdAt: cls.createdAt ? new Date(cls.createdAt).toISOString() : new Date().toISOString(),
       updatedAt: cls.updatedAt ? new Date(cls.updatedAt).toISOString() : new Date().toISOString(),
       classTeacherId: cls.classTeacherId ? (cls.classTeacherId as ObjectId).toString() : undefined,

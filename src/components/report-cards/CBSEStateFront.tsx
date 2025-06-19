@@ -87,12 +87,6 @@ const faPeriodGradeScale2ndLang = [
   { min: 23, grade: 'C1' }, { min: 18, grade: 'C2' },
   { min: 10, grade: 'D1' }, { min: 0, grade: 'D2' } 
 ];
-// Co-curricular grade scale kept for potential future use, but rendering is removed.
-// const coCurricularGradeScale = [ 
-//   { min: 85, grade: 'A+' }, { min: 71, grade: 'A' },
-//   { min: 56, grade: 'B' }, { min: 41, grade: 'C' },
-//   { min: 0, grade: 'D' }
-// ];
 
 const getGrade = (totalMarks: number, scale: { min: number; grade: string }[]): string => {
   for (let i = 0; i < scale.length; i++) {
@@ -101,8 +95,6 @@ const getGrade = (totalMarks: number, scale: { min: number; grade: string }[]): 
   return scale[scale.length - 1]?.grade || 'N/A'; 
 };
 
-// Removed: const coCurricularSubjects = ["Value Edn.", "Work Edn.", "Phy. Edn.", "Art. Edn."]; 
-
 
 const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   studentData,
@@ -110,8 +102,8 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   academicSubjects, 
   faMarks, 
   onFaMarksChange, 
-  coMarks, // Prop kept
-  onCoMarksChange, // Prop kept
+  // coMarks, // Prop kept
+  // onCoMarksChange, // Prop kept
   secondLanguage,
   onSecondLanguageChange,
   academicYear,
@@ -124,17 +116,14 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
   const isStudent = currentUserRole === 'student';
   const isAdmin = currentUserRole === 'admin';
 
-  // Admins can only edit if studentIdNo (student data) is NOT loaded yet (i.e., before fetching)
-  // Once fetched, it becomes read-only for admin too on this page.
-  // Teachers can only edit specific subjects. Students can never edit.
   const isFieldDisabledForRole = (subjectName?: string): boolean => {
     if (isStudent) return true;
-    if (isAdmin && !!studentData.studentIdNo) return true; // Admin read-only if student data is loaded
+    if (isAdmin && !!studentData.studentIdNo) return true; 
     if (isTeacher) {
-      if (!subjectName) return true; // Disable general student data for teacher
+      if (!subjectName) return true; 
       return !editableSubjects.includes(subjectName);
     }
-    return false; // SuperAdmin or Admin before data load can edit
+    return false; 
   };
 
 
@@ -173,8 +162,6 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
     return results;
   }, [faMarks, secondLanguage]);
 
-  // calculateCoResults is kept for structure, but not used if co-curricular rendering is removed.
-  // const calculateCoResults = React.useCallback((subjectIndex: number) => { ... }, [coMarks]);
 
   return (
     <>
@@ -388,19 +375,6 @@ const CBSEStateFront: React.FC<CBSEStateFrontProps> = ({
         <p className="small-note">
           Formative Assessment Tools: (1) Children Participation and Reflections, (2) Project work, (3) Written work, (4) Slip Test (20M)
         </p>
-
-        {/* Co-curricular section removed from rendering as per request. Props and state are kept for future use. */}
-        {/* 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginTop: '15px' }}>
-          <div style={{ flex: 3 }}>
-            <div className="subtitle">Co-Curricular Subjects</div>
-            <table id="co-table"> ... </table>
-          </div>
-          <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            ... Grade legends ...
-          </div>
-        </div>
-        */}
         
         <p className="small-note" style={{marginTop: '15px'}}>
             NOTE: In case of Science, Physical Science & Biological Science Teachers conduct & Record Formative Assessment Separately for 50 Marks each. Sum of FA1 to FA4 for Phy.Sci (200M) and Bio.Sci (200M) to be considered for respective rows on backside.

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BookCopy, PlusCircle, Edit3, Trash2, Loader2, UserCheck, FilePlus, XCircle, Info, Users } from "lucide-react";
+import { BookCopy, PlusCircle, Edit3, Trash2, Loader2, UserCheck, FilePlus, XCircle, Info, Users, Languages } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import {
@@ -28,7 +28,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger here
+  AlertDialogTrigger, 
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolClass, getSchoolClasses, updateSchoolClass, deleteSchoolClass } from "@/app/actions/classes";
@@ -57,8 +57,10 @@ export default function AdminClassManagementPage() {
     resolver: zodResolver(createClassFormSchema),
     defaultValues: {
       name: "",
+      section: "",
       classTeacherId: "", 
       subjects: [{ name: "", teacherId: "" }],
+      secondLanguageSubjectName: "",
     },
   });
 
@@ -66,6 +68,7 @@ export default function AdminClassManagementPage() {
     control: form.control,
     name: "subjects",
   });
+  const currentSubjects = form.watch("subjects");
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -122,13 +125,15 @@ export default function AdminClassManagementPage() {
     if (editingClass) {
       form.reset({
         name: editingClass.name,
+        section: editingClass.section || "",
         classTeacherId: editingClass.classTeacherId?.toString() || "",
         subjects: editingClass.subjects.length > 0 
           ? editingClass.subjects.map(s => ({ name: s.name, teacherId: s.teacherId?.toString() || "" })) 
           : [{ name: "", teacherId: "" }],
+        secondLanguageSubjectName: editingClass.secondLanguageSubjectName || "",
       });
     } else {
-      form.reset({ name: "", classTeacherId: "", subjects: [{ name: "", teacherId: "" }] });
+      form.reset({ name: "", section: "", classTeacherId: "", subjects: [{ name: "", teacherId: "" }], secondLanguageSubjectName: "" });
     }
   }, [editingClass, form]);
 
@@ -177,6 +182,8 @@ export default function AdminClassManagementPage() {
     );
   }
 
+  const classDisplayName = (cls: SchoolClass) => `${cls.name}${cls.section ? ` - ${cls.section}` : ''}`;
+
   return (
     <div className="space-y-6">
       <Card>
@@ -185,7 +192,7 @@ export default function AdminClassManagementPage() {
             <BookCopy className="mr-2 h-6 w-6" /> Class Management
           </CardTitle>
           <CardDescription>
-            {editingClass ? `Editing Class: ${editingClass.name}` : "Create and manage classes, assign class teachers, and define subjects with their respective teachers."}
+            {editingClass ? `Editing Class: ${classDisplayName(editingClass)}` : "Create and manage classes, assign class teachers, and define subjects with their respective teachers."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -197,11 +204,18 @@ export default function AdminClassManagementPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <FormField control={form.control} name="name" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Class Name</FormLabel>
-                    <FormControl><Input placeholder="e.g., Grade 10 - Section A" {...field} disabled={isSubmitting} /></FormControl>
+                    <FormLabel>Class Name (e.g., Grade 10)</FormLabel>
+                    <FormControl><Input placeholder="e.g., Grade 10" {...field} disabled={isSubmitting} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+                <FormField control={form.control} name="section" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Section (e.g., A)</FormLabel>
+                    <FormControl><Input placeholder="e.g., A" {...field} disabled={isSubmitting} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}/>
@@ -278,6 +292,34 @@ export default function AdminClassManagementPage() {
                   <FilePlus className="mr-2 h-4 w-4"/>Add Subject
                 </Button>
               </div>
+              
+              <FormField
+                  control={form.control}
+                  name="secondLanguageSubjectName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center"><Languages className="mr-2 h-4 w-4 text-muted-foreground"/>Designated Second Language (Optional)</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ""}
+                        disabled={isSubmitting || currentSubjects.length === 0}
+                      >
+                        <FormControl><SelectTrigger>
+                            <SelectValue placeholder={currentSubjects.length > 0 ? "Select from offered subjects" : "Add subjects first"} />
+                        </SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="">-- None --</SelectItem>
+                          {currentSubjects.filter(s => s.name?.trim()).map(s => (
+                            <SelectItem key={s.name} value={s.name!}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription className="text-xs">This subject will use second language grading scales on report cards.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={isSubmitting || isLoadingData}>
@@ -304,9 +346,10 @@ export default function AdminClassManagementPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Class Name</TableHead>
+                <TableHead>Class (Name - Section)</TableHead>
                 <TableHead>Class Teacher</TableHead>
                 <TableHead>Subjects (Teachers)</TableHead>
+                <TableHead>2nd Lang</TableHead>
                 <TableHead>Created On</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -314,7 +357,7 @@ export default function AdminClassManagementPage() {
             <TableBody>
               {schoolClasses.map((cls) => (
                 <TableRow key={cls._id.toString()}>
-                  <TableCell className="font-medium">{cls.name}</TableCell>
+                  <TableCell className="font-medium">{classDisplayName(cls)}</TableCell>
                   <TableCell>{cls.classTeacherName || (cls.classTeacherId ? 'N/A' : 'Not Assigned')}</TableCell>
                   <TableCell>
                     {cls.subjects.length > 0 ? (
@@ -325,6 +368,7 @@ export default function AdminClassManagementPage() {
                         </ul>
                     ) : 'None'}
                   </TableCell>
+                  <TableCell>{cls.secondLanguageSubjectName || 'N/A'}</TableCell>
                   <TableCell>{format(new Date(cls.createdAt), "PP")}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(cls)} disabled={isSubmitting || isDeleting}><Edit3 className="h-4 w-4" /></Button>
@@ -333,7 +377,7 @@ export default function AdminClassManagementPage() {
                       {classToDelete && classToDelete._id === cls._id && (
                         <AlertDialogContent>
                           <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                            <AlertDialogDescription>Delete class <span className="font-semibold">{classToDelete.name}</span>? This cannot be undone.</AlertDialogDescription>
+                            <AlertDialogDescription>Delete class <span className="font-semibold">{classDisplayName(classToDelete)}</span>? This cannot be undone.</AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel onClick={() => setClassToDelete(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>

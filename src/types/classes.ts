@@ -12,24 +12,28 @@ export interface SchoolClassSubject {
 export interface SchoolClass {
   _id: string;
   schoolId: string;
-  name: string;
+  name: string; // e.g., Grade 10
+  section?: string; // e.g., A, B
   classTeacherId?: string | null;
   classTeacherName?: string; // From aggregation
-  subjects: SchoolClassSubject[]; // Updated to use the new interface
+  subjects: SchoolClassSubject[]; 
   createdAt: string; // ISOString
   updatedAt: string; // ISOString
+  secondLanguageSubjectName?: string; // Name of the designated second language subject
 }
 
 // Schema for creating a new class
 export const createClassFormSchema = z.object({
-  name: z.string().min(1, { message: "Class name is required." }).max(100, { message: "Class name too long."}),
-  classTeacherId: z.string().optional().nullable().or(z.literal('')), // Teacher's User ID, optional at creation
+  name: z.string().min(1, { message: "Class name (e.g., Grade 10) is required." }).max(100, { message: "Class name too long."}),
+  section: z.string().min(1, { message: "Section (e.g., A) is required."}).max(10, { message: "Section name too long."}),
+  classTeacherId: z.string().optional().nullable().or(z.literal('')), 
   subjects: z.array(z.object({ 
       name: z.string().min(1, "Subject name cannot be empty."),
-      teacherId: z.string().optional().nullable().or(z.literal('')) // Optional teacher ID for the subject
+      teacherId: z.string().optional().nullable().or(z.literal('')) 
     }))
     .min(1, { message: "At least one subject is required." })
     .max(20, { message: "Maximum 20 subjects allowed."}),
+  secondLanguageSubjectName: z.string().optional().nullable().or(z.literal('')), // New: to designate a subject as second lang
 });
 export type CreateClassFormData = z.infer<typeof createClassFormSchema>;
 
