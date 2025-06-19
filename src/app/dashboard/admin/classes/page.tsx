@@ -28,6 +28,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added missing import
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolClass, getSchoolClasses, updateSchoolClass, deleteSchoolClass } from "@/app/actions/classes";
@@ -39,7 +40,7 @@ import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 
 const NONE_TEACHER_VALUE = "__NONE_TEACHER_OPTION__";
-const NONE_SUBJECT_VALUE = "__NONE_SUBJECT_OPTION__"; // Added for clarity and safety
+const NONE_SUBJECT_VALUE = "__NONE_SUBJECT_OPTION__";
 
 export default function AdminClassManagementPage() {
   const { toast } = useToast();
