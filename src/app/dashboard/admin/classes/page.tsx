@@ -28,7 +28,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, 
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolClass, getSchoolClasses, updateSchoolClass, deleteSchoolClass } from "@/app/actions/classes";
@@ -40,6 +39,7 @@ import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 
 const NONE_TEACHER_VALUE = "__NONE_TEACHER_OPTION__";
+const NONE_SUBJECT_VALUE = "__NONE_SUBJECT_OPTION__"; // Added for clarity and safety
 
 export default function AdminClassManagementPage() {
   const { toast } = useToast();
@@ -300,7 +300,7 @@ export default function AdminClassManagementPage() {
                     <FormItem>
                       <FormLabel className="flex items-center"><Languages className="mr-2 h-4 w-4 text-muted-foreground"/>Designated Second Language (Optional)</FormLabel>
                       <Select
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => field.onChange(value === NONE_SUBJECT_VALUE ? "" : value)}
                         value={field.value || ""}
                         disabled={isSubmitting || currentSubjects.length === 0}
                       >
@@ -308,7 +308,7 @@ export default function AdminClassManagementPage() {
                             <SelectValue placeholder={currentSubjects.length > 0 ? "Select from offered subjects" : "Add subjects first"} />
                         </SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="">-- None --</SelectItem>
+                          <SelectItem value={NONE_SUBJECT_VALUE}>-- None --</SelectItem>
                           {currentSubjects.filter(s => s.name?.trim()).map(s => (
                             <SelectItem key={s.name} value={s.name!}>{s.name}</SelectItem>
                           ))}
@@ -405,3 +405,5 @@ export default function AdminClassManagementPage() {
     </div>
   );
 }
+
+    
