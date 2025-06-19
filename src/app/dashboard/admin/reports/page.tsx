@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getDailyAttendanceForSchool } from "@/app/actions/attendance";
 import type { AttendanceRecord, AuthUser } from "@/types/attendance";
 import type { User as AppUser } from "@/types/user";
-import type { School, TermFee } from "@/types/school"; 
+import type { School, TermFee } from "@/types/school";
 import type { FeePayment } from "@/types/fees";
 import type { FeeConcession } from "@/types/concessions";
 import { getReportCardsForClass, setReportPublicationStatusForClass } from "@/app/actions/reports"; // Added new actions
@@ -26,7 +26,7 @@ import { getClassesForSchoolAsOptions } from "@/app/actions/classes"; // For cla
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
 import { getFeePaymentsBySchool } from "@/app/actions/fees";
-import { getFeeConcessionsForSchool } from "@/app/actions/concessions"; 
+import { getFeeConcessionsForSchool } from "@/app/actions/concessions";
 import Link from "next/link";
 
 import jsPDF from 'jspdf';
@@ -34,11 +34,11 @@ import html2canvas from 'html2canvas';
 
 const getCurrentAcademicYear = (): string => {
   const today = new Date();
-  const currentMonth = today.getMonth(); 
+  const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
-  if (currentMonth >= 5) { 
+  if (currentMonth >= 5) {
     return `${currentYear}-${currentYear + 1}`;
-  } else { 
+  } else {
     return `${currentYear - 1}-${currentYear}`;
   }
 };
@@ -63,17 +63,17 @@ interface OverallAttendanceSummary {
 
 interface ClassFeeSummary {
   className: string;
-  totalExpected: number; 
+  totalExpected: number;
   totalCollected: number;
-  totalConcessions: number; 
+  totalConcessions: number;
   totalDue: number;
   collectionPercentage: number;
 }
 
 interface OverallFeeSummary {
-  grandTotalExpected: number; 
+  grandTotalExpected: number;
   grandTotalCollected: number;
-  grandTotalConcessions: number; 
+  grandTotalConcessions: number;
   grandTotalDue: number;
   overallCollectionPercentage: number;
 }
@@ -89,7 +89,7 @@ export default function AdminReportsPage() {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [classSummaries, setClassSummaries] = useState<ClassAttendanceSummary[]>([]);
   const [overallSummary, setOverallSummary] = useState<OverallAttendanceSummary | null>(null);
-  
+
   const [allSchoolStudents, setAllSchoolStudents] = useState<AppUser[]>([]);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [allSchoolPayments, setAllSchoolPayments] = useState<FeePayment[]>([]);
@@ -115,7 +115,7 @@ export default function AdminReportsPage() {
 
 
   useEffect(() => {
-    setReportDate(new Date()); 
+    setReportDate(new Date());
 
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
@@ -162,9 +162,9 @@ export default function AdminReportsPage() {
       setOverallSummary(null);
       return;
     }
-    if (allSchoolStudents.length > 0 && attendanceRecords.length === 0 && reportDate) { 
+    if (allSchoolStudents.length > 0 && attendanceRecords.length === 0 && reportDate) {
         const summaries: ClassAttendanceSummary[] = allSchoolStudents
-            .reduce((acc, student) => { 
+            .reduce((acc, student) => {
                 if (student.classId) {
                     const classObj = classOptions.find(c => c.value === student.classId);
                     const classNameForSummary = classObj?.label || student.classId;
@@ -181,17 +181,17 @@ export default function AdminReportsPage() {
                 className: group.className,
                 totalStudents: group.students.length,
                 present: 0,
-                absent: group.students.length, 
+                absent: group.students.length,
                 late: 0,
                 attendancePercentage: 0,
             }))
             .sort((a, b) => a.className.localeCompare(b.className));
-        
+
         setClassSummaries(summaries);
         setOverallSummary({
             totalStudents: allSchoolStudents.length,
             totalPresent: 0,
-            totalAbsent: allSchoolStudents.length, 
+            totalAbsent: allSchoolStudents.length,
             totalLate: 0,
             overallAttendancePercentage: 0,
         });
@@ -210,7 +210,7 @@ export default function AdminReportsPage() {
         classMap.get(classNameForSummary)!.students.push(student);
       }
     });
-    
+
     attendanceRecords.forEach(record => {
       const classObj = classOptions.find(c => c.value === record.classId.toString()); // classId from attendance is ObjectId string
       const classNameForSummary = classObj?.label || record.className; // Use record.className as fallback if classId mapping fails
@@ -231,7 +231,7 @@ export default function AdminReportsPage() {
     for (const [className, data] of classMap.entries()) {
       const totalStudentsInClass = data.students.length;
       const markedStudentsCount = data.present + data.absent + data.late;
-      const unmarkedAsAbsent = totalStudentsInClass - markedStudentsCount; 
+      const unmarkedAsAbsent = totalStudentsInClass - markedStudentsCount;
 
       const actualPresent = data.present;
       const actualLate = data.late;
@@ -239,7 +239,7 @@ export default function AdminReportsPage() {
 
       const attendedInClass = actualPresent + actualLate;
       const attendancePercentage = totalStudentsInClass > 0 ? Math.round((attendedInClass / totalStudentsInClass) * 100) : 0;
-      
+
       summaries.push({
         className,
         totalStudents: totalStudentsInClass,
@@ -265,7 +265,7 @@ export default function AdminReportsPage() {
         totalLate: totalSchoolLate,
         overallAttendancePercentage
     });
-    
+
     setClassSummaries(summaries.sort((a, b) => a.className.localeCompare(b.className)));
 
   }, [allSchoolStudents, attendanceRecords, reportDate, classOptions]);
@@ -280,20 +280,20 @@ export default function AdminReportsPage() {
 
     let grandTotalExpected = 0;
     let grandTotalCollected = 0;
-    let grandTotalConcessions = 0; 
+    let grandTotalConcessions = 0;
 
     const classFeeMap = new Map<string, { totalExpected: number, totalCollected: number, totalConcessions: number, studentCount: number }>();
 
     allSchoolStudents.forEach(student => {
       if (student.classId) {
         const classObj = classOptions.find(c => c.value === student.classId);
-        const classNameForSummary = classObj?.name || student.classId; // Use original class name for tuition fee lookup
+        const classNameForSummary = (classObj as any)?.name || student.classId; // Use original class name for tuition fee lookup
         const displayClassName = classObj?.label || student.classId; // Use label for display
 
         const studentTotalAnnualTuitionFee = calculateAnnualTuitionFee(classNameForSummary, schoolDetails);
         const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id.toString());
         const studentTotalPaid = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
-        
+
         const studentConcessionsForYear = allSchoolConcessions.filter(
             c => c.studentId.toString() === student._id.toString() && c.academicYear === currentAcademicYear
         );
@@ -319,12 +319,12 @@ export default function AdminReportsPage() {
       const netExpectedForClass = data.totalExpected - data.totalConcessions;
       const totalDue = netExpectedForClass - data.totalCollected;
       const collectionPercentage = netExpectedForClass > 0 ? Math.round((data.totalCollected / netExpectedForClass) * 100) : (data.totalCollected > 0 ? 100 : 0);
-      
+
       feeSummaries.push({
         className,
-        totalExpected: data.totalExpected, 
+        totalExpected: data.totalExpected,
         totalCollected: data.totalCollected,
-        totalConcessions: data.totalConcessions, 
+        totalConcessions: data.totalConcessions,
         totalDue,
         collectionPercentage,
       });
@@ -360,7 +360,7 @@ export default function AdminReportsPage() {
         setIsLoading(false);
         return;
     }
-   
+
     setIsLoading(true);
     let schoolDataFetchedThisRun = false;
 
@@ -373,7 +373,7 @@ export default function AdminReportsPage() {
           getFeeConcessionsForSchool(authUser.schoolId.toString(), currentAcademicYear),
           getClassesForSchoolAsOptions(authUser.schoolId.toString())
         ]);
-        
+
         if (classesOptRes) setClassOptions(classesOptRes);
 
         if (studentsResult.success && studentsResult.users) {
@@ -396,7 +396,7 @@ export default function AdminReportsPage() {
           toast({ variant: "warning", title: "Fee Payment Data", description: paymentsResult.message || "Could not fetch fee payments." });
           setAllSchoolPayments([]);
         }
-        
+
         if (concessionsResult.success && concessionsResult.concessions) {
             setAllSchoolConcessions(concessionsResult.concessions);
         } else {
@@ -416,7 +416,7 @@ export default function AdminReportsPage() {
         try {
             const attendanceResult = await getDailyAttendanceForSchool(authUser.schoolId.toString(), reportDate);
             if (attendanceResult.success && attendanceResult.records) {
-                setAttendanceRecords(attendanceResult.records); 
+                setAttendanceRecords(attendanceResult.records);
                 if (attendanceResult.records.length === 0 && allSchoolStudents.length > 0 && (isManualRefresh || schoolDataFetchedThisRun)) {
                     toast({ title: "No Attendance Data", description: "No attendance records found for the selected date." });
                 }
@@ -430,15 +430,15 @@ export default function AdminReportsPage() {
             setAttendanceRecords([]);
         }
     } else {
-        setAttendanceRecords([]); 
+        setAttendanceRecords([]);
     }
-    
+
     setIsLoading(false);
   }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length, currentAcademicYear]);
 
   useEffect(() => {
     if (authUser && authUser.schoolId) {
-      loadReportData(false); 
+      loadReportData(false);
     }
   }, [authUser, reportDate, loadReportData]);
 
@@ -457,13 +457,13 @@ export default function AdminReportsPage() {
     setIsDownloadingAttendancePdf(true);
     try {
       const canvas = await html2canvas(reportContent, {
-        scale: 2, 
+        scale: 2,
         useCORS: true,
         logging: false,
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
-        orientation: 'landscape', 
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4',
       });
@@ -473,16 +473,16 @@ export default function AdminReportsPage() {
       const imgProps = pdf.getImageProperties(imgData);
       const imgWidth = imgProps.width;
       const imgHeight = imgProps.height;
-      
+
       const ratio = imgWidth / imgHeight;
-      let newImgWidth = pdfWidth - 20; 
+      let newImgWidth = pdfWidth - 20;
       let newImgHeight = newImgWidth / ratio;
 
       if (newImgHeight > pdfHeight - 20) {
-        newImgHeight = pdfHeight - 20; 
+        newImgHeight = pdfHeight - 20;
         newImgWidth = newImgHeight * ratio;
       }
-      
+
       const x = (pdfWidth - newImgWidth) / 2;
       const y = (pdfHeight - newImgHeight) / 2;
 
@@ -510,13 +510,13 @@ export default function AdminReportsPage() {
     setIsDownloadingFeePdf(true);
     try {
       const canvas = await html2canvas(reportContent, {
-        scale: 2, 
+        scale: 2,
         useCORS: true,
         logging: false,
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
-        orientation: 'portrait', 
+        orientation: 'portrait',
         unit: 'mm',
         format: 'a4',
       });
@@ -526,19 +526,19 @@ export default function AdminReportsPage() {
       const imgProps = pdf.getImageProperties(imgData);
       const imgWidth = imgProps.width;
       const imgHeight = imgProps.height;
-      
+
       const ratio = imgWidth / imgHeight;
-      let newImgWidth = pdfWidth - 20; 
+      let newImgWidth = pdfWidth - 20;
       let newImgHeight = newImgWidth / ratio;
 
-      if (newImgHeight > pdfHeight - 20) { 
-        newImgHeight = pdfHeight - 20; 
+      if (newImgHeight > pdfHeight - 20) {
+        newImgHeight = pdfHeight - 20;
         newImgWidth = newImgHeight * ratio;
       }
-      
+
       const x = (pdfWidth - newImgWidth) / 2;
       const y = (pdfHeight - newImgHeight) / 2;
-      
+
       pdf.addImage(imgData, 'PNG', x, y, newImgWidth, newImgHeight);
       pdf.save(`Fee_Collection_Report_${schoolDetails.schoolName.replace(/\s+/g, '_')}_${currentAcademicYear}.pdf`);
     } catch (error) {
@@ -647,17 +647,17 @@ export default function AdminReportsPage() {
           {reportsForBulkPublish.length > 0 && !isLoadingBulkReports && (
             <div className="space-y-3 mt-4">
               <div className="flex gap-2">
-                <Button 
-                  onClick={() => handleBulkPublishAction(true)} 
-                  disabled={isBulkPublishing} 
+                <Button
+                  onClick={() => handleBulkPublishAction(true)}
+                  disabled={isBulkPublishing}
                   variant="default"
                   className="bg-green-600 hover:bg-green-700"
                 >
                   {isBulkPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldCheck className="mr-2 h-4 w-4"/>} Publish All Loaded ({reportsForBulkPublish.filter(r => r.hasReport).length})
                 </Button>
-                <Button 
-                  onClick={() => handleBulkPublishAction(false)} 
-                  disabled={isBulkPublishing} 
+                <Button
+                  onClick={() => handleBulkPublishAction(false)}
+                  disabled={isBulkPublishing}
                   variant="destructive"
                 >
                   {isBulkPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldOff className="mr-2 h-4 w-4"/>} Unpublish All Loaded ({reportsForBulkPublish.filter(r => r.hasReport).length})
@@ -681,8 +681,8 @@ export default function AdminReportsPage() {
                         {report.hasReport ? <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" /> : <XCircleIcon className="h-5 w-5 text-red-500 mx-auto" />}
                       </TableCell>
                       <TableCell>
-                        {report.hasReport ? (report.isPublished ? 
-                          <span className="text-green-600 font-semibold">Published</span> : 
+                        {report.hasReport ? (report.isPublished ?
+                          <span className="text-green-600 font-semibold">Published</span> :
                           <span className="text-red-600 font-semibold">Not Published</span>
                         ) : (
                           <span className="text-muted-foreground">No Report</span>
@@ -732,9 +732,9 @@ export default function AdminReportsPage() {
                             </PopoverContent>
                         </Popover>
                     </div>
-                    <Button 
-                        variant="default" 
-                        onClick={() => loadReportData(true)} 
+                    <Button
+                        variant="default"
+                        onClick={() => loadReportData(true)}
                         disabled={isLoading || !authUser || !reportDate}
                         className="w-full sm:w-auto"
                     >
@@ -742,9 +742,9 @@ export default function AdminReportsPage() {
                         <span className="sm:inline hidden">Generate Report</span>
                         <span className="sm:hidden inline">Generate</span>
                     </Button>
-                     <Button 
-                        variant="outline" 
-                        onClick={handleDownloadAttendancePdf} 
+                     <Button
+                        variant="outline"
+                        onClick={handleDownloadAttendancePdf}
                         disabled={isLoading || isDownloadingAttendancePdf || !authUser || !reportDate || !overallSummary}
                         className="w-full sm:w-auto"
                     >
@@ -766,8 +766,8 @@ export default function AdminReportsPage() {
           ) : !reportDate ? (
              <p className="text-center text-muted-foreground py-4">Please select a date to generate the attendance report.</p>
           ) : classSummaries.length > 0 && overallSummary ? (
-            <div id="attendanceReportContent" className="p-4 bg-card rounded-md"> 
-            <Card className="mb-6 bg-secondary/30 border-none shadow-none"> 
+            <div id="attendanceReportContent" className="p-4 bg-card rounded-md">
+            <Card className="mb-6 bg-secondary/30 border-none shadow-none">
                 <CardHeader className="pt-2 pb-2">
                     <CardTitle className="text-lg">Overall School Attendance - {format(reportDate, "PPP")}</CardTitle>
                 </CardHeader>
@@ -827,7 +827,7 @@ export default function AdminReportsPage() {
                 <Info className="mx-auto h-12 w-12 text-muted-foreground" />
                 <p className="mt-4 text-lg font-semibold">No Attendance Data to Display</p>
                 <p className="text-muted-foreground">
-                    {(allSchoolStudents.length > 0 && attendanceRecords.length === 0) ? "No attendance was marked for this date, or all students were absent." : 
+                    {(allSchoolStudents.length > 0 && attendanceRecords.length === 0) ? "No attendance was marked for this date, or all students were absent." :
                      (allSchoolStudents.length === 0) ? "No students found for this school. Please add students via User Management." :
                      "No attendance data for the selected date."}
                 </p>
@@ -841,9 +841,9 @@ export default function AdminReportsPage() {
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                  <CardTitle>Fee Collection Summary Report (Annual Tuition - {currentAcademicYear})</CardTitle>
-                 <Button 
-                    variant="outline" 
-                    onClick={handleDownloadFeePdf} 
+                 <Button
+                    variant="outline"
+                    onClick={handleDownloadFeePdf}
                     disabled={isLoading || isDownloadingFeePdf || !authUser || !feeOverallSummary || !schoolDetails}
                     className="w-full sm:w-auto"
                 >
@@ -929,8 +929,8 @@ export default function AdminReportsPage() {
                     <Info className="mx-auto h-12 w-12 text-muted-foreground" />
                     <p className="mt-4 text-lg font-semibold">No Fee Data to Display</p>
                     <p className="text-muted-foreground">
-                        {(!allSchoolStudents.length) ? "No students found for this school. Please add students." : 
-                         (!schoolDetails) ? "School fee structure not loaded. Cannot calculate fee summaries." : 
+                        {(!allSchoolStudents.length) ? "No students found for this school. Please add students." :
+                         (!schoolDetails) ? "School fee structure not loaded. Cannot calculate fee summaries." :
                          (!allSchoolPayments.length && !allSchoolConcessions.length && schoolDetails && allSchoolStudents.length > 0) ? "No fee payments or concessions have been recorded for this school year yet." :
                          "Fee data is currently unavailable."
                         }
@@ -942,5 +942,3 @@ export default function AdminReportsPage() {
     </div>
   );
 }
-
-```

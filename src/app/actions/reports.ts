@@ -339,4 +339,3 @@ export async function setReportPublicationStatusForClass(schoolId: string, class
     return { success: false, updatedCount: 0, message: 'An unexpected error occurred.', error: errorMessage };
   }
 }
-```
