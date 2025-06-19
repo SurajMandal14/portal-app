@@ -84,17 +84,24 @@ const getCurrentAcademicYear = (): string => {
   }
 };
 
+// This function can be defined within the component or passed if memoized correctly with dependencies
 const calculateFaTotal200MForRow = (subjectNameForBack: string, currentFaMarks: Record<string, FrontSubjectFAData>): number | null => {
+  // If subjectNameForBack is "Physics" or "Biology", it means we are calculating for a Science paper.
+  // The FA marks are stored under the "Science" key.
   const faSubjectKey = (subjectNameForBack === "Physics" || subjectNameForBack === "Biology") ? "Science" : subjectNameForBack;
   const subjectFaData = currentFaMarks[faSubjectKey];
+
   if (!subjectFaData) return null;
+
   let overallTotal = 0;
   (['fa1', 'fa2', 'fa3', 'fa4'] as const).forEach(faPeriodKey => {
     const periodMarks = subjectFaData[faPeriodKey];
     if (periodMarks) {
+      // Sum up all tool marks for the period
       overallTotal += (periodMarks.tool1 || 0) + (periodMarks.tool2 || 0) + (periodMarks.tool3 || 0) + (periodMarks.tool4 || 0);
     }
   });
+  // Cap at 200 as per requirement, though individual tool max marks should prevent this if validated.
   return overallTotal > 200 ? 200 : overallTotal; 
 };
 
@@ -277,7 +284,7 @@ export default function GenerateCBSEStateReportPage() {
           );
 
           const newFaMarksForState: Record<string, FrontSubjectFAData> = getDefaultSubjectFaDataFront(currentLoadedClassSubjects);
-          let newSaDataForState = initializeDefaultSaDataBack();
+          let tempSaData = initializeDefaultSaDataBack();
 
           if (marksResult.success && marksResult.marks) {
             const allFetchedMarks = marksResult.marks;
@@ -306,9 +313,8 @@ export default function GenerateCBSEStateReportPage() {
                 }
               });
             });
-            setFaMarks(newFaMarksForState); // Set FA marks to trigger useEffect for FA totals
-
-            // Process SA marks
+            
+            // Process SA marks into tempSaData
             allFetchedMarks.forEach((mark: MarkEntryType) => {
                 if (mark.assessmentName.startsWith("SA1") || mark.assessmentName.startsWith("SA2")) {
                     const [saPeriod, paperTypeWithSuffix] = mark.assessmentName.split('-'); 
@@ -318,31 +324,39 @@ export default function GenerateCBSEStateReportPage() {
                     let targetPaperTypeOnReport: string;
 
                     if (mark.subjectName === "Science") {
-                        targetSubjectNameInReport = "Science";
                         targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "Physics" : "Biology";
                     } else {
                         targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "I" : "II";
                         const subjectDef = backSubjectStructure.find(s => s.name === mark.subjectName);
                         if (targetPaperTypeOnReport === "II" && !(subjectDef && subjectDef.papers.includes("II"))) {
-                            targetPaperTypeOnReport = "I";
+                            targetPaperTypeOnReport = "I"; 
                         }
                     }
                     
-                    newSaDataForState = newSaDataForState.map(row => {
-                        if (row.subjectName === targetSubjectNameInReport && row.paper === targetPaperTypeOnReport) {
-                            const newRow = { ...row }; 
-                            if (saPeriod === "SA1") {
-                                newRow.sa1 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
-                            } else if (saPeriod === "SA2") {
-                                newRow.sa2 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
-                            }
-                            return newRow;
+                    const rowIndex = tempSaData.findIndex(row => row.subjectName === targetSubjectNameInReport && row.paper === targetPaperTypeOnReport);
+
+                    if (rowIndex !== -1) {
+                        // Create a new row object for immutability
+                        const updatedRow = { ...tempSaData[rowIndex] }; 
+                        if (saPeriod === "SA1") {
+                            updatedRow.sa1 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
+                        } else if (saPeriod === "SA2") {
+                            updatedRow.sa2 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
                         }
-                        return row;
-                    });
+                        // Replace the old row with the updated one
+                        tempSaData = tempSaData.map((row, idx) => idx === rowIndex ? updatedRow : row);
+                    }
                 }
             });
-            setSaData(newSaDataForState); // SA marks are set. FA totals will be merged by useEffect.
+             // Now, incorporate faTotal200M into this tempSaData using newFaMarksForState
+            const finalSaDataWithFaTotals = tempSaData.map(row => ({
+                ...row,
+                faTotal200M: calculateFaTotal200MForRow(row.subjectName === "Science" ? row.paper : row.subjectName, newFaMarksForState)
+            }));
+
+            setFaMarks(newFaMarksForState);
+            setSaData(finalSaDataWithFaTotals);
+
 
           } else { 
             if (!marksResult.success && marksResult.message) {
@@ -369,18 +383,6 @@ export default function GenerateCBSEStateReportPage() {
   };
 
 
-  useEffect(() => {
-    // This useEffect updates saData with calculated faTotal200M whenever faMarks changes.
-    // It ensures that faTotal200M is based on the latest faMarks.
-    setSaData(prevSaData =>
-      prevSaData.map(row => ({
-        ...row,
-        faTotal200M: calculateFaTotal200MForRow(row.subjectName === "Science" ? row.paper : row.subjectName, faMarks)
-      }))
-    );
-  }, [faMarks]); // Removed calculateFaTotal200MForRow from dependency array as it's stable if defined outside or memoized correctly if it had complex deps.
-
-
   const handleStudentDataChange = (field: keyof FrontStudentData, value: string) => {
     if (isFieldDisabledForRole()) return; 
     setStudentData(prev => ({ ...prev, [field]: value }));
@@ -402,7 +404,16 @@ export default function GenerateCBSEStateReportPage() {
         ...(currentSubjectMarks[faPeriod] || getDefaultFaMarksEntryFront()), 
         [toolKey]: validatedValue 
       };
-      return { ...prev, [subjectIdentifier]: { ...currentSubjectMarks, [faPeriod]: updatedPeriodMarks }};
+      const newFaMarks = { ...prev, [subjectIdentifier]: { ...currentSubjectMarks, [faPeriod]: updatedPeriodMarks }};
+      
+      // When FA marks change, also update faTotal200M in saData
+      setSaData(currentSaData =>
+        currentSaData.map(row => ({
+          ...row,
+          faTotal200M: calculateFaTotal200MForRow(row.subjectName === "Science" ? row.paper : row.subjectName, newFaMarks)
+        }))
+      );
+      return newFaMarks;
     });
   };
 
@@ -412,7 +423,7 @@ export default function GenerateCBSEStateReportPage() {
 
   const handleSaDataChange = (rowIndex: number, period: 'sa1' | 'sa2', field: 'marks' | 'maxMarks', value: string) => {
     const subjectName = saData[rowIndex]?.subjectName;
-    if (isFieldDisabledForRole(subjectName)) return;
+    if (isFieldDisabledForRole(subjectName)) return; 
     const numValue = parseInt(value, 10);
     const validatedValue = isNaN(numValue) ? null : Math.max(numValue, 0); 
     
@@ -680,5 +691,7 @@ export default function GenerateCBSEStateReportPage() {
     </div>
   );
 }
+
+    
 
     
