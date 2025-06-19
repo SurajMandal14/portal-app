@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BookCopy, PlusCircle, Edit3, Trash2, Loader2, UserCheck, FilePlus, XCircle, Info, Users, Languages } from "lucide-react";
+import { BookCopy, PlusCircle, Edit3, Trash2, Loader2, UserCheck, FilePlus, XCircle, Info, Users, Languages, School as SchoolIcon } from "lucide-react"; // Added SchoolIcon
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import {
@@ -28,25 +28,31 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added missing import
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolClass, getSchoolClasses, updateSchoolClass, deleteSchoolClass } from "@/app/actions/classes";
 import { getSchoolUsers } from "@/app/actions/schoolUsers"; 
+import { getSchoolById } from "@/app/actions/schools"; // Import getSchoolById
 import type { SchoolClass, CreateClassFormData } from '@/types/classes';
 import { createClassFormSchema } from '@/types/classes';
 import type { AuthUser, User as AppUser } from "@/types/user";
+import type { School, ClassTuitionFeeConfig } from "@/types/school"; // Import School and ClassTuitionFeeConfig
 import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 
 const NONE_TEACHER_VALUE = "__NONE_TEACHER_OPTION__";
 const NONE_SUBJECT_VALUE = "__NONE_SUBJECT_OPTION__";
+const NONE_CLASS_NAME_VALUE = "__NONE_CLASS_NAME_OPTION__";
+
 
 export default function AdminClassManagementPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>([]);
   const [availableTeachers, setAvailableTeachers] = useState<AppUser[]>([]);
+  const [schoolDetails, setSchoolDetails] = useState<School | null>(null); // State for school details
+  const [availableClassNamesForSchool, setAvailableClassNamesForSchool] = useState<string[]>([]); // State for class names from tuition config
   
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -93,9 +99,10 @@ export default function AdminClassManagementPage() {
     }
     setIsLoadingData(true);
     try {
-      const [classesResult, teachersResult] = await Promise.all([
+      const [classesResult, teachersResult, schoolDetailsResult] = await Promise.all([
         getSchoolClasses(authUser.schoolId.toString()),
-        getSchoolUsers(authUser.schoolId.toString()) 
+        getSchoolUsers(authUser.schoolId.toString()),
+        getSchoolById(authUser.schoolId.toString()) // Fetch school details
       ]);
 
       if (classesResult.success && classesResult.classes) {
@@ -110,6 +117,18 @@ export default function AdminClassManagementPage() {
          toast({ variant: "warning", title: "Teacher Info", description: teachersResult.message || "Failed to load teachers for dropdown." });
       }
 
+      if (schoolDetailsResult.success && schoolDetailsResult.school) {
+        setSchoolDetails(schoolDetailsResult.school);
+        const classNamesFromTuition = Array.from(new Set(schoolDetailsResult.school.tuitionFees
+          .map((tf: ClassTuitionFeeConfig) => tf.className)
+          .filter(Boolean) as string[]));
+        setAvailableClassNamesForSchool(classNamesFromTuition);
+      } else {
+        toast({ variant: "destructive", title: "School Details Error", description: schoolDetailsResult.message || "Failed to load school configuration for class names."});
+        setSchoolDetails(null);
+        setAvailableClassNamesForSchool([]);
+      }
+
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Unexpected error fetching initial data." });
     } finally {
@@ -119,7 +138,7 @@ export default function AdminClassManagementPage() {
 
   useEffect(() => {
     if (authUser?.schoolId) fetchInitialData();
-    else { setIsLoadingData(false); setSchoolClasses([]); setAvailableTeachers([]); }
+    else { setIsLoadingData(false); setSchoolClasses([]); setAvailableTeachers([]); setSchoolDetails(null); setAvailableClassNamesForSchool([]);}
   }, [authUser, fetchInitialData]);
 
   useEffect(() => {
@@ -206,13 +225,36 @@ export default function AdminClassManagementPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Class Name (e.g., Grade 10)</FormLabel>
-                    <FormControl><Input placeholder="e.g., Grade 10" {...field} disabled={isSubmitting} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}/>
+                <FormField 
+                  control={form.control} 
+                  name="name" 
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center"><SchoolIcon className="mr-2 h-4 w-4 text-muted-foreground"/>Class Name</FormLabel>
+                       <Select
+                        onValueChange={(value) => field.onChange(value === NONE_CLASS_NAME_VALUE ? "" : value)}
+                        value={field.value || ""}
+                        disabled={isSubmitting || isLoadingData || availableClassNamesForSchool.length === 0}
+                      >
+                        <FormControl><SelectTrigger>
+                            <SelectValue placeholder={
+                                availableClassNamesForSchool.length > 0 
+                                ? "Select class name" 
+                                : (isLoadingData ? "Loading names..." : "No class names in tuition config")
+                            } />
+                        </SelectTrigger></FormControl>
+                        <SelectContent>
+                           <SelectItem value={NONE_CLASS_NAME_VALUE}>-- Select Class Name --</SelectItem>
+                          {availableClassNamesForSchool.map(className => (
+                            <SelectItem key={className} value={className}>{className}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription className="text-xs">Class names are based on Super Admin's tuition fee configurations for this school.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField control={form.control} name="section" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Section (e.g., A)</FormLabel>
@@ -306,7 +348,7 @@ export default function AdminClassManagementPage() {
                         disabled={isSubmitting || currentSubjects.length === 0}
                       >
                         <FormControl><SelectTrigger>
-                            <SelectValue placeholder={currentSubjects.length > 0 ? "Select from offered subjects" : "Add subjects first"} />
+                            <SelectValue placeholder={currentSubjects.filter(s => s.name?.trim()).length > 0 ? "Select from offered subjects" : "Add subjects first"} />
                         </SelectTrigger></FormControl>
                         <SelectContent>
                           <SelectItem value={NONE_SUBJECT_VALUE}>-- None --</SelectItem>
@@ -398,7 +440,7 @@ export default function AdminClassManagementPage() {
             <div className="text-center py-6">
                 <Info className="mx-auto h-10 w-10 text-muted-foreground" />
                 <p className="mt-3 text-muted-foreground">No classes found for this school.</p>
-                <p className="text-xs text-muted-foreground">Use the form above to create the first class.</p>
+                <p className="text-xs text-muted-foreground">Use the form above to create the first class. Ensure tuition fee structures are set by Super Admin.</p>
             </div>
           )}
         </CardContent>
@@ -406,5 +448,4 @@ export default function AdminClassManagementPage() {
     </div>
   );
 }
-
     

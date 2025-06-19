@@ -38,10 +38,10 @@ import {
     type CreateSchoolUserServerActionFormData
 } from '@/types/user';
 import { getSchoolById } from "@/app/actions/schools";
-import { getSchoolClasses } from "@/app/actions/classes"; 
+import { getClassesForSchoolAsOptions } from "@/app/actions/classes"; // Updated import
 import type { User as AppUser } from "@/types/user";
 import type { School, TermFee } from "@/types/school";
-import type { SchoolClass } from "@/types/classes"; 
+// SchoolClass is not directly used here, but its structure is relevant for options
 import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 import type { AuthUser } from "@/types/attendance";
@@ -50,11 +50,18 @@ type SchoolStudent = Partial<AppUser>;
 
 const NONE_CLASS_VALUE = "__NONE_CLASS_ID__"; 
 
+interface ClassOption {
+  value: string; // class _id
+  label: string; // "ClassName - Section"
+  name?: string; // Original class name
+  section?: string; // Original section
+}
+
 export default function AdminStudentManagementPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null); 
-  const [managedClasses, setManagedClasses] = useState<SchoolClass[]>([]); 
+  const [classOptions, setClassOptions] = useState<ClassOption[]>([]); // For dropdown
   const [allSchoolStudents, setAllSchoolStudents] = useState<SchoolStudent[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
@@ -113,10 +120,10 @@ export default function AdminStudentManagementPage() {
     }
     setIsLoadingData(true);
     try {
-      const [schoolResult, usersResult, classesResult] = await Promise.all([
+      const [schoolResult, usersResult, classesOptionsResult] = await Promise.all([
         getSchoolById(authUser.schoolId.toString()),
         getSchoolUsers(authUser.schoolId.toString()),
-        getSchoolClasses(authUser.schoolId.toString()) 
+        getClassesForSchoolAsOptions(authUser.schoolId.toString()) 
       ]);
 
       if (schoolResult.success && schoolResult.school) {
@@ -136,11 +143,9 @@ export default function AdminStudentManagementPage() {
         setAllSchoolStudents([]);
       }
 
-      if (classesResult.success && classesResult.classes) {
-        setManagedClasses(classesResult.classes);
-      } else {
-        toast({ variant: "warning", title: "Class List Error", description: classesResult.message || "Failed to load managed class list." });
-        setManagedClasses([]);
+      setClassOptions(classesOptionsResult);
+      if (classesOptionsResult.length === 0) {
+         toast({ variant: "info", title: "No Classes", description: "No classes found. Please create classes first in Class Management." });
       }
 
     } catch (error) {
@@ -152,7 +157,7 @@ export default function AdminStudentManagementPage() {
 
   useEffect(() => {
     if (authUser?.schoolId) fetchInitialData();
-    else { setIsLoadingData(false); setAllSchoolStudents([]); setSchoolDetails(null); setManagedClasses([]); }
+    else { setIsLoadingData(false); setAllSchoolStudents([]); setSchoolDetails(null); setClassOptions([]); }
   }, [authUser, fetchInitialData]);
 
   const calculateAnnualFeeFromTerms = useCallback((terms: TermFee[]): number => {
@@ -162,10 +167,10 @@ export default function AdminStudentManagementPage() {
   const selectedClassIdForTuition = studentForm.watch("classId");
   useEffect(() => {
     setNoTuitionFeeStructureFound(false);
-    if (selectedClassIdForTuition && selectedClassIdForTuition !== NONE_CLASS_VALUE && schoolDetails?.tuitionFees && managedClasses.length > 0) {
-      const selectedClass = managedClasses.find(cls => cls._id === selectedClassIdForTuition);
-      if (selectedClass) {
-        const feeConfig = schoolDetails.tuitionFees.find(tf => tf.className === selectedClass.name);
+    if (selectedClassIdForTuition && selectedClassIdForTuition !== NONE_CLASS_VALUE && schoolDetails?.tuitionFees && classOptions.length > 0) {
+      const selectedClassOption = classOptions.find(cls => cls.value === selectedClassIdForTuition);
+      if (selectedClassOption && selectedClassOption.name) { // selectedClassOption.name is the actual class name (e.g. Grade 10)
+        const feeConfig = schoolDetails.tuitionFees.find(tf => tf.className === selectedClassOption.name);
         if (feeConfig?.terms) {
           setCalculatedTuitionFee(calculateAnnualFeeFromTerms(feeConfig.terms));
         } else {
@@ -178,7 +183,7 @@ export default function AdminStudentManagementPage() {
     } else {
       setCalculatedTuitionFee(null);
     }
-  }, [selectedClassIdForTuition, schoolDetails, managedClasses, calculateAnnualFeeFromTerms]);
+  }, [selectedClassIdForTuition, schoolDetails, classOptions, calculateAnnualFeeFromTerms]);
 
   const studentFormEnableBus = studentForm.watch("enableBusTransport");
   const studentFormBusLocation = studentForm.watch("busRouteLocation");
@@ -220,13 +225,34 @@ export default function AdminStudentManagementPage() {
     }
   }, [studentFormEnableBus, studentFormBusLocation, studentFormBusCategory, schoolDetails, calculateAnnualFeeFromTerms]);
 
+  const handleClassChangeForStudentForm = (classIdValue: string) => {
+    studentForm.setValue('classId', classIdValue === NONE_CLASS_VALUE ? "" : classIdValue);
+    const selectedClass = classOptions.find(opt => opt.value === classIdValue);
+    if (selectedClass && selectedClass.section) {
+      studentForm.setValue('section', selectedClass.section);
+    } else if (classIdValue === NONE_CLASS_VALUE) {
+      studentForm.setValue('section', '');
+    }
+  };
+
+  const handleClassChangeForEditForm = (classIdValue: string) => {
+    editForm.setValue('classId', classIdValue === NONE_CLASS_VALUE ? "" : classIdValue);
+    const selectedClass = classOptions.find(opt => opt.value === classIdValue);
+    if (selectedClass && selectedClass.section) {
+      editForm.setValue('section', selectedClass.section);
+    } else if (classIdValue === NONE_CLASS_VALUE) {
+       editForm.setValue('section', ''); // Clear section if "-- None --" is chosen
+    }
+  };
+
+
   useEffect(() => {
     if (editingStudent) {
       editForm.reset({
         name: editingStudent.name || "",
         email: editingStudent.email || "",
         password: "", 
-        role: 'student', // Role is fixed for this page
+        role: 'student', 
         classId: editingStudent.classId || "", 
         admissionId: editingStudent.admissionId || "",
         enableBusTransport: !!editingStudent.busRouteLocation,
@@ -279,7 +305,7 @@ export default function AdminStudentManagementPage() {
     setIsSubmittingEdit(true);
     const payload = { 
       ...values, 
-      role: 'student' as 'student', // Explicitly set role for student edits
+      role: 'student' as 'student', 
       classId: values.classId === NONE_CLASS_VALUE ? "" : values.classId, 
       busRouteLocation: values.enableBusTransport ? values.busRouteLocation : undefined,
       busClassCategory: values.enableBusTransport ? values.busClassCategory : undefined,
@@ -321,8 +347,8 @@ export default function AdminStudentManagementPage() {
 
   const getClassNameFromId = (classId: string | undefined): string => {
     if (!classId) return 'N/A';
-    const foundClass = managedClasses.find(cls => cls._id === classId);
-    return foundClass?.name || 'N/A (Invalid ID)';
+    const foundClass = classOptions.find(cls => cls.value === classId);
+    return foundClass?.label || 'N/A (Invalid ID)';
   };
 
   if (!authUser && !isLoadingData) { 
@@ -370,7 +396,6 @@ export default function AdminStudentManagementPage() {
                         <FormMessage />
                       </FormItem>
                   )}/>
-                  {/* Role is fixed to 'student' and not shown in edit form here */}
                   <FormField control={editForm.control} name="admissionId" render={({ field }) => (
                       <FormItem>
                           <FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel>
@@ -387,8 +412,34 @@ export default function AdminStudentManagementPage() {
                     <FormField control={editForm.control} name="dob" render={({ field }) => (
                       <FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Birth</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
                   )}/>
+                   <FormField 
+                      control={editForm.control} 
+                      name="classId" 
+                      render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Assign to Class</FormLabel>
+                              <Select 
+                                  onValueChange={(value) => handleClassChangeForEditForm(value)} // Use specific handler
+                                  value={field.value || ""} 
+                                  disabled={isSubmittingEdit || classOptions.length === 0}
+                              >
+                                  <FormControl><SelectTrigger>
+                                      <SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} />
+                                  </SelectTrigger></FormControl>
+                                  <SelectContent>
+                                      <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
+                                      {classOptions.map((opt) => (
+                                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                      ))}
+                                  </SelectContent>
+                              </Select>
+                              {classOptions.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                  />
                   <FormField control={editForm.control} name="section" render={({ field }) => (
-                      <FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="e.g., A, B" {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="Auto from class" {...field} disabled={isSubmittingEdit} readOnly={!!editForm.getValues("classId")} /></FormControl><FormMessage /></FormItem>
                   )}/>
                   <FormField control={editForm.control} name="rollNo" render={({ field }) => (
                       <FormItem><FormLabel>Roll Number</FormLabel><FormControl><Input {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
@@ -399,32 +450,6 @@ export default function AdminStudentManagementPage() {
                   <FormField control={editForm.control} name="aadharNo" render={({ field }) => (
                       <FormItem><FormLabel>Aadhar Number</FormLabel><FormControl><Input {...field} disabled={isSubmittingEdit}/></FormControl><FormMessage /></FormItem>
                   )}/>
-                  <FormField 
-                      control={editForm.control} 
-                      name="classId" 
-                      render={({ field }) => (
-                          <FormItem>
-                              <FormLabel>Assign to Class</FormLabel>
-                              <Select 
-                                  onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)}
-                                  value={field.value || ""} 
-                                  disabled={isSubmittingEdit || managedClasses.length === 0}
-                              >
-                                  <FormControl><SelectTrigger>
-                                      <SelectValue placeholder={managedClasses.length > 0 ? "Select class" : "No classes available"} />
-                                  </SelectTrigger></FormControl>
-                                  <SelectContent>
-                                      <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
-                                      {managedClasses.map((cls) => (
-                                          <SelectItem key={cls._id} value={cls._id.toString()}>{cls.name}</SelectItem>
-                                      ))}
-                                  </SelectContent>
-                              </Select>
-                              {managedClasses.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
-                              <FormMessage />
-                          </FormItem>
-                      )}
-                  />
                   <FormField
                       control={editForm.control}
                       name="enableBusTransport"
@@ -493,23 +518,23 @@ export default function AdminStudentManagementPage() {
                         <FormItem>
                             <FormLabel>Assign to Class</FormLabel>
                             <Select 
-                                onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)} 
+                                onValueChange={(value) => handleClassChangeForStudentForm(value)} // Use specific handler
                                 value={field.value || ""} 
-                                disabled={isSubmittingStudent || managedClasses.length === 0}
+                                disabled={isSubmittingStudent || classOptions.length === 0}
                             >
                                 <FormControl><SelectTrigger>
-                                    <SelectValue placeholder={managedClasses.length > 0 ? "Select class" : "No classes available"} />
+                                    <SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} />
                                 </SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
-                                    {managedClasses.map((cls)=>(<SelectItem key={cls._id} value={cls._id.toString()}>{cls.name}</SelectItem>))}
+                                    {classOptions.map((opt)=>(<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
                                 </SelectContent>
                             </Select>
-                            {managedClasses.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
+                            {classOptions.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
                             {calculatedTuitionFee !== null && (
                                 <FormDescription className="text-xs pt-1">
                                     Annual Tuition Fee: <span className="font-sans">₹</span>{calculatedTuitionFee.toLocaleString()}
-                                    {noTuitionFeeStructureFound && <span className="text-destructive"> (No fee structure found for this class)</span>}
+                                    {noTuitionFeeStructureFound && <span className="text-destructive"> (No fee structure found for this class name)</span>}
                                 </FormDescription>
                             )}
                             <FormMessage/>
@@ -525,7 +550,7 @@ export default function AdminStudentManagementPage() {
                         <FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Birth</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
                     )}/>
                     <FormField control={studentForm.control} name="section" render={({ field }) => (
-                        <FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="e.g., A, B" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="Auto from class" {...field} disabled={isSubmittingStudent} readOnly={!!studentForm.getValues("classId")} /></FormControl><FormMessage /></FormItem>
                     )}/>
                     <FormField control={studentForm.control} name="rollNo" render={({ field }) => (
                         <FormItem><FormLabel>Roll Number</FormLabel><FormControl><Input placeholder="e.g., 101" {...field} disabled={isSubmittingStudent}/></FormControl><FormMessage /></FormItem>
@@ -625,14 +650,14 @@ export default function AdminStudentManagementPage() {
              <div className="flex items-center justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading students...</p></div>
           ) : filteredStudents.length > 0 ? (
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Admission ID</TableHead><TableHead>Class Assigned</TableHead><TableHead>Bus Route</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Admission ID</TableHead><TableHead>Class - Section</TableHead><TableHead>Bus Route</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredStudents.map((student) => (
                 <TableRow key={student._id?.toString()}>
                   <TableCell>{student.name}</TableCell>
                   <TableCell>{student.email}</TableCell>
                   <TableCell>{student.admissionId || 'N/A'}</TableCell>
-                  <TableCell>{getClassNameFromId(student.classId)}</TableCell>
+                  <TableCell>{getClassNameFromId(student.classId)} {student.section ? ` - ${student.section}` : ''}</TableCell>
                   <TableCell>{student.busRouteLocation ? `${student.busRouteLocation} (${student.busClassCategory || 'N/A'})` : 'N/A'}</TableCell>
                   <TableCell>{student.createdAt ? format(new Date(student.createdAt as string), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">

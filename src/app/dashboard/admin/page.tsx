@@ -131,15 +131,15 @@ export default function AdminDashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser, toast]);
 
-  const schoolName = schoolDetails?.schoolName || (isLoadingSchoolName ? "Loading..." : "Your School");
+  const schoolNameDisplay = schoolDetails?.schoolName || (isLoadingSchoolName ? "Loading..." : "Your School");
   const adminName = authUser?.name || "Administrator";
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-headline">Admin Dashboard - {schoolName}</CardTitle>
-          <CardDescription>Welcome, {adminName}. Manage student information, fees, attendance, and staff for {schoolName}.</CardDescription>
+          <CardTitle className="text-2xl font-headline">Admin Dashboard - {schoolNameDisplay}</CardTitle>
+          <CardDescription>Welcome, {adminName}. Manage student information, fees, attendance, and staff for {schoolNameDisplay}.</CardDescription>
         </CardHeader>
       </Card>
 
