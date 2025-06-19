@@ -26,20 +26,20 @@ Scholr is packed with features to make running your institution smoother:
 
 - **Multi-Role User Management:**
     - **Super Admins:** Manage schools, school administrator accounts, define school-wide fee structures (tuition and bus fees, term-wise), and apply student fee concessions.
-    - **School Admins:** Manage teachers and students. Create students with automatic fee calculation based on class and optional bus transport. Manage attendance overview, fee collection (recording payments), and report generation for their assigned school. View school fee structures.
-    - **Teachers:** Mark student attendance for their assigned classes, view their profile. (Marks entry feature planned).
-    - **Students:** View their attendance records, fee status (including concessions), and profile.
+    - **School Admins:** Manage teachers and students. Create students with automatic fee calculation based on class and optional bus transport. Manage attendance overview, fee collection (recording payments), and report generation for their assigned school. View school fee structures. Control student report card visibility for the entire school.
+    - **Teachers:** Mark student attendance for their assigned classes, view their profile, and enter student marks for various assessments (including detailed tool-wise FA marks).
+    - **Students:** View their attendance records, fee status (including concessions), profile, and published report cards (if allowed by school admin).
 - **Streamlined Attendance Tracking:** Teachers can mark daily attendance (Present, Absent, Late). Admins and Students can view relevant attendance records and summaries.
 - **Simplified Fee Management:**
     - Super Admins define tuition fees (per class, term-wise) and bus fees (per location & class category, term-wise).
     - Super Admins can apply individual student fee concessions.
     - School Admins record fee payments for students.
     - Students can view their fee payment history and dues, with concessions factored in.
-- **Comprehensive Reporting (In Progress):**
+- **Comprehensive Reporting & Report Card Generation:**
     - Admins can view daily attendance summary reports (class-wise and overall) and fee collection summaries (reflecting concessions). PDF download available.
-    - A flexible report card generation system is implemented, starting with a "CBSE State Pattern" template. Admins can input marks and save report cards.
+    - A flexible report card generation system (CBSE State Pattern) allows admins to review and save report cards based on teacher-entered marks. Admins can publish/unpublish individual report cards.
 - **Personalized Profiles:** Users can view and update their basic profile information (name, phone, avatar).
-- **Role-Based Dashboards:** Each user role (Super Admin, Admin, Teacher, Student) gets a tailored dashboard with relevant information and quick links. The header dynamically displays the school name for school-affiliated users.
+- **Role-Based Dashboards:** Each user role (Super Admin, Admin, Teacher, Student) gets a tailored dashboard with relevant information and quick links. The header dynamically displays the school logo for school-affiliated users.
 
 ## Project Structure Overview
 
@@ -59,7 +59,7 @@ The project follows a structure typical for Next.js applications using the App R
 -   **`/src/lib/`**: Utility functions and library initializations.
     -   **`/src/lib/mongodb.ts`**: Handles the MongoDB database connection.
     -   **`/src/lib/utils.ts`**: General utility functions (like `cn` for classnames).
--   **`/src/types/`**: TypeScript type definitions and Zod schemas for various data structures (User, School, Fees, Attendance, Reports, Concessions).
+-   **`/src/types/`**: TypeScript type definitions and Zod schemas for various data structures (User, School, Fees, Attendance, Reports, Concessions, Classes, Marks).
 -   **`/src/hooks/`**: Custom React hooks (e.g., `useToast`, `useMobile`).
 -   **`/src/contexts/`**: React Context providers (e.g., `StudentDataContext`).
 -   **`/src/ai/`**: Contains Genkit setup (`genkit.ts`) and will house AI-related flows and logic. Currently, AI features are not deeply integrated but the foundation is present.
@@ -73,7 +73,7 @@ The project follows a structure typical for Next.js applications using the App R
 -   These server actions are called directly from client components (React Server Components or client components using `await`).
 -   **Database:** MongoDB is used as the database. The connection logic is managed in `/src/lib/mongodb.ts`. Server actions interact with the database (CRUD operations) using the official MongoDB Node.js driver.
 -   **Data Validation:** Zod schemas are used within server actions (often imported from `/src/types/`) to validate incoming data before processing or database interaction.
--   **Authentication:** A basic email/password login system is implemented. User session data (name, role, email, IDs) is stored in `localStorage` after successful login via the `loginUser` server action. This data is then used by client-side components to determine user role and access permissions.
+-   **Authentication:** Login uses email (for staff) or admission number (for students) and password. User session data (name, role, email, IDs) is stored in `localStorage` after successful login via the `loginUser` server action. This data is then used by client-side components to determine user role and access permissions. Email login is case-sensitive.
 -   **AI Integration (Genkit):** The project is configured to use Genkit for AI functionalities (defined in `/src/ai/`). While not extensively used yet, this setup allows for future integration of LLMs for tasks like content generation, data analysis, or smart assistance.
 
 ## Frontend Setup & Flow
@@ -91,42 +91,41 @@ The project follows a structure typical for Next.js applications using the App R
     -   For cross-component state or more complex scenarios, React Context API is used (e.g., `StudentDataContext`).
     -   Data fetching from server actions is typically done via `async/await` calls within client components or passed as props from Server Components.
 -   **Forms:** React Hook Form (`react-hook-form`) is used for managing form state, validation (with Zod via `@hookform/resolvers/zod`), and submission.
--   **User Session on Client:** After login, user information (role, name, email, IDs) is stored in `localStorage`. The `Header` component and individual dashboard pages read this information to tailor the UI and navigation. The Header dynamically shows the school name for affiliated users or "Scholr" for Super Admins.
+-   **User Session on Client:** After login, user information (role, name, email, IDs) is stored in `localStorage`. The `Header` component and individual dashboard pages read this information to tailor the UI and navigation. The Header dynamically shows the school logo for affiliated users or "Scholr" for Super Admins.
 
 ## Key Workflows (High-Level)
 
 1.  **User Authentication:**
-    -   User enters credentials on the login page (`/src/app/page.tsx` -> `LoginForm`).
-    -   `loginUser` server action validates credentials against the MongoDB `users` collection.
+    -   User enters credentials (email/admission no. & password) on the login page (`/src/app/page.tsx` -> `LoginForm`).
+    -   `loginUser` server action validates credentials against the MongoDB `users` collection. Email check is case-sensitive.
     -   On success, user data is stored in `localStorage`, and the user is redirected to their role-specific dashboard.
 
 2.  **School & Fee Structure Management (Super Admin):**
-    -   Super Admin creates/edits schools (`/super-admin/schools`).
-    -   Defines term-wise tuition fees per class.
-    -   Defines term-wise bus fees per location and class category.
+    -   Super Admin creates/edits schools (`/super-admin/schools`), including setting if students can view published reports.
+    -   Defines term-wise tuition fees per class and bus fees per location/category.
     -   Assigns School Administrators (`/super-admin/users`).
     -   Applies student-specific fee concessions (`/super-admin/concessions`).
 
 3.  **User Management (School Admin):**
-    -   School Admin manages teachers and students for their assigned school (`/admin/users`).
-    -   When creating a student:
-        - Selects class; tuition fee is auto-calculated based on Super Admin's setup.
-        - Optionally enables bus transport, selects route/category; bus fee is auto-calculated.
-        - Student's `classId`, `busRouteLocation`, `busClassCategory` are stored.
+    -   School Admin manages teachers and students for their school (`/admin/users`).
+    -   Student creation includes name, email, password, admission ID, class, optional bus transport details, and other personal details (father's name, mother's name, DOB, etc.).
     -   Data is saved via server actions, linking users to the admin's `schoolId`.
 
-4.  **Attendance:**
-    -   **Teacher:** Marks attendance (`/teacher/attendance`) for students in their assigned class. Data is submitted via `submitAttendance` server action to the `attendances` collection.
-    -   **Admin/Student:** View attendance records/summaries fetched by relevant server actions.
+4.  **Marks Entry (Teacher):**
+    -   Teachers enter marks for various assessments, including detailed tool-wise marks for Formative Assessments (e.g., FA1-Tool1, FA1-Tool2), for students in their assigned subjects/classes.
 
-5.  **Fees (Payment & Viewing):**
-    -   **Admin:** Records fee payments (`/admin/fees`) for students. System calculates due amount considering tuition, bus fees (from student's assigned class/route), and any concessions. Generates receipts.
-    -   **Student:** Views their fee payment history (`/student/fees`), total due, and applied concessions.
+5.  **Report Card Generation & Publishing (Admin):**
+    -   Admin navigates to report card generation (e.g., `/admin/reports/generate-cbse-state`).
+    -   Loads student data using Admission ID.
+    -   Report card form populates with student details and marks entered by teachers (Admin view is read-only for marks).
+    -   Admin saves the report card (initial save marks it as "Not Published").
+    -   Admin can then explicitly "Publish" or "Unpublish" the saved report card.
 
-6.  **Report Card Generation (CBSE State Pattern):**
-    -   **Admin:** Navigates to `/admin/reports/generate-cbse-state`.
-    -   Enters student details, marks, and attendance.
-    -   Saves report card via `saveReportCard` server action to the `report_cards` collection.
+6.  **Student Report Card Viewing:**
+    -   Students navigate to their "Exam Results" page.
+    -   They can only view their report card if:
+        1.  The School Admin has enabled the school-wide setting "Allow Students To View Published Reports" (in `/admin/settings`).
+        2.  The specific report card for the student and academic year has been marked as "Published" by an Admin.
 
 ## Getting Started
 
@@ -168,14 +167,14 @@ Ready to dive in? Here's how to get Scholr up and running:
         ```json
         {
           "name": "Super Admin",
-          "email": "superadmin@example.com",
-          "password": "your_secure_password", // This will be hashed by the app if bcrypt is used on first login, or store plain for initial login
+          "email": "siddhumanoj1@gmail.com",
+          "password": "Siddhumanoj1@", 
           "role": "superadmin",
-          "createdAt": "ISODate(...)",
-          "updatedAt": "ISODate(...)"
+          "createdAt": "ISODate(...)", 
+          "updatedAt": "ISODate(...)" 
         }
         ```
-        *   **Note on Password:** For the very first login, if you insert a plain text password (e.g., "password"), the login logic has a fallback to check plain text if hashing fails, intended for this initial setup. Subsequent password changes or new user creations (by admins) will store hashed passwords.
+        *   **Note on Password:** Store the password as plain text (e.g., "Siddhumanoj1@") for the initial setup. The login logic has a fallback to check plain text if hashing fails, intended for this first Super Admin. Subsequent password changes or new user creations (by admins) will store hashed passwords.
     *   After inserting this user, you can log in with these credentials to start creating schools and school admins.
 
 ## Available Scripts

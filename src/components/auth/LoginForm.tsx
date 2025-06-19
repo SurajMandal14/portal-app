@@ -22,8 +22,8 @@ import { loginUser, type LoginResult } from "@/app/actions/auth";
 import { useState } from "react";
 
 const formSchema = z.object({
-  email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(1, { message: "Password is required." }), 
+  identifier: z.string().min(1, { message: "Email or Admission Number is required." }),
+  password: z.string().min(1, { message: "Password is required." }),
 });
 
 export function LoginForm() {
@@ -34,7 +34,7 @@ export function LoginForm() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: "",
+      identifier: "",
       password: "",
     },
   });
@@ -97,12 +97,12 @@ export function LoginForm() {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
               control={form.control}
-              name="email"
+              name="identifier"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>Email / Admission No.</FormLabel>
                   <FormControl>
-                    <Input placeholder="user@example.com" {...field} disabled={isLoading} />
+                    <Input placeholder="Enter your email or admission number" {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
