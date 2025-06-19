@@ -92,7 +92,6 @@ export default function AdminDashboardPage() {
       setIsLoadingUserCounts(true);
       setIsLoadingAttendance(true);
 
-      // Fetch School Name
       getSchoolById(authUser.schoolId.toString()).then(result => {
         if (result.success && result.school) {
           setSchoolDetails(result.school);
@@ -102,7 +101,6 @@ export default function AdminDashboardPage() {
         setIsLoadingSchoolName(false);
       });
 
-      // Fetch User Counts
       getSchoolUserRoleCounts(authUser.schoolId.toString()).then(result => {
         if (result.success && result.counts) {
           setUserCounts(result.counts);
@@ -112,7 +110,6 @@ export default function AdminDashboardPage() {
         setIsLoadingUserCounts(false);
       });
       
-      // Fetch Attendance Overview for Today
       getDailyAttendanceOverviewForSchool(authUser.schoolId.toString(), new Date()).then(result => {
         if (result.success && result.summary) {
           setAttendanceOverview(result.summary);
@@ -127,15 +124,15 @@ export default function AdminDashboardPage() {
     if (authUser && authUser.schoolId) {
       fetchDashboardData();
     } else {
-      // If no authUser or schoolId, set loading states to false.
       setIsLoadingSchoolName(false);
       setIsLoadingUserCounts(false);
       setIsLoadingAttendance(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authUser, toast]); // userCounts?.students is removed, as it creates a loop if attendance sets itself based on it on failure
+  }, [authUser, toast]); 
 
   const schoolName = schoolDetails?.schoolName || (isLoadingSchoolName ? "Loading..." : "Your School");
+  const adminName = authUser?.name || "Administrator";
 
   return (
     <div className="space-y-6">
@@ -145,7 +142,7 @@ export default function AdminDashboardPage() {
           <CardDescription>Manage student information, fees, attendance, and staff for your school.</CardDescription>
         </CardHeader>
         <CardContent>
-          <p>Welcome, Administrator of {schoolName}. Use the sections below to manage your school's operations.</p>
+          <p>Welcome, {adminName} of {schoolName}. Use the sections below to manage your school's operations.</p>
         </CardContent>
       </Card>
       

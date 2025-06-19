@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2 } from "lucide-react"; // Added BarChart2
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,8 +19,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import type { AuthUser } from "@/types/user"; 
 import { getSchoolById } from "@/app/actions/schools";
-// School type is not directly used in this component after changes, but action returns it.
-// import type { School } from "@/types/school"; 
 
 const navLinksBase = {
   superadmin: [
@@ -48,6 +46,7 @@ const navLinksBase = {
     { href: "/dashboard/student", label: "Student Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/student/fees", label: "My Fees", icon: DollarSign },
     { href: "/dashboard/student/attendance", label: "My Attendance", icon: CheckSquare },
+    { href: "/dashboard/student/results", label: "Exam Results", icon: BookUser },
     { href: "/dashboard/student/profile", label: "My Profile", icon: BookUser },
   ],
 };
@@ -61,26 +60,27 @@ export function Header() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  // displaySchoolName state is no longer used for direct display in header text
-  // const [displaySchoolName, setDisplaySchoolName] = useState<string>("Scholr"); 
+  const [displaySchoolName, setDisplaySchoolName] = useState<string | null>(null); 
   const [displaySchoolLogoUrl, setDisplaySchoolLogoUrl] = useState<string | null | undefined>(null);
   const [isLoadingSchoolDetails, setIsLoadingSchoolDetails] = useState(false);
 
-  // const getShortSchoolName = (fullName: string | undefined): string => {
-  //   if (!fullName) return "Scholr";
-  //   const words = fullName.split(" ");
-  //   return words[0] || "Scholr";
-  // };
+  const getShortSchoolName = (fullName: string | undefined): string | null => {
+    if (!fullName) return null;
+    // Example: if you want to limit to first few words or characters
+    // For now, let's just use the full name if it's not too long, or a shortened version.
+    // This can be adjusted based on desired visual length.
+    return fullName.length > 30 ? fullName.substring(0, 27) + "..." : fullName;
+  };
 
   const fetchSchoolDetails = useCallback(async (schoolId: string) => {
     setIsLoadingSchoolDetails(true);
     const result = await getSchoolById(schoolId);
     if (result.success && result.school) {
-      // setDisplaySchoolName(getShortSchoolName(result.school.schoolName)); // Name no longer displayed
+      setDisplaySchoolName(getShortSchoolName(result.school.schoolName));
       setDisplaySchoolLogoUrl(result.school.schoolLogoUrl);
     } else {
       toast({ variant: "warning", title: "School Info", description: "Could not load school details for header."});
-      // setDisplaySchoolName("Scholr"); 
+      setDisplaySchoolName(null); 
       setDisplaySchoolLogoUrl(null);
     }
     setIsLoadingSchoolDetails(false);
@@ -98,32 +98,22 @@ export function Header() {
           if (parsedUser.schoolId && parsedUser.role !== 'superadmin') {
             fetchSchoolDetails(parsedUser.schoolId.toString());
           } else {
-            // setDisplaySchoolName("Scholr"); // Default for superadmin or if no schoolId
+            setDisplaySchoolName(null); 
             setDisplaySchoolLogoUrl(null);
             setIsLoadingSchoolDetails(false);
           }
         } else {
           localStorage.removeItem('loggedInUser');
           setAuthUser(null);
-          // setDisplaySchoolName("Scholr");
+          setDisplaySchoolName(null);
           setDisplaySchoolLogoUrl(null);
-          toast({
-            variant: "destructive",
-            title: "Session Error",
-            description: "Invalid session data. Please log in again.",
-          });
         }
       } catch (e) {
         console.error("Failed to parse user from localStorage in Header:", e);
         localStorage.removeItem('loggedInUser');
         setAuthUser(null);
-        // setDisplaySchoolName("Scholr");
+        setDisplaySchoolName(null);
         setDisplaySchoolLogoUrl(null);
-        toast({
-          variant: "destructive",
-          title: "Session Error",
-          description: "Your session data might be corrupted. Please log in again.",
-        });
       } finally {
         setIsLoadingUser(false);
       }
@@ -131,22 +121,19 @@ export function Header() {
       if (storedUser) { 
         localStorage.removeItem('loggedInUser');
       }
-      if (authUser !== null) { 
-        setAuthUser(null);
-      }
-      // setDisplaySchoolName("Scholr");
+      setAuthUser(null);
+      setDisplaySchoolName(null);
       setDisplaySchoolLogoUrl(null);
       setIsLoadingUser(false);
       setIsLoadingSchoolDetails(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, toast, fetchSchoolDetails]); 
+  }, [pathname, fetchSchoolDetails]); 
 
 
   const handleLogout = () => {
     localStorage.removeItem('loggedInUser');
     setAuthUser(null);
-    // setDisplaySchoolName("Scholr");
+    setDisplaySchoolName(null);
     setDisplaySchoolLogoUrl(null);
     toast({
       title: "Logged Out",
@@ -159,14 +146,38 @@ export function Header() {
   const currentRole = authUser?.role as Role | undefined;
   const currentNavLinks = currentRole ? navLinksBase[currentRole] || [] : [];
 
-  if (isLoadingUser || isLoadingSchoolDetails) {
+  const HeaderTitleContent = () => (
+    <>
+      {displaySchoolLogoUrl && authUser && authUser.role !== 'superadmin' ? (
+        <img 
+            src={displaySchoolLogoUrl} 
+            alt="School Logo" 
+            data-ai-hint="school logo"
+            className="h-8 w-8 rounded-sm object-contain"
+            onError={(e) => (e.currentTarget.style.display = 'none')} 
+        />
+      ) : (
+        <ScholrIcon className="h-7 w-7 text-primary" />
+      )}
+      {authUser?.role !== 'superadmin' && displaySchoolName && (
+        <span className="ml-2 text-sm font-medium text-muted-foreground truncate max-w-[150px] sm:max-w-[200px]">
+          {displaySchoolName}
+        </span>
+      )}
+      {authUser?.role === 'superadmin' && (
+         <span className="ml-2 font-headline">Scholr</span>
+      )}
+    </>
+  );
+
+
+  if (isLoadingUser || (authUser && authUser.role !== 'superadmin' && isLoadingSchoolDetails)) {
     return (
       <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
         <div className="container flex h-16 items-center justify-between px-4 md:px-6">
-          <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
+          <div className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
             <ScholrIcon className="h-7 w-7 text-primary" />
-            {/* Removed name span here for loading state too */}
-          </Link>
+          </div>
           <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
         </div>
       </header>
@@ -177,12 +188,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
       <div className="container flex h-16 items-center justify-between px-4 md:px-6">
         <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold sm:text-xl" onClick={() => setIsSheetOpen(false)}>
-          {displaySchoolLogoUrl && authUser && authUser.role !== 'superadmin' ? (
-            <img src={displaySchoolLogoUrl} alt="School Logo" data-ai-hint="school logo" className="h-8 w-8 rounded-sm object-contain"/>
-          ) : (
-            <ScholrIcon className="h-7 w-7 text-primary" />
-          )}
-          {/* Removed: <span className="font-headline">{displaySchoolName}</span> */}
+          <HeaderTitleContent />
         </Link>
 
         {authUser && (
@@ -253,12 +259,7 @@ export function Header() {
                   <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                   <nav className="grid gap-4 text-base font-medium">
                     <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold mb-4" onClick={() => setIsSheetOpen(false)}>
-                       {displaySchoolLogoUrl && authUser && authUser.role !== 'superadmin' ? (
-                        <img src={displaySchoolLogoUrl} alt="School Logo Mobile" data-ai-hint="school logo mobile" className="h-7 w-7 rounded-sm object-contain"/>
-                      ) : (
-                        <ScholrIcon className="h-7 w-7 text-primary" />
-                      )}
-                      {/* Removed: <span className="font-headline">{displaySchoolName}</span> */}
+                      <HeaderTitleContent />
                     </Link>
                     {currentNavLinks.map((link) => (
                       <Link
