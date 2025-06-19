@@ -3,12 +3,14 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChartBig, CalendarDays, Loader2, Info, Download, DollarSign, FileText, BadgePercent } from "lucide-react";
+import { BarChartBig, CalendarDays, Loader2, Info, Download, DollarSign, FileText, BadgePercent, Users, ShieldCheck, ShieldOff, UploadCloud, BookOpenCheck, CheckCircle2, XCircleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -17,22 +19,23 @@ import type { AttendanceRecord, AuthUser } from "@/types/attendance";
 import type { User as AppUser } from "@/types/user";
 import type { School, TermFee } from "@/types/school"; 
 import type { FeePayment } from "@/types/fees";
-import type { FeeConcession } from "@/types/concessions"; // Import FeeConcession
+import type { FeeConcession } from "@/types/concessions";
+import { getReportCardsForClass, setReportPublicationStatusForClass } from "@/app/actions/reports"; // Added new actions
+import type { BulkPublishReportInfo } from "@/types/report"; // Added type
+import { getClassesForSchoolAsOptions } from "@/app/actions/classes"; // For class dropdown
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
 import { getFeePaymentsBySchool } from "@/app/actions/fees";
-import { getFeeConcessionsForSchool } from "@/app/actions/concessions"; // Import action for concessions
+import { getFeeConcessionsForSchool } from "@/app/actions/concessions"; 
 import Link from "next/link";
 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-// Helper to determine current academic year string (e.g., "2023-2024")
 const getCurrentAcademicYear = (): string => {
   const today = new Date();
-  const currentMonth = today.getMonth(); // 0 (Jan) to 11 (Dec)
+  const currentMonth = today.getMonth(); 
   const currentYear = today.getFullYear();
-  // Assuming academic year starts in June (month 5)
   if (currentMonth >= 5) { 
     return `${currentYear}-${currentYear + 1}`;
   } else { 
@@ -60,19 +63,24 @@ interface OverallAttendanceSummary {
 
 interface ClassFeeSummary {
   className: string;
-  totalExpected: number; // Annual tuition
+  totalExpected: number; 
   totalCollected: number;
-  totalConcessions: number; // Added
+  totalConcessions: number; 
   totalDue: number;
   collectionPercentage: number;
 }
 
 interface OverallFeeSummary {
-  grandTotalExpected: number; // Annual tuition
+  grandTotalExpected: number; 
   grandTotalCollected: number;
-  grandTotalConcessions: number; // Added
+  grandTotalConcessions: number; 
   grandTotalDue: number;
   overallCollectionPercentage: number;
+}
+
+interface ClassOption {
+  value: string; // class _id
+  label: string; // "ClassName - Section"
 }
 
 
@@ -85,7 +93,7 @@ export default function AdminReportsPage() {
   const [allSchoolStudents, setAllSchoolStudents] = useState<AppUser[]>([]);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [allSchoolPayments, setAllSchoolPayments] = useState<FeePayment[]>([]);
-  const [allSchoolConcessions, setAllSchoolConcessions] = useState<FeeConcession[]>([]); // State for concessions
+  const [allSchoolConcessions, setAllSchoolConcessions] = useState<FeeConcession[]>([]);
   const [feeClassSummaries, setFeeClassSummaries] = useState<ClassFeeSummary[]>([]);
   const [feeOverallSummary, setFeeOverallSummary] = useState<OverallFeeSummary | null>(null);
 
@@ -96,6 +104,14 @@ export default function AdminReportsPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [lastFetchedSchoolId, setLastFetchedSchoolId] = useState<string | null>(null);
   const currentAcademicYear = getCurrentAcademicYear();
+
+  // States for Bulk Report Publishing
+  const [classOptions, setClassOptions] = useState<ClassOption[]>([]);
+  const [selectedClassForBulkPublish, setSelectedClassForBulkPublish] = useState<string>("");
+  const [academicYearForBulkPublish, setAcademicYearForBulkPublish] = useState<string>(currentAcademicYear);
+  const [reportsForBulkPublish, setReportsForBulkPublish] = useState<BulkPublishReportInfo[]>([]);
+  const [isLoadingBulkReports, setIsLoadingBulkReports] = useState(false);
+  const [isBulkPublishing, setIsBulkPublishing] = useState(false);
 
 
   useEffect(() => {
@@ -121,6 +137,18 @@ export default function AdminReportsPage() {
     }
   }, [toast]);
 
+  const fetchClassOptionsForBulkPublish = useCallback(async () => {
+    if (authUser?.schoolId) {
+      const options = await getClassesForSchoolAsOptions(authUser.schoolId.toString());
+      setClassOptions(options);
+    }
+  }, [authUser?.schoolId]);
+
+  useEffect(() => {
+    fetchClassOptionsForBulkPublish();
+  }, [fetchClassOptionsForBulkPublish]);
+
+
   const calculateAnnualTuitionFee = useCallback((className: string | undefined, schoolConfig: School | null): number => {
     if (!className || !schoolConfig || !schoolConfig.tuitionFees) return 0;
     const classFeeConfig = schoolConfig.tuitionFees.find(cf => cf.className === className);
@@ -138,9 +166,11 @@ export default function AdminReportsPage() {
         const summaries: ClassAttendanceSummary[] = allSchoolStudents
             .reduce((acc, student) => { 
                 if (student.classId) {
-                    let classGroup = acc.find(g => g.className === student.classId);
+                    const classObj = classOptions.find(c => c.value === student.classId);
+                    const classNameForSummary = classObj?.label || student.classId;
+                    let classGroup = acc.find(g => g.className === classNameForSummary);
                     if (!classGroup) {
-                        classGroup = { className: student.classId, students: [] };
+                        classGroup = { className: classNameForSummary, students: [] };
                         acc.push(classGroup);
                     }
                     classGroup.students.push(student);
@@ -172,16 +202,20 @@ export default function AdminReportsPage() {
 
     allSchoolStudents.forEach(student => {
       if (student.classId) {
-        if (!classMap.has(student.classId)) {
-          classMap.set(student.classId, { students: [], present: 0, absent: 0, late: 0 });
+        const classObj = classOptions.find(c => c.value === student.classId);
+        const classNameForSummary = classObj?.label || student.classId;
+        if (!classMap.has(classNameForSummary)) {
+          classMap.set(classNameForSummary, { students: [], present: 0, absent: 0, late: 0 });
         }
-        classMap.get(student.classId)!.students.push(student);
+        classMap.get(classNameForSummary)!.students.push(student);
       }
     });
     
     attendanceRecords.forEach(record => {
-      if (classMap.has(record.className)) {
-        const classData = classMap.get(record.className)!;
+      const classObj = classOptions.find(c => c.value === record.classId.toString()); // classId from attendance is ObjectId string
+      const classNameForSummary = classObj?.label || record.className; // Use record.className as fallback if classId mapping fails
+      if (classMap.has(classNameForSummary)) {
+        const classData = classMap.get(classNameForSummary)!;
         if (record.status === 'present') classData.present++;
         else if (record.status === 'absent') classData.absent++;
         else if (record.status === 'late') classData.late++;
@@ -234,7 +268,7 @@ export default function AdminReportsPage() {
     
     setClassSummaries(summaries.sort((a, b) => a.className.localeCompare(b.className)));
 
-  }, [allSchoolStudents, attendanceRecords, reportDate]);
+  }, [allSchoolStudents, attendanceRecords, reportDate, classOptions]);
 
 
  const processFeeData = useCallback(() => {
@@ -246,13 +280,17 @@ export default function AdminReportsPage() {
 
     let grandTotalExpected = 0;
     let grandTotalCollected = 0;
-    let grandTotalConcessions = 0; // For overall summary
+    let grandTotalConcessions = 0; 
 
     const classFeeMap = new Map<string, { totalExpected: number, totalCollected: number, totalConcessions: number, studentCount: number }>();
 
     allSchoolStudents.forEach(student => {
       if (student.classId) {
-        const studentTotalAnnualTuitionFee = calculateAnnualTuitionFee(student.classId, schoolDetails);
+        const classObj = classOptions.find(c => c.value === student.classId);
+        const classNameForSummary = classObj?.name || student.classId; // Use original class name for tuition fee lookup
+        const displayClassName = classObj?.label || student.classId; // Use label for display
+
+        const studentTotalAnnualTuitionFee = calculateAnnualTuitionFee(classNameForSummary, schoolDetails);
         const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id.toString());
         const studentTotalPaid = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
         
@@ -265,10 +303,10 @@ export default function AdminReportsPage() {
         grandTotalCollected += studentTotalPaid;
         grandTotalConcessions += studentTotalConcessions;
 
-        if (!classFeeMap.has(student.classId)) {
-          classFeeMap.set(student.classId, { totalExpected: 0, totalCollected: 0, totalConcessions: 0, studentCount: 0 });
+        if (!classFeeMap.has(displayClassName)) {
+          classFeeMap.set(displayClassName, { totalExpected: 0, totalCollected: 0, totalConcessions: 0, studentCount: 0 });
         }
-        const classData = classFeeMap.get(student.classId)!;
+        const classData = classFeeMap.get(displayClassName)!;
         classData.totalExpected += studentTotalAnnualTuitionFee;
         classData.totalCollected += studentTotalPaid;
         classData.totalConcessions += studentTotalConcessions;
@@ -284,9 +322,9 @@ export default function AdminReportsPage() {
       
       feeSummaries.push({
         className,
-        totalExpected: data.totalExpected, // Gross expected before concessions
+        totalExpected: data.totalExpected, 
         totalCollected: data.totalCollected,
-        totalConcessions: data.totalConcessions, // Class total concessions
+        totalConcessions: data.totalConcessions, 
         totalDue,
         collectionPercentage,
       });
@@ -305,7 +343,7 @@ export default function AdminReportsPage() {
     });
     setFeeClassSummaries(feeSummaries.sort((a,b) => a.className.localeCompare(b.className)));
 
-  }, [allSchoolStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, calculateAnnualTuitionFee, currentAcademicYear]);
+  }, [allSchoolStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, calculateAnnualTuitionFee, currentAcademicYear, classOptions]);
 
 
   useEffect(() => {
@@ -328,12 +366,15 @@ export default function AdminReportsPage() {
 
     if (isManualRefresh || lastFetchedSchoolId !== authUser.schoolId.toString()) {
       try {
-        const [studentsResult, schoolRes, paymentsResult, concessionsResult] = await Promise.all([
+        const [studentsResult, schoolRes, paymentsResult, concessionsResult, classesOptRes] = await Promise.all([
           getSchoolUsers(authUser.schoolId.toString()),
           getSchoolById(authUser.schoolId.toString()),
           getFeePaymentsBySchool(authUser.schoolId.toString()),
-          getFeeConcessionsForSchool(authUser.schoolId.toString(), currentAcademicYear) // Fetch concessions for current year
+          getFeeConcessionsForSchool(authUser.schoolId.toString(), currentAcademicYear),
+          getClassesForSchoolAsOptions(authUser.schoolId.toString())
         ]);
+        
+        if (classesOptRes) setClassOptions(classesOptRes);
 
         if (studentsResult.success && studentsResult.users) {
           setAllSchoolStudents(studentsResult.users.filter(u => u.role === 'student'));
@@ -508,6 +549,43 @@ export default function AdminReportsPage() {
     }
   };
 
+  const handleLoadReportsForBulkPublish = async () => {
+    if (!authUser?.schoolId || !selectedClassForBulkPublish || !academicYearForBulkPublish) {
+      toast({ variant: "destructive", title: "Missing Information", description: "Please select a class and academic year."});
+      setReportsForBulkPublish([]);
+      return;
+    }
+    setIsLoadingBulkReports(true);
+    const result = await getReportCardsForClass(authUser.schoolId.toString(), selectedClassForBulkPublish, academicYearForBulkPublish);
+    if (result.success && result.reports) {
+      setReportsForBulkPublish(result.reports);
+      if (result.reports.length === 0) {
+        toast({title: "No Reports Found", description: "No existing report cards found for this class and academic year to publish."});
+      }
+    } else {
+      toast({variant: "destructive", title: "Error Loading Reports", description: result.message || "Could not load reports."});
+      setReportsForBulkPublish([]);
+    }
+    setIsLoadingBulkReports(false);
+  };
+
+  const handleBulkPublishAction = async (publish: boolean) => {
+    if (!authUser?.schoolId || !selectedClassForBulkPublish || !academicYearForBulkPublish || reportsForBulkPublish.length === 0) {
+      toast({ variant: "destructive", title: "Error", description: "No reports loaded or selection missing."});
+      return;
+    }
+    setIsBulkPublishing(true);
+    const result = await setReportPublicationStatusForClass(authUser.schoolId.toString(), selectedClassForBulkPublish, academicYearForBulkPublish, publish);
+    if (result.success) {
+      toast({ title: "Bulk Update Successful", description: result.message});
+      // Refresh the list
+      handleLoadReportsForBulkPublish();
+    } else {
+      toast({variant: "destructive", title: "Bulk Update Failed", description: result.message || "Could not update report statuses."});
+    }
+    setIsBulkPublishing(false);
+  };
+
 
   return (
     <div className="space-y-6">
@@ -538,6 +616,91 @@ export default function AdminReportsPage() {
             </Button>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Bulk Report Card Publishing</CardTitle>
+          <CardDescription>Publish or unpublish all report cards for a selected class and academic year.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="flex-grow">
+              <Label htmlFor="bulk-class-select">Select Class</Label>
+              <Select onValueChange={setSelectedClassForBulkPublish} value={selectedClassForBulkPublish} disabled={isLoadingBulkReports || isBulkPublishing || classOptions.length === 0}>
+                <SelectTrigger id="bulk-class-select">
+                  <SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {classOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-grow">
+              <Label htmlFor="bulk-academic-year">Academic Year</Label>
+              <Input id="bulk-academic-year" value={academicYearForBulkPublish} onChange={(e) => setAcademicYearForBulkPublish(e.target.value)} placeholder="YYYY-YYYY" disabled={isLoadingBulkReports || isBulkPublishing}/>
+            </div>
+            <Button onClick={handleLoadReportsForBulkPublish} disabled={isLoadingBulkReports || isBulkPublishing || !selectedClassForBulkPublish || !academicYearForBulkPublish.match(/^\d{4}-\d{4}$/)}>
+              {isLoadingBulkReports ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Users className="mr-2 h-4 w-4"/>} Load Reports
+            </Button>
+          </div>
+
+          {reportsForBulkPublish.length > 0 && !isLoadingBulkReports && (
+            <div className="space-y-3 mt-4">
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => handleBulkPublishAction(true)} 
+                  disabled={isBulkPublishing} 
+                  variant="default"
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isBulkPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldCheck className="mr-2 h-4 w-4"/>} Publish All Loaded ({reportsForBulkPublish.filter(r => r.hasReport).length})
+                </Button>
+                <Button 
+                  onClick={() => handleBulkPublishAction(false)} 
+                  disabled={isBulkPublishing} 
+                  variant="destructive"
+                >
+                  {isBulkPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldOff className="mr-2 h-4 w-4"/>} Unpublish All Loaded ({reportsForBulkPublish.filter(r => r.hasReport).length})
+                </Button>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student Name</TableHead>
+                    <TableHead>Admission ID</TableHead>
+                    <TableHead>Report Exists?</TableHead>
+                    <TableHead>Current Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reportsForBulkPublish.map(report => (
+                    <TableRow key={report.studentId}>
+                      <TableCell>{report.studentName}</TableCell>
+                      <TableCell>{report.admissionId}</TableCell>
+                       <TableCell className="text-center">
+                        {report.hasReport ? <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" /> : <XCircleIcon className="h-5 w-5 text-red-500 mx-auto" />}
+                      </TableCell>
+                      <TableCell>
+                        {report.hasReport ? (report.isPublished ? 
+                          <span className="text-green-600 font-semibold">Published</span> : 
+                          <span className="text-red-600 font-semibold">Not Published</span>
+                        ) : (
+                          <span className="text-muted-foreground">No Report</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+           {isLoadingBulkReports && <div className="text-center p-4"><Loader2 className="h-6 w-6 animate-spin text-primary"/> Loading student report statuses...</div>}
+           {!isLoadingBulkReports && reportsForBulkPublish.length === 0 && selectedClassForBulkPublish && (
+                <p className="text-center text-muted-foreground py-4">No reports found for the selected class and year, or no students in class.</p>
+            )}
+        </CardContent>
+      </Card>
+
 
       <Card>
         <CardHeader>
@@ -780,3 +943,4 @@ export default function AdminReportsPage() {
   );
 }
 
+```

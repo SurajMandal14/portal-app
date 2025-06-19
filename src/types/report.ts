@@ -62,3 +62,14 @@ export interface GetStudentReportCardResult {
   error?: string;
 }
 
+// For bulk publishing UI
+export interface BulkPublishReportInfo {
+  reportId: string | null; // ObjectId as string or null if no report exists
+  studentId: string;
+  studentName: string;
+  admissionId?: string;
+  isPublished: boolean;
+  hasReport: boolean; // True if a report document exists for this student/year
+}
+
+```

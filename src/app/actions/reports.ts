@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { ReportCardData, SaveReportCardResult, SetReportCardPublicationStatusResult, GetStudentReportCardResult } from '@/types/report';
+import type { ReportCardData, SaveReportCardResult, SetReportCardPublicationStatusResult, GetStudentReportCardResult, BulkPublishReportInfo } from '@/types/report';
 import { ObjectId } from 'mongodb';
 import type { User } from '@/types/user'; 
 import { getSchoolById } from './schools'; 
@@ -39,7 +39,7 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
     const { studentId, schoolId: schoolIdStr, academicYear, reportCardTemplateKey, studentInfo, formativeAssessments, coCurricularAssessments, secondLanguage, summativeAssessments, attendance, finalOverallGrade, generatedByAdminId: adminIdStr, term } = validatedData.data;
     
     const reportBaseData = {
-        studentId, // This is a string (User._id)
+        studentId, 
         schoolId: new ObjectId(schoolIdStr),
         academicYear,
         reportCardTemplateKey,
@@ -67,7 +67,7 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
     if (existingReport) {
         const result = await reportCardsCollection.updateOne(
             { _id: existingReport._id as ObjectId },
-            { $set: reportBaseData } // isPublished status is NOT changed here, only by setReportCardPublicationStatus
+            { $set: reportBaseData } 
         );
         if (result.modifiedCount === 0 && result.matchedCount === 0) {
              return { success: false, message: 'Failed to update report card. Report not found after initial check, or no changes made.' };
@@ -157,7 +157,7 @@ export async function getStudentReportCard(
   publishedOnly?: boolean 
 ): Promise<GetStudentReportCardResult> {
   try {
-    if (!ObjectId.isValid(schoolId)) { // StudentId is a string from User._id, no need to check here
+    if (!ObjectId.isValid(schoolId)) { 
       return { success: false, message: 'Invalid school ID format.' };
     }
 
@@ -175,7 +175,7 @@ export async function getStudentReportCard(
     const reportCardsCollection = db.collection<ReportCardData>('report_cards');
 
     const query: any = {
-      studentId: studentId, // studentId is stored as a string (User._id) in report_cards
+      studentId: studentId, 
       schoolId: new ObjectId(schoolId),
       academicYear: academicYear,
       reportCardTemplateKey: 'cbse_state', 
@@ -194,10 +194,11 @@ export async function getStudentReportCard(
     });
 
     if (!reportCardDoc) {
+      let message = 'No report card found for the specified criteria.';
       if (publishedOnly) {
-        return { success: false, message: 'Your report card for this academic year has not been published yet or is not available. Please check back later or contact your school.' };
+        message = 'Your report card for this academic year has not been published yet or is not available. Please check back later or contact your school.';
       }
-      return { success: false, message: 'No report card found for the specified criteria.' };
+      return { success: false, message };
     }
     
     const reportCard: ReportCardData = {
@@ -220,3 +221,122 @@ export async function getStudentReportCard(
   }
 }
 
+export interface GetReportCardsForClassResult {
+  success: boolean;
+  reports?: BulkPublishReportInfo[];
+  message?: string;
+  error?: string;
+}
+
+export async function getReportCardsForClass(schoolId: string, classId: string, academicYear: string): Promise<GetReportCardsForClassResult> {
+  try {
+    if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(classId)) {
+      return { success: false, message: 'Invalid School or Class ID format.' };
+    }
+    if (!academicYear || !/^\d{4}-\d{4}$/.test(academicYear)) {
+      return { success: false, message: 'Valid Academic Year (YYYY-YYYY) is required.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const reportCardsCollection = db.collection<ReportCardData>('report_cards');
+    const usersCollection = db.collection<User>('users');
+    
+    // First, get all student IDs for the given classId and schoolId
+    const studentsInClass = await usersCollection.find({
+      schoolId: new ObjectId(schoolId),
+      classId: classId, 
+      role: 'student'
+    }).project({ _id: 1, name: 1, admissionId: 1 }).toArray();
+
+    if (studentsInClass.length === 0) {
+      return { success: true, reports: [], message: 'No students found in this class.' };
+    }
+    const studentIds = studentsInClass.map(s => s._id.toString());
+
+    // Then, fetch report cards for these students for the given academic year
+    const reportDocs = await reportCardsCollection.find({
+      schoolId: new ObjectId(schoolId),
+      studentId: { $in: studentIds },
+      academicYear: academicYear,
+      reportCardTemplateKey: 'cbse_state', // Assuming 'cbse_state' template
+    }).project({ _id: 1, studentId: 1, 'studentInfo.studentName': 1, isPublished: 1 }).toArray();
+    
+    // Combine student info with their report status
+    const reportsInfo: BulkPublishReportInfo[] = studentsInClass.map(student => {
+      const report = reportDocs.find(r => r.studentId === student._id.toString());
+      return {
+        reportId: report?._id.toString() || null, // Report ID if exists
+        studentId: student._id.toString(),
+        studentName: student.name,
+        admissionId: student.admissionId || 'N/A',
+        isPublished: report ? report.isPublished || false : false,
+        hasReport: !!report,
+      };
+    }).sort((a, b) => a.studentName.localeCompare(b.studentName));
+
+
+    return { success: true, reports: reportsInfo };
+
+  } catch (error) {
+    console.error('Get report cards for class error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch report cards for class.' };
+  }
+}
+
+
+export interface SetReportPublicationStatusForClassResult {
+  success: boolean;
+  updatedCount: number;
+  message: string;
+  error?: string;
+}
+
+export async function setReportPublicationStatusForClass(schoolId: string, classId: string, academicYear: string, isPublished: boolean): Promise<SetReportPublicationStatusForClassResult> {
+  try {
+    if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(classId)) {
+      return { success: false, updatedCount: 0, message: 'Invalid School or Class ID format.' };
+    }
+     if (!academicYear || !/^\d{4}-\d{4}$/.test(academicYear)) {
+      return { success: false, updatedCount: 0, message: 'Valid Academic Year (YYYY-YYYY) is required.' };
+    }
+    
+    const { db } = await connectToDatabase();
+    const reportCardsCollection = db.collection<ReportCardData>('report_cards');
+    const usersCollection = db.collection<User>('users');
+
+    // Get all student IDs for the given classId and schoolId
+    const studentsInClass = await usersCollection.find({
+      schoolId: new ObjectId(schoolId),
+      classId: classId, 
+      role: 'student'
+    }).project({ _id: 1 }).toArray();
+
+    if (studentsInClass.length === 0) {
+      return { success: true, updatedCount: 0, message: 'No students found in this class to update reports for.' };
+    }
+    const studentIds = studentsInClass.map(s => s._id.toString());
+
+    const result = await reportCardsCollection.updateMany(
+      { 
+        schoolId: new ObjectId(schoolId), 
+        studentId: { $in: studentIds },
+        academicYear: academicYear,
+        reportCardTemplateKey: 'cbse_state', 
+      },
+      { $set: { isPublished: isPublished, updatedAt: new Date() } }
+    );
+    
+    return { 
+      success: true, 
+      updatedCount: result.modifiedCount,
+      message: `${result.modifiedCount} report cards ${isPublished ? 'published' : 'unpublished'} successfully for class.`
+    };
+
+  } catch (error) {
+    console.error('Set report publication status for class error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, updatedCount: 0, message: 'An unexpected error occurred.', error: errorMessage };
+  }
+}
+```
