@@ -586,6 +586,8 @@ export default function AdminReportsPage() {
     setIsBulkPublishing(false);
   };
 
+  const reportsThatExistCount = reportsForBulkPublish.filter(r => r.hasReport).length;
+
 
   return (
     <div className="space-y-6">
@@ -620,7 +622,7 @@ export default function AdminReportsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Bulk Report Card Publishing</CardTitle>
-          <CardDescription>Publish or unpublish all report cards for a selected class and academic year.</CardDescription>
+          <CardDescription>Publish or unpublish existing, generated report cards for a selected class and academic year.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 items-end">
@@ -649,18 +651,18 @@ export default function AdminReportsPage() {
               <div className="flex gap-2">
                 <Button
                   onClick={() => handleBulkPublishAction(true)}
-                  disabled={isBulkPublishing}
+                  disabled={isBulkPublishing || reportsThatExistCount === 0}
                   variant="default"
                   className="bg-green-600 hover:bg-green-700"
                 >
-                  {isBulkPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldCheck className="mr-2 h-4 w-4"/>} Publish All Loaded ({reportsForBulkPublish.filter(r => r.hasReport).length})
+                  {isBulkPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldCheck className="mr-2 h-4 w-4"/>} Publish All ({reportsThatExistCount})
                 </Button>
                 <Button
                   onClick={() => handleBulkPublishAction(false)}
-                  disabled={isBulkPublishing}
+                  disabled={isBulkPublishing || reportsThatExistCount === 0}
                   variant="destructive"
                 >
-                  {isBulkPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldOff className="mr-2 h-4 w-4"/>} Unpublish All Loaded ({reportsForBulkPublish.filter(r => r.hasReport).length})
+                  {isBulkPublishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldOff className="mr-2 h-4 w-4"/>} Unpublish All ({reportsThatExistCount})
                 </Button>
               </div>
               <Table>
@@ -942,3 +944,5 @@ export default function AdminReportsPage() {
     </div>
   );
 }
+
+    
