@@ -3,10 +3,10 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, CheckSquare, Percent, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks, RefreshCw, AlertTriangle, Award } from "lucide-react";
+import { DollarSign, CheckSquare, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks, RefreshCw, AlertTriangle, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { StudentDataProvider, useStudentData } from '@/contexts/StudentDataContext';
+import { useStudentData } from '@/contexts/StudentDataContext'; // StudentDataProvider is no longer imported here
 
 function StudentDashboardContent() {
   const {
@@ -66,6 +66,7 @@ function StudentDashboardContent() {
             <CardTitle className="text-2xl font-headline">Student Dashboard</CardTitle>
             <CardDescription>
               Welcome, {authUser.name}!
+              {authUser.admissionId && ` (Adm. No: ${authUser.admissionId})`}
               {authUser.classId && ` (Class: ${authUser.classId})`}
             </CardDescription>
           </div>
@@ -156,9 +157,5 @@ function StudentDashboardContent() {
 
 
 export default function StudentDashboardPage() {
-  return (
-    <StudentDataProvider>
-      <StudentDashboardContent />
-    </StudentDataProvider>
-  );
+  return <StudentDashboardContent />;
 }
