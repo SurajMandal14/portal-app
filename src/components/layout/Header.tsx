@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase } from "lucide-react";
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase, Award } from "lucide-react"; // Added Award
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,7 +47,7 @@ const navLinksBase = {
     { href: "/dashboard/student", label: "Student Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/student/fees", label: "My Fees", icon: DollarSign },
     { href: "/dashboard/student/attendance", label: "My Attendance", icon: CheckSquare },
-    { href: "/dashboard/student/results", label: "Exam Results", icon: BookUser },
+    { href: "/dashboard/student/results", label: "Exam Results", icon: Award }, // Changed icon to Award
     { href: "/dashboard/student/profile", label: "My Profile", icon: BookUser },
   ],
 };
@@ -272,8 +272,8 @@ export function Header() {
                       <p className="text-sm font-medium leading-none">{authUser.name}</p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {authUser.email} ({authUser.role && authUser.role.charAt(0).toUpperCase() + authUser.role.slice(1)})
-                         {authUser.classId && authUser.role === 'student' && ` - ${authUser.classId}`}
-                         {authUser.classId && authUser.role === 'teacher' && ` - Class: ${authUser.classId}`}
+                         {authUser.role === 'student' && authUser.admissionId && ` - Adm No: ${authUser.admissionId}`}
+                         {authUser.classId && (authUser.role === 'student' || authUser.role === 'teacher') && ` - Class: ${authUser.classId}`}
                       </p>
                     </div>
                   </DropdownMenuLabel>

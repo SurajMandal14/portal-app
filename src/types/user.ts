@@ -36,7 +36,7 @@ export interface User {
 }
 
 // Centralized AuthUser type
-export type AuthUser = Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId' | 'classId' | 'avatarUrl'>;
+export type AuthUser = Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId' | 'classId' | 'avatarUrl' | 'admissionId'>;
 
 
 // Zod schema for Super Admin creating/updating School Admins
@@ -183,4 +183,3 @@ export const updateProfileFormSchema = z.object({
   avatarUrl: z.string().url("Invalid URL format for avatar.").optional().or(z.literal('')),
 });
 export type UpdateProfileFormData = z.infer<typeof updateProfileFormSchema>;
-

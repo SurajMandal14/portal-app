@@ -13,6 +13,17 @@ import { getFeePaymentsByStudent } from "@/app/actions/fees";
 import type { FeePayment } from "@/types/fees";
 import { useStudentData } from "@/contexts/StudentDataContext"; // Import context
 
+const getCurrentAcademicYearLocal = (): string => {
+  const today = new Date();
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+  if (currentMonth >= 5) { 
+    return `${currentYear}-${currentYear + 1}`;
+  } else { 
+    return `${currentYear - 1}-${currentYear}`;
+  }
+};
+
 export default function StudentFeesPage() {
   const { 
     authUser, 
@@ -48,6 +59,8 @@ export default function StudentFeesPage() {
       fetchPayments();
     }
   }, [authUser, fetchPayments]);
+
+  const displayAcademicYear = schoolDetails?.academicYear || getCurrentAcademicYearLocal();
 
   if (isLoadingContext) {
     return (
@@ -88,6 +101,10 @@ export default function StudentFeesPage() {
     );
   }
 
+  const netPayable = feeSummary ? feeSummary.totalFee - feeSummary.totalConcessions : 0;
+  const displayPercentage = feeSummary ? feeSummary.percentagePaid : 0;
+
+
   return (
     <div className="space-y-6">
       <Card>
@@ -95,14 +112,14 @@ export default function StudentFeesPage() {
           <CardTitle className="text-2xl font-headline flex items-center">
             <DollarSign className="mr-2 h-6 w-6" /> My Fee Status
           </CardTitle>
-          <CardDescription>Overview of your fee payments, concessions, and dues for {authUser.classId}.</CardDescription>
+          <CardDescription>Overview of your fee payments, concessions, and dues for class {authUser.classId}.</CardDescription>
         </CardHeader>
       </Card>
 
       {feeSummary ? (
         <Card>
           <CardHeader>
-            <CardTitle>Fee Summary (Annual Tuition for {schoolDetails?.academicYear || new Date().getFullYear()})</CardTitle>
+            <CardTitle>Fee Summary (Annual Tuition for {displayAcademicYear})</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <div className="flex flex-col space-y-1 rounded-lg border p-4 shadow-sm">
@@ -129,19 +146,15 @@ export default function StudentFeesPage() {
                 <ListChecks className="h-5 w-5 text-blue-500" />
               </div>
               <p className="text-2xl font-bold">
-                {feeSummary.totalFee - feeSummary.totalConcessions > 0 
-                  ? `${Math.round((feeSummary.totalPaid / (feeSummary.totalFee - feeSummary.totalConcessions)) * 100)}%`
-                  : feeSummary.totalPaid > 0 ? '100%+' : '0%'}
+                {displayPercentage}%
               </p>
               <Progress 
-                value={feeSummary.totalFee - feeSummary.totalConcessions > 0 
-                  ? Math.round((feeSummary.totalPaid / (feeSummary.totalFee - feeSummary.totalConcessions)) * 100) 
-                  : (feeSummary.totalPaid > 0 ? 100 : 0) } 
+                value={displayPercentage} 
                 className="h-3 mt-1" 
               />
               <p className="text-xs text-muted-foreground">
                 <span className="font-sans">₹</span>{feeSummary.totalPaid.toLocaleString()} paid / 
-                <span className="font-sans">₹</span>{(feeSummary.totalFee - feeSummary.totalConcessions).toLocaleString()} net payable
+                <span className="font-sans">₹</span>{netPayable.toLocaleString()} net payable
               </p>
             </div>
           </CardContent>
@@ -158,8 +171,8 @@ export default function StudentFeesPage() {
       {appliedConcessions.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center"><BadgePercent className="mr-2 h-5 w-5 text-blue-600" />Applied Concessions (Current Academic Year)</CardTitle>
-            <CardDescription>List of fee concessions applied to your account for the current academic year.</CardDescription>
+            <CardTitle className="flex items-center"><BadgePercent className="mr-2 h-5 w-5 text-blue-600" />Applied Concessions (Academic Year: {displayAcademicYear})</CardTitle>
+            <CardDescription>List of fee concessions applied to your account.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>

@@ -175,7 +175,20 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
             const totalPaid = studentPayments.reduce((sum, payment) => sum + payment.amountPaid, 0);
             const totalConcessionsAmount = studentConcessions.reduce((sum, concession) => sum + concession.amount, 0);
             const totalDue = totalAnnualTuitionFee - totalPaid - totalConcessionsAmount;
-            const percentagePaid = totalAnnualTuitionFee > 0 ? Math.round((totalPaid / totalAnnualTuitionFee) * 100) : 0;
+            
+            const netPayable = totalAnnualTuitionFee - totalConcessionsAmount;
+            let percentagePaid = 0;
+            if (netPayable > 0) {
+              percentagePaid = Math.round((totalPaid / netPayable) * 100);
+            } else if (netPayable <= 0 && totalPaid > 0) {
+              percentagePaid = 100; // Fully paid or overpaid if net payable is zero/negative but something was paid
+            } else if (netPayable <= 0 && totalPaid <= 0) {
+              percentagePaid = 0; // Or 100 if fee is 0 and no payment, depends on interpretation
+            }
+            // Ensure percentage doesn't exceed 100 for display if overpaid relative to net
+            percentagePaid = Math.min(percentagePaid, 100);
+
+
             setFeeSummary({ totalFee: totalAnnualTuitionFee, totalPaid, totalConcessions: totalConcessionsAmount, totalDue, percentagePaid });
         } else {
             setFeeSummary({ totalFee: 0, totalPaid: 0, totalConcessions: 0, totalDue: 0, percentagePaid: 0 });
