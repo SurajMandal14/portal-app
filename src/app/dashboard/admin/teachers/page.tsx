@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, Briefcase, XCircle, UserMinus } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, Briefcase, XCircle, UserMinus, UserCheck } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
@@ -218,6 +218,21 @@ export default function AdminTeacherManagementPage() {
     setIsActionDialogOpen(false);
     setUserToUpdate(null);
   };
+
+  const handleReactivate = async () => {
+    if (!userToUpdate?._id || !authUser?.schoolId) return;
+    setIsStatusUpdateLoading(true);
+    const result = await updateUserStatus(userToUpdate._id.toString(), authUser.schoolId.toString(), 'active');
+    if (result.success) {
+      toast({ title: "Status Updated", description: result.message });
+      fetchInitialData();
+    } else {
+      toast({ variant: "destructive", title: "Update Failed", description: result.error || result.message });
+    }
+    setIsStatusUpdateLoading(false);
+    setIsActionDialogOpen(false);
+    setUserToUpdate(null);
+  };
   
   const handleConfirmDelete = async () => {
     if (!userToUpdate?._id || !authUser?.schoolId) return;
@@ -349,16 +364,28 @@ export default function AdminTeacherManagementPage() {
       <AlertDialog open={isActionDialogOpen} onOpenChange={setIsActionDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Update status for {userToUpdate?.name}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {userToUpdate?.status === 'discontinued'
+                ? `Reactivate ${userToUpdate?.name}?`
+                : `Update status for ${userToUpdate?.name}?`}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Mark the user as 'Discontinued' to deactivate their account while preserving records. Or, 'Delete Permanently' to remove all data, which cannot be undone.
+              {userToUpdate?.status === 'discontinued'
+                ? "This will set the user's status back to 'active', allowing them to log in and use the system again."
+                : "You can mark the user as 'Discontinued' to deactivate their account while preserving records. Or, 'Delete Permanently' to remove all data, which cannot be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setUserToUpdate(null)}>Cancel</AlertDialogCancel>
-            <Button variant="outline" onClick={handleDiscontinue} disabled={isStatusUpdateLoading}>
-              {isStatusUpdateLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserMinus className="mr-2 h-4 w-4"/>} Discontinue
-            </Button>
+            {userToUpdate?.status === 'discontinued' ? (
+              <Button variant="outline" onClick={handleReactivate} disabled={isStatusUpdateLoading}>
+                {isStatusUpdateLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserCheck className="mr-2 h-4 w-4"/>} Reactivate
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={handleDiscontinue} disabled={isStatusUpdateLoading}>
+                {isStatusUpdateLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserMinus className="mr-2 h-4 w-4"/>} Discontinue
+              </Button>
+            )}
             <Button variant="destructive" onClick={() => { setIsActionDialogOpen(false); setIsConfirmDeleteDialogOpen(true); }} disabled={isStatusUpdateLoading}>
               <Trash2 className="mr-2 h-4 w-4"/> Delete Permanently
             </Button>
