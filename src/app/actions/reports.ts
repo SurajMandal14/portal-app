@@ -3,42 +3,11 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { ReportCardData, SaveReportCardResult, SetReportCardPublicationStatusResult, GetStudentReportCardResult, BulkPublishReportInfo, ReportCardSASubjectEntry } from '@/types/report'; // Ensure ReportCardSASubjectEntry is imported
+import type { ReportCardData, SaveReportCardResult, SetReportCardPublicationStatusResult, GetStudentReportCardResult, BulkPublishReportInfo } from '@/types/report';
+import { reportCardDataSchemaForSave } from '@/types/report'; // Import the new schema from types/report
 import { ObjectId } from 'mongodb';
 import type { User } from '@/types/user'; 
 import { getSchoolById } from './schools'; 
-
-// Adjusted Zod schema for saving to match the new ReportCardSASubjectEntry structure
-const saPaperScoreSchemaForSave = z.object({
-  marks: z.number().nullable(),
-  maxMarks: z.number().nullable(),
-});
-
-const reportCardSASubjectEntrySchemaForSave = z.object({
-  subjectName: z.string(),
-  paper: z.string(),
-  sa1: saPaperScoreSchemaForSave,
-  sa2: saPaperScoreSchemaForSave,
-  faTotal200M: z.number().nullable(),
-});
-
-
-const reportCardDataSchemaForSave = z.object({
-  studentId: z.string().min(1, "Student ID is required."),
-  schoolId: z.string().min(1, "School ID is required."),
-  academicYear: z.string().min(4, "Academic year is required."),
-  reportCardTemplateKey: z.string().min(1, "Report card template key is required."),
-  studentInfo: z.any(), 
-  formativeAssessments: z.array(z.any()),
-  coCurricularAssessments: z.array(z.any()),
-  secondLanguage: z.enum(['Hindi', 'Telugu']).optional(),
-  summativeAssessments: z.array(reportCardSASubjectEntrySchemaForSave), // Use the new schema here
-  attendance: z.array(z.any()),
-  finalOverallGrade: z.string().nullable(),
-  generatedByAdminId: z.string().optional(),
-  term: z.string().optional(),
-});
-
 
 export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'createdAt' | 'updatedAt' | 'isPublished'>): Promise<SaveReportCardResult> {
   try {
@@ -59,10 +28,10 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
         academicYear,
         reportCardTemplateKey,
         studentInfo,
-        formativeAssessments, // This structure from front-end has subjectName, fa1, fa2, fa3, fa4
+        formativeAssessments,
         coCurricularAssessments,
         secondLanguage,
-        summativeAssessments, // This now uses ReportCardSASubjectEntry structure
+        summativeAssessments, // This now uses the new schema with AS1-AS6
         attendance,
         finalOverallGrade,
         generatedByAdminId: adminIdStr ? new ObjectId(adminIdStr) : undefined,

@@ -1,8 +1,8 @@
 
 import type { ObjectId } from 'mongodb';
+import { z } from 'zod';
 import type { ReportCardTemplateKey } from './school';
-import type { StudentData as FrontStudentData, MarksEntry as FrontMarksEntryType } from '@/components/report-cards/CBSEStateFront'; // Renamed MarksEntry to avoid conflict
-// Removed BackSARowData and BackAttendanceMonthData imports as their structures will be defined here or derived
+import type { StudentData as FrontStudentData, MarksEntry as FrontMarksEntryType } from '@/components/report-cards/CBSEStateFront';
 
 // Define a structure for storing FA marks that includes the subject identifier
 export interface FormativeAssessmentEntryForStorage {
@@ -13,22 +13,38 @@ export interface FormativeAssessmentEntryForStorage {
   fa4: FrontMarksEntryType;
 }
 
-// New Structure for SA Paper Scores
-export interface SAPaperScore {
-  marks: number | null;
-  maxMarks: number | null;
+// Structure for the 6 Assessment Skill marks for a given SA period
+export interface SAPeriodMarks {
+  as1: number | null;
+  as2: number | null;
+  as3: number | null;
+  as4: number | null;
+  as5: number | null;
+  as6: number | null;
 }
 
-// New Structure for SA data per subject/paper row for storage and display
+// Structure for the max marks of the 6 Assessment Skills
+export interface SAMaxMarks {
+  as1: number;
+  as2: number;
+  as3: number;
+  as4: number;
+  as5: number;
+  as6: number;
+}
+
+// Main structure for Summative Assessment data per subject in a saved report
 export interface ReportCardSASubjectEntry {
-  subjectName: string; // e.g., "Telugu", "Hindi", "English", "Maths", "Science", "Social"
-  paper: string; // e.g., "I", "II" for most, or "Physics", "Biology" for Science papers
-  sa1: SAPaperScore;
-  sa2: SAPaperScore;
-  faTotal200M: number | null; // This is the sum of FA1-FA4 (200M total from FA marks table)
+  subjectName: string; 
+  sa1_marks: SAPeriodMarks;
+  sa1_max_marks: SAMaxMarks;
+  sa2_marks: SAPeriodMarks;
+  sa2_max_marks: SAMaxMarks;
+  faTotal200M: number | null; 
 }
 
-// Structure for Attendance data for storage and display (can remain similar)
+
+// Structure for Attendance data for storage and display
 export interface ReportCardAttendanceMonth {
   workingDays: number | null;
   presentDays: number | null;
@@ -37,18 +53,18 @@ export interface ReportCardAttendanceMonth {
 
 export interface ReportCardData {
   _id?: ObjectId | string;
-  studentId: string; // Reference to the User._id of the student
-  schoolId: ObjectId | string; // Reference to the School._id
-  academicYear: string; // e.g., "2023-2024"
-  reportCardTemplateKey: ReportCardTemplateKey; // e.g., 'cbse_state'
+  studentId: string;
+  schoolId: ObjectId | string;
+  academicYear: string;
+  reportCardTemplateKey: ReportCardTemplateKey;
   
   studentInfo: FrontStudentData;
   formativeAssessments: FormativeAssessmentEntryForStorage[];
-  coCurricularAssessments: any[]; // Using 'any[]' as coCurricularAssessments was empty and structure may change. Using FrontCoCurricularSAData causes type issues in page.
+  coCurricularAssessments: any[];
   secondLanguage?: 'Hindi' | 'Telugu';
 
-  summativeAssessments: ReportCardSASubjectEntry[]; // UPDATED STRUCTURE
-  attendance: ReportCardAttendanceMonth[]; // UPDATED STRUCTURE
+  summativeAssessments: ReportCardSASubjectEntry[];
+  attendance: ReportCardAttendanceMonth[];
   finalOverallGrade: string | null;
 
   isPublished?: boolean;
@@ -57,6 +73,46 @@ export interface ReportCardData {
   updatedAt?: Date;
   term?: string;
 }
+
+// --- Zod Schemas for Validation ---
+
+const saPeriodMarksSchema = z.object({
+  as1: z.number().nullable(), as2: z.number().nullable(), as3: z.number().nullable(),
+  as4: z.number().nullable(), as5: z.number().nullable(), as6: z.number().nullable(),
+});
+
+const saMaxMarksSchema = z.object({
+  as1: z.number(), as2: z.number(), as3: z.number(),
+  as4: z.number(), as5: z.number(), as6: z.number(),
+});
+
+const reportCardSASubjectEntrySchemaForSave = z.object({
+  subjectName: z.string(),
+  sa1_marks: saPeriodMarksSchema,
+  sa1_max_marks: saMaxMarksSchema,
+  sa2_marks: saPeriodMarksSchema,
+  sa2_max_marks: saMaxMarksSchema,
+  faTotal200M: z.number().nullable(),
+});
+
+export const reportCardDataSchemaForSave = z.object({
+  studentId: z.string().min(1, "Student ID is required."),
+  schoolId: z.string().min(1, "School ID is required."),
+  academicYear: z.string().min(4, "Academic year is required."),
+  reportCardTemplateKey: z.string().min(1, "Report card template key is required."),
+  studentInfo: z.any(), 
+  formativeAssessments: z.array(z.any()),
+  coCurricularAssessments: z.array(z.any()),
+  secondLanguage: z.enum(['Hindi', 'Telugu']).optional(),
+  summativeAssessments: z.array(reportCardSASubjectEntrySchemaForSave),
+  attendance: z.array(z.any()),
+  finalOverallGrade: z.string().nullable(),
+  generatedByAdminId: z.string().optional(),
+  term: z.string().optional(),
+});
+
+
+// --- Server Action Result Types ---
 
 export interface SaveReportCardResult {
   success: boolean;
@@ -88,4 +144,3 @@ export interface BulkPublishReportInfo {
   isPublished: boolean;
   hasReport: boolean;
 }
-

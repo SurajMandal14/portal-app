@@ -46,7 +46,6 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
         subjectId: subjectId,
         subjectName: subjectName,
         assessmentName: sm.assessmentName, // Use specific assessment name from each mark entry
-        // term: term, // Removed
         academicYear: academicYear,
         marksObtained: sm.marksObtained,
         maxMarks: sm.maxMarks,
@@ -61,7 +60,6 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
             classId: markFieldsToSet.classId,
             subjectId: markFieldsToSet.subjectId,
             assessmentName: markFieldsToSet.assessmentName,
-            // term: markFieldsToSet.term, // Removed
             academicYear: markFieldsToSet.academicYear,
             schoolId: markFieldsToSet.schoolId,
           },
@@ -80,7 +78,6 @@ export async function submitMarks(payload: MarksSubmissionPayload): Promise<Subm
               classId: markFieldsToSet.classId,
               subjectId: markFieldsToSet.subjectId,
               assessmentName: markFieldsToSet.assessmentName,
-              // term: markFieldsToSet.term, // Removed
               academicYear: markFieldsToSet.academicYear,
               schoolId: markFieldsToSet.schoolId,
               createdAt: new Date(),
@@ -119,7 +116,6 @@ export async function getMarksForAssessment(
   classId: string,
   subjectNameParam: string,
   assessmentNameBase: string, // e.g., "FA1", "SA1"
-  // term: string, // Removed
   academicYear: string
 ): Promise<GetMarksResult> {
   try {
@@ -135,7 +131,7 @@ export async function getMarksForAssessment(
     if (["FA1", "FA2", "FA3", "FA4"].includes(assessmentNameBase)) {
       queryAssessmentFilter = { $regex: `^${assessmentNameBase}-Tool` };
     } else if (["SA1", "SA2"].includes(assessmentNameBase)) {
-      queryAssessmentFilter = { $regex: `^${assessmentNameBase}-(Paper|AS)` }; // Updated to include AS
+      queryAssessmentFilter = { $regex: `^${assessmentNameBase}-AS` }; // Only look for Assessment Skills now
     } else {
       // For any other specific assessment names
       queryAssessmentFilter = { $in: [assessmentNameBase] };
@@ -146,7 +142,6 @@ export async function getMarksForAssessment(
       classId: classId,
       subjectId: subjectNameParam, // Querying by subjectName (which is stored in subjectId field in DB)
       assessmentName: queryAssessmentFilter,
-      // term: term, // Removed
       academicYear: academicYear,
     }).toArray();
 
