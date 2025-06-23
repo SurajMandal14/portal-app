@@ -65,7 +65,7 @@ export default function AdminTeacherManagementPage() {
 
   const teacherForm = useForm<CreateTeacherFormData>({
     resolver: zodResolver(createTeacherFormSchema),
-    defaultValues: { name: "", email: "", password: "", classId: "" },
+    defaultValues: { name: "", email: "", password: "" },
   });
 
   const editForm = useForm<UpdateSchoolUserFormData>({
@@ -161,7 +161,6 @@ export default function AdminTeacherManagementPage() {
     const payload: CreateSchoolUserServerActionFormData = { 
         ...values, 
         role: 'teacher', 
-        classId: values.classId === NONE_CLASS_VALUE ? undefined : values.classId 
     };
     const result = await createSchoolUser(payload, authUser.schoolId.toString());
     setIsSubmittingTeacher(false);
@@ -218,7 +217,7 @@ export default function AdminTeacherManagementPage() {
   const getClassNameFromId = (classId: string | undefined): string => {
     if (!classId) return 'N/A';
     const foundClass = managedClasses.find(cls => cls._id === classId);
-    return foundClass?.name || 'N/A (Invalid ID)';
+    return foundClass ? `${foundClass.name} - ${foundClass.section}` : 'N/A';
   };
 
   if (!authUser && !isLoadingData) { 
@@ -275,7 +274,7 @@ export default function AdminTeacherManagementPage() {
                               <Select 
                                   onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)}
                                   value={field.value || ""} 
-                                  disabled={isSubmittingEdit || managedClasses.length === 0}
+                                  disabled={true} // Disabled as per user request to simplify logic
                               >
                                   <FormControl><SelectTrigger>
                                       <SelectValue placeholder={managedClasses.length > 0 ? "Select class" : "No classes available"} />
@@ -283,12 +282,11 @@ export default function AdminTeacherManagementPage() {
                                   <SelectContent>
                                       <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
                                       {managedClasses.map((cls) => (
-                                          <SelectItem key={cls._id} value={cls._id.toString()}>{cls.name}</SelectItem>
+                                          <SelectItem key={cls._id} value={cls._id.toString()}>{cls.name} - {cls.section}</SelectItem>
                                       ))}
                                   </SelectContent>
                               </Select>
-                              <FormDescription className="text-xs">Assigning here makes them the primary class teacher for attendance.</FormDescription>
-                              {managedClasses.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
+                              <FormDescription className="text-xs">Class Teacher assignments are now managed from the Class Management page.</FormDescription>
                               <FormMessage />
                           </FormItem>
                       )}
@@ -314,28 +312,7 @@ export default function AdminTeacherManagementPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <FormField control={teacherForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Jane Teacher" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
                         <FormField control={teacherForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="teacher@example.com" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={teacherForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={teacherForm.control} name="classId" render={({ field }) => ( 
-                            <FormItem>
-                                <FormLabel>Assign as Class Teacher (Optional)</FormLabel>
-                                <Select 
-                                    onValueChange={(value) => field.onChange(value === NONE_CLASS_VALUE ? "" : value)} 
-                                    value={field.value || ""} 
-                                    disabled={isSubmittingTeacher || managedClasses.length === 0}
-                                >
-                                    <FormControl><SelectTrigger>
-                                        <SelectValue placeholder={managedClasses.length > 0 ? "Select class if class teacher" : "No classes available"} />
-                                    </SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>
-                                        {managedClasses.map((cls)=>(<SelectItem key={cls._id} value={cls._id.toString()}>{cls.name}</SelectItem>))}
-                                    </SelectContent>
-                                </Select>
-                                <FormDescription className="text-xs">Assigning here makes them the primary class teacher for attendance.</FormDescription>
-                                {managedClasses.length === 0 && <FormDescription className="text-xs">No classes created yet. Please create classes in Class Management first.</FormDescription>}
-                                <FormMessage/>
-                            </FormItem>
-                        )}/>
+                        <FormField control={teacherForm.control} name="password" render={({ field }) => (<FormItem className="md:col-span-2"><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmittingTeacher}/></FormControl><FormMessage /></FormItem>)}/>
                     </div>
                     <Button type="submit" className="w-full md:w-auto" disabled={isSubmittingTeacher || isLoadingData}>{isSubmittingTeacher ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Teacher</Button>
                 </form>
@@ -398,4 +375,3 @@ export default function AdminTeacherManagementPage() {
     </div>
   );
 }
-

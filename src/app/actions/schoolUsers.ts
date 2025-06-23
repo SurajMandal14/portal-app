@@ -82,7 +82,8 @@ export async function createSchoolUser(values: CreateSchoolUserServerActionFormD
       return { success: false, message: 'Failed to create user.', error: 'Database insertion failed.' };
     }
 
-    revalidatePath('/dashboard/admin/users');
+    revalidatePath('/dashboard/admin/students');
+    revalidatePath('/dashboard/admin/teachers');
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _p, ...userWithoutPassword } = newUser;
@@ -264,7 +265,8 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
       return { success: false, message: 'User not found for update.', error: 'User not found.' };
     }
 
-    revalidatePath('/dashboard/admin/users');
+    revalidatePath('/dashboard/admin/students');
+    revalidatePath('/dashboard/admin/teachers');
 
     const updatedUserDoc = await usersCollection.findOne({ _id: new ObjectId(userId) as any });
     if (!updatedUserDoc) {
@@ -514,4 +516,3 @@ export async function getStudentDetailsForReportCard(admissionIdQuery: string, s
     return { success: false, error: errorMessage, message: 'Failed to fetch student details for report card.' };
   }
 }
-

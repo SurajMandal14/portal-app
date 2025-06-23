@@ -327,3 +327,47 @@ export async function setSchoolReportVisibility(schoolId: string, allowVisibilit
     return { success: false, message: 'An unexpected error occurred.', error: errorMessage };
   }
 }
+
+
+export interface DeleteSchoolResult {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export async function deleteSchool(schoolId: string): Promise<DeleteSchoolResult> {
+  try {
+    if (!ObjectId.isValid(schoolId)) {
+      return { success: false, message: 'Invalid school ID format.' };
+    }
+    
+    const schoolObjectId = new ObjectId(schoolId);
+    const { db } = await connectToDatabase();
+    
+    // Check for dependencies first
+    const usersCount = await db.collection('users').countDocuments({ schoolId: schoolObjectId });
+    if (usersCount > 0) {
+      return { success: false, message: 'Cannot delete school. Please remove all assigned users (Admins, Teachers, Students) first.' };
+    }
+
+    // Optional: Add checks for other collections if needed
+    // const classesCount = await db.collection('school_classes').countDocuments({ schoolId: schoolObjectId });
+    // if (classesCount > 0) {
+    //   return { success: false, message: 'Cannot delete school. Please remove all assigned classes first.' };
+    // }
+
+    const result = await db.collection('schools').deleteOne({ _id: schoolObjectId as any });
+    if (result.deletedCount === 0) {
+      return { success: false, message: 'School not found or already deleted.' };
+    }
+
+    revalidatePath('/dashboard/super-admin/schools');
+
+    return { success: true, message: 'School deleted successfully!' };
+    
+  } catch (error) {
+    console.error('Delete school server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, message: 'An unexpected error occurred during school deletion.', error: errorMessage };
+  }
+}

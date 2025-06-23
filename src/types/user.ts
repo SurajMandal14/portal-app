@@ -85,7 +85,7 @@ export const createTeacherFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  classId: z.string().optional(), // Optional: if teacher is also a class teacher for a specific class (this will be their primary attendance class _id)
+  // classId is removed from here to simplify logic. It's managed from the Classes page.
 });
 export type CreateTeacherFormData = z.infer<typeof createTeacherFormSchema>;
 
