@@ -690,7 +690,7 @@ export default function GenerateCBSEStateReportPage() {
           <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${!showBackSide ? 'hidden' : ''}`}>
             <CBSEStateBack
               saData={saData}
-              onSaDataChange={() => {}}
+              onSaDataChange={handleSaDataChange}
               onFaTotalChange={handleFaTotalChangeBack}
               attendanceData={attendanceData} onAttendanceDataChange={handleAttendanceDataChange}
               finalOverallGradeInput={finalOverallGradeInput} onFinalOverallGradeInputChange={setFinalOverallGradeInput}
