@@ -51,14 +51,15 @@ export default function AdminClassManagementPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>([]);
   const [availableTeachers, setAvailableTeachers] = useState<AppUser[]>([]);
-  const [schoolDetails, setSchoolDetails] = useState<School | null>(null); // State for school details
-  const [availableClassNamesForSchool, setAvailableClassNamesForSchool] = useState<string[]>([]); // State for class names from tuition config
+  const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
+  const [availableClassNamesForSchool, setAvailableClassNamesForSchool] = useState<string[]>([]);
   
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingClass, setEditingClass] = useState<SchoolClass | null>(null);
   const [classToDelete, setClassToDelete] = useState<SchoolClass | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false); // State to control form visibility
 
   const form = useForm<CreateClassFormData>({
     resolver: zodResolver(createClassFormSchema),
@@ -102,7 +103,7 @@ export default function AdminClassManagementPage() {
       const [classesResult, teachersResult, schoolDetailsResult] = await Promise.all([
         getSchoolClasses(authUser.schoolId.toString()),
         getSchoolUsers(authUser.schoolId.toString()),
-        getSchoolById(authUser.schoolId.toString()) // Fetch school details
+        getSchoolById(authUser.schoolId.toString())
       ]);
 
       if (classesResult.success && classesResult.classes) {
@@ -142,7 +143,7 @@ export default function AdminClassManagementPage() {
   }, [authUser, fetchInitialData]);
 
   useEffect(() => {
-    if (editingClass) {
+    if (isFormOpen && editingClass) {
       form.reset({
         name: editingClass.name,
         section: editingClass.section || "",
@@ -152,10 +153,8 @@ export default function AdminClassManagementPage() {
           : [{ name: "", teacherId: "" }],
         secondLanguageSubjectName: editingClass.secondLanguageSubjectName || "",
       });
-    } else {
-      form.reset({ name: "", section: "", classTeacherId: "", subjects: [{ name: "", teacherId: "" }], secondLanguageSubjectName: "" });
     }
-  }, [editingClass, form]);
+  }, [editingClass, isFormOpen, form]);
 
   async function onSubmit(values: CreateClassFormData) {
     if (!authUser?.schoolId) return;
@@ -168,15 +167,32 @@ export default function AdminClassManagementPage() {
     setIsSubmitting(false);
     if (result.success) {
       toast({ title: editingClass ? "Class Updated" : "Class Created", description: result.message });
-      handleCancelEdit();
+      handleCancelClick();
       fetchInitialData();
     } else {
       toast({ variant: "destructive", title: `Error ${editingClass ? "Updating" : "Creating"} Class`, description: result.error || result.message });
     }
   }
 
-  const handleEditClick = (cls: SchoolClass) => { setEditingClass(cls); window.scrollTo({ top: 0, behavior: 'smooth' }); };
-  const handleCancelEdit = () => { setEditingClass(null); form.reset(); };
+  const handleEditClick = (cls: SchoolClass) => {
+    setEditingClass(cls);
+    setIsFormOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleAddClick = () => {
+    setEditingClass(null);
+    form.reset({ name: "", section: "", classTeacherId: "", subjects: [{ name: "", teacherId: "" }], secondLanguageSubjectName: "" });
+    setIsFormOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  
+  const handleCancelClick = () => {
+    setIsFormOpen(false);
+    setEditingClass(null);
+    form.reset();
+  };
+
   const handleDeleteClick = (cls: SchoolClass) => setClassToDelete(cls);
 
   const handleConfirmDelete = async () => {
@@ -212,175 +228,180 @@ export default function AdminClassManagementPage() {
             <BookCopy className="mr-2 h-6 w-6" /> Class Management
           </CardTitle>
           <CardDescription>
-            {editingClass ? `Editing Class: ${classDisplayName(editingClass)}` : "Create and manage classes, assign class teachers, and define subjects with their respective teachers."}
+            Create and manage classes, assign class teachers, and define subjects with their respective teachers.
           </CardDescription>
         </CardHeader>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingClass ? "Edit Class" : "Add New Class"}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <FormField 
-                  control={form.control} 
-                  name="name" 
-                  render={({ field }) => (
+      {isFormOpen && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{editingClass ? `Edit Class: ${classDisplayName(editingClass)}` : "Add New Class"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <FormField 
+                    control={form.control} 
+                    name="name" 
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center"><SchoolIcon className="mr-2 h-4 w-4 text-muted-foreground"/>Class Name</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value === NONE_CLASS_NAME_VALUE ? "" : value)}
+                          value={field.value || ""}
+                          disabled={isSubmitting || isLoadingData || availableClassNamesForSchool.length === 0}
+                        >
+                          <FormControl><SelectTrigger>
+                              <SelectValue placeholder={
+                                  availableClassNamesForSchool.length > 0 
+                                  ? "Select class name" 
+                                  : (isLoadingData ? "Loading names..." : "No class names in tuition config")
+                              } />
+                          </SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value={NONE_CLASS_NAME_VALUE}>-- Select Class Name --</SelectItem>
+                            {availableClassNamesForSchool.map(className => (
+                              <SelectItem key={className} value={className}>{className}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">Class names are based on Super Admin's tuition fee configurations for this school.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField control={form.control} name="section" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center"><SchoolIcon className="mr-2 h-4 w-4 text-muted-foreground"/>Class Name</FormLabel>
-                       <Select
-                        onValueChange={(value) => field.onChange(value === NONE_CLASS_NAME_VALUE ? "" : value)}
-                        value={field.value || ""}
-                        disabled={isSubmitting || isLoadingData || availableClassNamesForSchool.length === 0}
-                      >
-                        <FormControl><SelectTrigger>
-                            <SelectValue placeholder={
-                                availableClassNamesForSchool.length > 0 
-                                ? "Select class name" 
-                                : (isLoadingData ? "Loading names..." : "No class names in tuition config")
-                            } />
-                        </SelectTrigger></FormControl>
-                        <SelectContent>
-                           <SelectItem value={NONE_CLASS_NAME_VALUE}>-- Select Class Name --</SelectItem>
-                          {availableClassNamesForSchool.map(className => (
-                            <SelectItem key={className} value={className}>{className}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription className="text-xs">Class names are based on Super Admin's tuition fee configurations for this school.</FormDescription>
+                      <FormLabel>Section (e.g., A)</FormLabel>
+                      <FormControl><Input placeholder="e.g., A" {...field} disabled={isSubmitting} /></FormControl>
                       <FormMessage />
                     </FormItem>
-                  )}
-                />
-                <FormField control={form.control} name="section" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Section (e.g., A)</FormLabel>
-                    <FormControl><Input placeholder="e.g., A" {...field} disabled={isSubmitting} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}/>
-                <FormField control={form.control} name="classTeacherId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center"><UserCheck className="mr-2 h-4 w-4 text-muted-foreground"/>Assign Class Teacher (Optional)</FormLabel>
-                    <Select
-                      onValueChange={(value) => {
-                        field.onChange(value === NONE_TEACHER_VALUE ? "" : value);
-                      }}
-                      value={field.value || ""} 
-                      disabled={isSubmitting || isLoadingData || availableTeachers.length === 0}
-                    >
-                      <FormControl><SelectTrigger>
-                          <SelectValue placeholder={availableTeachers.length > 0 ? "Select a teacher" : "No teachers available"} />
-                      </SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE_TEACHER_VALUE}>None</SelectItem>
-                        {availableTeachers.map(teacher => (
-                          <SelectItem key={teacher._id!.toString()} value={teacher._id!.toString()}>{teacher.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription className="text-xs">The class teacher can mark attendance for this class.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}/>
-              </div>
-
-              <div className="space-y-3">
-                <FormLabel className="text-lg font-semibold">Subjects Offered</FormLabel>
-                {subjectFields.map((subjectItem, index) => (
-                  <Card key={subjectItem.id} className="p-4 border-dashed">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
-                      <FormField control={form.control} name={`subjects.${index}.name`} render={({ field }) => (
-                        <FormItem className="md:col-span-1">
-                          <FormLabel htmlFor={`subject-name-${index}`}>Subject Name {index + 1}</FormLabel>
-                          <FormControl>
-                            <Input id={`subject-name-${index}`} placeholder={`Subject ${index + 1}`} {...field} disabled={isSubmitting} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}/>
-                      <FormField control={form.control} name={`subjects.${index}.teacherId`} render={({ field }) => (
-                        <FormItem className="md:col-span-1">
-                           <FormLabel htmlFor={`subject-teacher-${index}`} className="flex items-center"><Users className="mr-1 h-4 w-4 text-muted-foreground"/>Assign Subject Teacher</FormLabel>
-                           <Select
-                              onValueChange={(value) => field.onChange(value === NONE_TEACHER_VALUE ? "" : value)}
-                              value={field.value || ""}
-                              disabled={isSubmitting || isLoadingData || availableTeachers.length === 0}
-                            >
-                              <FormControl><SelectTrigger id={`subject-teacher-${index}`}>
-                                  <SelectValue placeholder={availableTeachers.length > 0 ? "Select teacher" : "No teachers"} />
-                              </SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value={NONE_TEACHER_VALUE}>-- None --</SelectItem>
-                                {availableTeachers.map(teacher => (
-                                  <SelectItem key={teacher._id!.toString()} value={teacher._id!.toString()}>{teacher.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                           <FormMessage />
-                        </FormItem>
-                      )}/>
-                      {subjectFields.length > 1 && (
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeSubject(index)} disabled={isSubmitting} className="text-destructive hover:bg-destructive/10 self-end justify-self-start md:justify-self-center">
-                          <Trash2 className="mr-1 h-4 w-4" />Remove Subject
-                        </Button>
-                      )}
-                    </div>
-                  </Card>
-                ))}
-                <Button type="button" variant="outline" size="sm" onClick={() => appendSubject({ name: "", teacherId: "" })} disabled={isSubmitting}>
-                  <FilePlus className="mr-2 h-4 w-4"/>Add Subject
-                </Button>
-              </div>
-              
-              <FormField
-                  control={form.control}
-                  name="secondLanguageSubjectName"
-                  render={({ field }) => (
+                  )}/>
+                  <FormField control={form.control} name="classTeacherId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center"><Languages className="mr-2 h-4 w-4 text-muted-foreground"/>Designated Second Language (Optional)</FormLabel>
+                      <FormLabel className="flex items-center"><UserCheck className="mr-2 h-4 w-4 text-muted-foreground"/>Assign Class Teacher (Optional)</FormLabel>
                       <Select
-                        onValueChange={(value) => field.onChange(value === NONE_SUBJECT_VALUE ? "" : value)}
-                        value={field.value || ""}
-                        disabled={isSubmitting || currentSubjects.length === 0}
+                        onValueChange={(value) => {
+                          field.onChange(value === NONE_TEACHER_VALUE ? "" : value);
+                        }}
+                        value={field.value || ""} 
+                        disabled={isSubmitting || isLoadingData || availableTeachers.length === 0}
                       >
                         <FormControl><SelectTrigger>
-                            <SelectValue placeholder={currentSubjects.filter(s => s.name?.trim()).length > 0 ? "Select from offered subjects" : "Add subjects first"} />
+                            <SelectValue placeholder={availableTeachers.length > 0 ? "Select a teacher" : "No teachers available"} />
                         </SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value={NONE_SUBJECT_VALUE}>-- None --</SelectItem>
-                          {currentSubjects.filter(s => s.name?.trim()).map(s => (
-                            <SelectItem key={s.name} value={s.name!}>{s.name}</SelectItem>
+                          <SelectItem value={NONE_TEACHER_VALUE}>None</SelectItem>
+                          {availableTeachers.map(teacher => (
+                            <SelectItem key={teacher._id!.toString()} value={teacher._id!.toString()}>{teacher.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormDescription className="text-xs">This subject will use second language grading scales on report cards.</FormDescription>
+                      <FormDescription className="text-xs">The class teacher can mark attendance for this class.</FormDescription>
                       <FormMessage />
                     </FormItem>
-                  )}
-                />
+                  )}/>
+                </div>
+
+                <div className="space-y-3">
+                  <FormLabel className="text-lg font-semibold">Subjects Offered</FormLabel>
+                  {subjectFields.map((subjectItem, index) => (
+                    <Card key={subjectItem.id} className="p-4 border-dashed">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
+                        <FormField control={form.control} name={`subjects.${index}.name`} render={({ field }) => (
+                          <FormItem className="md:col-span-1">
+                            <FormLabel htmlFor={`subject-name-${index}`}>Subject Name {index + 1}</FormLabel>
+                            <FormControl>
+                              <Input id={`subject-name-${index}`} placeholder={`Subject ${index + 1}`} {...field} disabled={isSubmitting} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}/>
+                        <FormField control={form.control} name={`subjects.${index}.teacherId`} render={({ field }) => (
+                          <FormItem className="md:col-span-1">
+                            <FormLabel htmlFor={`subject-teacher-${index}`} className="flex items-center"><Users className="mr-1 h-4 w-4 text-muted-foreground"/>Assign Subject Teacher</FormLabel>
+                            <Select
+                                onValueChange={(value) => field.onChange(value === NONE_TEACHER_VALUE ? "" : value)}
+                                value={field.value || ""}
+                                disabled={isSubmitting || isLoadingData || availableTeachers.length === 0}
+                              >
+                                <FormControl><SelectTrigger id={`subject-teacher-${index}`}>
+                                    <SelectValue placeholder={availableTeachers.length > 0 ? "Select teacher" : "No teachers"} />
+                                </SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value={NONE_TEACHER_VALUE}>-- None --</SelectItem>
+                                  {availableTeachers.map(teacher => (
+                                    <SelectItem key={teacher._id!.toString()} value={teacher._id!.toString()}>{teacher.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}/>
+                        {subjectFields.length > 1 && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeSubject(index)} disabled={isSubmitting} className="text-destructive hover:bg-destructive/10 self-end justify-self-start md:justify-self-center">
+                            <Trash2 className="mr-1 h-4 w-4" />Remove Subject
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" onClick={() => appendSubject({ name: "", teacherId: "" })} disabled={isSubmitting}>
+                    <FilePlus className="mr-2 h-4 w-4"/>Add Subject
+                  </Button>
+                </div>
+                
+                <FormField
+                    control={form.control}
+                    name="secondLanguageSubjectName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center"><Languages className="mr-2 h-4 w-4 text-muted-foreground"/>Designated Second Language (Optional)</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value === NONE_SUBJECT_VALUE ? "" : value)}
+                          value={field.value || ""}
+                          disabled={isSubmitting || currentSubjects.length === 0}
+                        >
+                          <FormControl><SelectTrigger>
+                              <SelectValue placeholder={currentSubjects.filter(s => s.name?.trim()).length > 0 ? "Select from offered subjects" : "Add subjects first"} />
+                          </SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value={NONE_SUBJECT_VALUE}>-- None --</SelectItem>
+                            {currentSubjects.filter(s => s.name?.trim()).map(s => (
+                              <SelectItem key={s.name} value={s.name!}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">This subject will use second language grading scales on report cards.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
 
-              <div className="flex gap-2">
-                <Button type="submit" disabled={isSubmitting || isLoadingData}>
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                  {editingClass ? "Update Class" : "Create Class"}
-                </Button>
-                {editingClass && (
-                  <Button type="button" variant="outline" onClick={handleCancelEdit} disabled={isSubmitting}><XCircle className="mr-2 h-4 w-4" />Cancel</Button>
-                )}
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={isSubmitting || isLoadingData}>
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                    {editingClass ? "Update Class" : "Create Class"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isSubmitting}><XCircle className="mr-2 h-4 w-4" />Cancel</Button>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Existing Classes</CardTitle>
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <CardTitle>Existing Classes</CardTitle>
+            <Button onClick={handleAddClick} disabled={isFormOpen && !editingClass}>
+                <PlusCircle className="mr-2 h-4 w-4"/> Add New Class
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoadingData ? (
