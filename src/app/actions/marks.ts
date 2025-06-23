@@ -135,9 +135,9 @@ export async function getMarksForAssessment(
     if (["FA1", "FA2", "FA3", "FA4"].includes(assessmentNameBase)) {
       queryAssessmentFilter = { $regex: `^${assessmentNameBase}-Tool` };
     } else if (["SA1", "SA2"].includes(assessmentNameBase)) {
-      queryAssessmentFilter = { $regex: `^${assessmentNameBase}-Paper` };
+      queryAssessmentFilter = { $regex: `^${assessmentNameBase}-(Paper|AS)` }; // Updated to include AS
     } else {
-      // For any other specific assessment names (though current UI won't use this path)
+      // For any other specific assessment names
       queryAssessmentFilter = { $in: [assessmentNameBase] };
     }
 

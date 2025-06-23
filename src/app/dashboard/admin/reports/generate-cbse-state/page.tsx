@@ -348,34 +348,47 @@ export default function GenerateCBSEStateReportPage() {
             });
             
             allFetchedMarks.forEach((mark: MarkEntryType) => {
-                if (mark.assessmentName.startsWith("SA1") || mark.assessmentName.startsWith("SA2")) {
-                    const [saPeriod, paperTypeWithSuffix] = mark.assessmentName.split('-'); 
-                    if (!paperTypeWithSuffix) return;
-
-                    let targetSubjectNameInReport = mark.subjectName;
-                    let targetPaperTypeOnReport: string;
-
-                    if (mark.subjectName === "Science") {
-                        targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "Physics" : "Biology";
-                    } else {
-                        const papersForThisSubject = getPapersForSubject(mark.subjectName);
-                        if (papersForThisSubject.length === 1) {
-                            targetPaperTypeOnReport = papersForThisSubject[0]; // Should be "I"
-                        } else { // Assumed 2 papers
-                            targetPaperTypeOnReport = paperTypeWithSuffix === "Paper1" ? "I" : "II";
-                        }
-                    }
+                if (mark.assessmentName.startsWith("SA")) {
+                    const saPeriod = mark.assessmentName.startsWith("SA1") ? "sa1" : "sa2";
+                    const isPaperBased = mark.assessmentName.includes("-Paper");
+                    const isASBased = mark.assessmentName.includes("-AS");
                     
-                    const rowIndex = tempSaDataForNewReport.findIndex(row => row.subjectName === targetSubjectNameInReport && row.paper === targetPaperTypeOnReport);
+                    let targetSubjectNameInReport = mark.subjectName;
+                    
+                    // Find matching rows in the SA data structure
+                    const targetRows = tempSaDataForNewReport.filter(row => row.subjectName === targetSubjectNameInReport);
 
-                    if (rowIndex !== -1) {
-                        const updatedRow = { ...tempSaDataForNewReport[rowIndex] }; 
-                        if (saPeriod === "SA1") {
-                            updatedRow.sa1 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
-                        } else if (saPeriod === "SA2") {
-                            updatedRow.sa2 = { marks: mark.marksObtained, maxMarks: mark.maxMarks }; 
+                    if (isPaperBased) {
+                         const paperType = mark.assessmentName.endsWith("Paper1") ? "I" : "II";
+                         const paperNameScience = mark.assessmentName.endsWith("Paper1") ? "Physics" : "Biology";
+                         const targetRow = targetRows.find(row => {
+                             if(row.subjectName === "Science") return row.paper === paperNameScience;
+                             return row.paper === paperType;
+                         });
+                         if (targetRow) {
+                           targetRow[saPeriod] = { marks: mark.marksObtained, maxMarks: mark.maxMarks };
+                         }
+
+                    } else if (isASBased) {
+                        const asIndex = parseInt(mark.assessmentName.split('-AS')[1], 10) - 1; // AS1 -> 0, AS2 -> 1
+                        if (asIndex >= 0 && asIndex < 3) { // AS1, AS2, AS3 -> Paper 1
+                            const paperName = targetRows[0]?.paper || "I";
+                             const targetRow = targetRows.find(row => row.paper === paperName);
+                             if(targetRow) {
+                                targetRow[saPeriod].marks = (targetRow[saPeriod].marks || 0) + (mark.marksObtained || 0);
+                                targetRow[saPeriod].maxMarks = (targetRow[saPeriod].maxMarks || 0) + (mark.maxMarks || 0);
+                             }
+                        } else if (asIndex >= 3 && asIndex < 6) { // AS4, AS5, AS6 -> Paper 2
+                           const paperName = targetRows[1]?.paper || "II";
+                           const targetRow = targetRows.find(row => row.paper === paperName);
+                           if (targetRow) {
+                                targetRow[saPeriod].marks = (targetRow[saPeriod].marks || 0) + (mark.marksObtained || 0);
+                                targetRow[saPeriod].maxMarks = (targetRow[saPeriod].maxMarks || 0) + (mark.maxMarks || 0);
+                           } else if (targetRows.length === 1) { // Single paper subject gets all AS marks
+                                targetRows[0][saPeriod].marks = (targetRows[0][saPeriod].marks || 0) + (mark.marksObtained || 0);
+                                targetRows[0][saPeriod].maxMarks = (targetRows[0][saPeriod].maxMarks || 0) + (mark.maxMarks || 0);
+                           }
                         }
-                        tempSaDataForNewReport = tempSaDataForNewReport.map((row, idx) => idx === rowIndex ? updatedRow : row);
                     }
                 }
             });
