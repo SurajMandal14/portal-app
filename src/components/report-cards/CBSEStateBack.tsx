@@ -195,12 +195,6 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
         .report-card-back-container .nowrap {
           white-space: nowrap;
         }
-        .report-card-back-container .rotated-text {
-          writing-mode: vertical-lr;
-          transform: rotate(180deg);
-          font-weight: normal;
-          font-size: 7px;
-        }
         .report-card-back-container input[type="number"], .report-card-back-container input[type="text"] {
           width: 28px; 
           text-align: center;
@@ -271,26 +265,26 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
                 </tr>
                 <tr>
                     <th colSpan={6}>Assessment Skills</th>
-                    <th rowSpan={2} className="rotated-text">Total Marks</th>
-                    <th rowSpan={2} className="rotated-text">Grade</th>
+                    <th rowSpan={2}>Total Marks</th>
+                    <th rowSpan={2}>Grade</th>
                     <th colSpan={6}>Assessment Skills</th>
-                    <th rowSpan={2} className="rotated-text">Total Marks</th>
-                    <th rowSpan={2} className="rotated-text">Grade</th>
-                    <th rowSpan={2} className="rotated-text small">FA (Total)</th>
-                    <th rowSpan={2} className="rotated-text small">SA1 (Adj)</th>
-                    <th rowSpan={2} className="rotated-text small">FA(Avg)+SA1 (100M)</th>
-                    <th rowSpan={2} className="rotated-text small">Internal (20M)</th>
-                    <th rowSpan={2} className="rotated-text small">SA2 (Adj)</th>
-                    <th rowSpan={2} className="rotated-text small">TOTAL (100M)</th>
-                    <th rowSpan={2} className="rotated-text">GRADE</th>
+                    <th rowSpan={2}>Total Marks</th>
+                    <th rowSpan={2}>Grade</th>
+                    <th rowSpan={2} className="small">FA (Total)</th>
+                    <th rowSpan={2} className="small">SA1 (Adj)</th>
+                    <th rowSpan={2} className="small">FA(Avg)+SA1 (100M)</th>
+                    <th rowSpan={2} className="small">Internal (20M)</th>
+                    <th rowSpan={2} className="small">SA2 (Adj)</th>
+                    <th rowSpan={2} className="small">TOTAL (100M)</th>
+                    <th rowSpan={2}>GRADE</th>
                 </tr>
                 <tr>
                     {/* SA1 AS Headers */}
-                    <th className="rotated-text">AS1</th><th className="rotated-text">AS2</th><th className="rotated-text">AS3</th>
-                    <th className="rotated-text">AS4</th><th className="rotated-text">AS5</th><th className="rotated-text">AS6</th>
+                    <th>AS1</th><th>AS2</th><th>AS3</th>
+                    <th>AS4</th><th>AS5</th><th>AS6</th>
                     {/* SA2 AS Headers */}
-                    <th className="rotated-text">AS1</th><th className="rotated-text">AS2</th><th className="rotated-text">AS3</th>
-                    <th className="rotated-text">AS4</th><th className="rotated-text">AS5</th><th className="rotated-text">AS6</th>
+                    <th>AS1</th><th>AS2</th><th>AS3</th>
+                    <th>AS4</th><th>AS5</th><th>AS6</th>
                 </tr>
             </thead>
             <tbody>
