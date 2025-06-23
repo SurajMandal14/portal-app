@@ -3,14 +3,14 @@
 
 import React from 'react';
 import type { UserRole } from '@/types/user';
-import type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperScore } from '@/types/report';
+import type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperData } from '@/types/report';
 
-export type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperScore };
+export type { ReportCardSASubjectEntry, ReportCardAttendanceMonth, SAPaperData };
 
 
 interface CBSEStateBackProps {
   saData: ReportCardSASubjectEntry[];
-  onSaDataChange: (rowIndex: number, period: 'sa1' | 'sa2', field: 'marks' | 'maxMarks', value: string) => void;
+  onSaDataChange: (rowIndex: number, period: 'sa1' | 'sa2', fieldKey: keyof SAPaperData, value: string) => void;
   onFaTotalChange: (rowIndex: number, value: string) => void; 
   
   attendanceData: ReportCardAttendanceMonth[];
@@ -83,55 +83,35 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const calculateRowDerivedData = (rowData: ReportCardSASubjectEntry) => {
     const isSecondLang = rowData.subjectName === secondLanguageSubjectName;
 
-    const sa1_actual = rowData.sa1 || { marks: null, maxMarks: 80 };
-    const sa2_actual = rowData.sa2 || { marks: null, maxMarks: 80 };
+    const sa1_data = rowData.sa1 || {};
+    const sa2_data = rowData.sa2 || {};
+    
+    const sa1_total_marks = Object.values(sa1_data).reduce((sum, skill) => sum + (skill?.marks || 0), 0);
+    const sa1_total_max_marks = Object.values(sa1_data).reduce((sum, skill) => sum + (skill?.maxMarks || 0), 0);
 
-    const sa1_marks_safe = sa1_actual.marks ?? 0;
-    const sa1_max_safe = sa1_actual.maxMarks ?? 80;
-
-    const sa2_marks_safe = sa2_actual.marks ?? 0;
-    const sa2_max_safe = sa2_actual.maxMarks ?? 80;
-
-    const sa1Grade = saGradeScale(sa1_marks_safe, sa1_max_safe, isSecondLang);
-    const sa2Grade = saGradeScale(sa2_marks_safe, sa2_max_safe, isSecondLang);
+    const sa2_total_marks = Object.values(sa2_data).reduce((sum, skill) => sum + (skill?.marks || 0), 0);
+    const sa2_total_max_marks = Object.values(sa2_data).reduce((sum, skill) => sum + (skill?.maxMarks || 0), 0);
+    
+    const sa1Grade = saGradeScale(sa1_total_marks, sa1_total_max_marks, isSecondLang);
+    const sa2Grade = saGradeScale(sa2_total_marks, sa2_total_max_marks, isSecondLang);
     
     const faTotal200M_val = rowData.faTotal200M ?? 0;
 
-    const sa1ForCalc = sa1_max_safe > 0 ? Math.min(sa1_marks_safe, sa1_max_safe) : 0;
-    const sa2ForCalc = sa2_max_safe > 0 ? Math.min(sa2_marks_safe, sa2_max_safe) : 0;
-
+    const sa1ForCalc = sa1_total_max_marks > 0 ? Math.min(sa1_total_marks, sa1_total_max_marks) : 0;
+    const sa2ForCalc = sa2_total_max_marks > 0 ? Math.min(sa2_total_marks, sa2_total_max_marks) : 0;
+    
     const faAvg50 = faTotal200M_val / 4; 
-    const sa1_50_for_avg = sa1_max_safe > 0 ? sa1ForCalc * (50 / sa1_max_safe) : 0;
+    const sa1_50_for_avg = sa1_total_max_marks > 0 ? sa1ForCalc * (50 / sa1_total_max_marks) : 0;
     const faAvgPlusSa1_100M = Math.round(faAvg50 + sa1_50_for_avg); 
     
-    const internalMarks_sa1_capped = sa1_marks_safe > 80 ? 80 : sa1_marks_safe;
-    const internalMarks_sa2_capped = sa2_marks_safe > 80 ? 80 : sa2_marks_safe;
-
-    // The logic: (FA_Total/200 * 20) + (SA1_Marks/80 * 20) + (SA2_Marks/80 * 20) should be for INTERNAL MARKS of 20.
-    // The CBSE state pattern as implemented here calculates internal marks as sum of FA (200M), SA1 (80M), SA2 (80M) scaled to 18% or 20%.
-    // Given the table has "Internal (20M)", let's assume FA contributes 10M, SA1 contributes 5M, SA2 contributes 5M to this.
-    // FA (200M) -> 10M is (FA_Total / 20)
-    // SA1 (80M) -> 5M is (SA1_Marks / 16)
-    // SA2 (80M) -> 5M is (SA2_Marks / 16)
-    // This is one interpretation if "Internal (20M)" is a distinct component.
-    // However, the provided image and common CBSE patterns often sum FA + SA1 + SA2 and then derive a final total and grade.
-    // The row "Internal (20M)" in the image refers to the average of (FA1+FA2+FA3+FA4 converted to 20M).
-    // The total (100M) is Internal(20M) + External/Written Exam (80M).
-    // The specific structure "FA(Avg)+SA1 (100M)" followed by "Internal (20M)" and then "SA2 (Adj.)" and "TOTAL (100M)"
-    // suggests:
-    // 1. FA Avg (50M) + SA1 (50M for avg) = 100M -> This is likely for Term 1 type summary.
-    // 2. Internal (20M): This should be the 20% weight of FA marks (i.e., FA Total / 10).
-    // 3. SA2 (Adj.): This is the SA2 marks (80M).
-    // 4. TOTAL (100M): Internal (20M) + SA2 (80M).
-    // This is a common pattern for final assessment if SA1 is formative and SA2 is summative.
-
-    const internalMarks = Math.round(faTotal200M_val / 10); // FA total / 10 for 20M internal
-    const finalTotal100M = internalMarks + sa2ForCalc; // SA2 is considered the 80M external exam
+    const internalMarks = Math.round(faTotal200M_val / 10);
+    const sa2_external_80M = sa2_total_max_marks > 0 ? sa2ForCalc * (80 / sa2_total_max_marks) : 0;
+    const finalTotal100M = Math.round(internalMarks + sa2_external_80M);
     const finalGrade = finalGradeScale(finalTotal100M, isSecondLang);
     
     return {
-      sa1Total: sa1_marks_safe, sa1Max: sa1_max_safe, sa1Grade,
-      sa2Total: sa2_marks_safe, sa2Max: sa2_max_safe, sa2Grade,
+      sa1Total: sa1_total_marks, sa1Max: sa1_total_max_marks, sa1Grade,
+      sa2Total: sa2_total_marks, sa2Max: sa2_total_max_marks, sa2Grade,
       faAvgPlusSa1_100M, internalMarks,
       finalTotal100M, finalGrade
     };
@@ -170,11 +150,7 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
   const totalPresentDays = attendanceData.slice(0, 11).reduce((sum, month) => sum + (month?.presentDays || 0), 0);
   const attendancePercentage = totalWorkingDays > 0 ? Math.round((totalPresentDays / totalWorkingDays) * 100) : 0;
   
-  const isPageReadOnlyForAdmin = isAdmin && saData.some(row => 
-    (row.sa1 && (row.sa1.marks !== null || row.sa1.maxMarks !== null)) ||
-    (row.sa2 && (row.sa2.marks !== null || row.sa2.maxMarks !== null)) ||
-    row.faTotal200M !== null
-  );
+  const isPageReadOnlyForAdmin = isAdmin;
 
 
   return (
@@ -228,6 +204,11 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
             color: #555 !important;
             cursor: not-allowed;
             border: 1px solid #ddd !important;
+        }
+        .report-card-back-container input.calculated-input {
+             border: none;
+             background-color: transparent;
+             font-weight: bold;
         }
         .report-card-back-container input::-webkit-outer-spin-button,
         .report-card-back-container input::-webkit-inner-spin-button {
@@ -302,28 +283,28 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
                     {isFirstPaperOfSubject && <td rowSpan={subjectPaperCount} className="subject-cell">{rowData.subjectName}</td>}
                     <td className="paper-cell">{rowData.paper}</td>
                     
-                    <td><input type="number" value={rowData.sa1?.marks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa1', 'marks', e.target.value)} disabled={isInputDisabled} /></td>
-                    <td><input type="number" value={rowData.sa1?.maxMarks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa1', 'maxMarks', e.target.value)} disabled={isInputDisabled} /></td>
+                    <td className="calculated">{derived.sa1Total}</td>
+                    <td className="calculated">{derived.sa1Max}</td>
                     <td className="calculated">{derived.sa1Grade}</td>
 
-                    <td><input type="number" value={rowData.sa2?.marks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa2', 'marks', e.target.value)} disabled={isInputDisabled} /></td>
-                    <td><input type="number" value={rowData.sa2?.maxMarks ?? ''} onChange={e => onSaDataChange(rowIndex, 'sa2', 'maxMarks', e.target.value)} disabled={isInputDisabled} /></td>
+                    <td className="calculated">{derived.sa2Total}</td>
+                    <td className="calculated">{derived.sa2Max}</td>
                     <td className="calculated">{derived.sa2Grade}</td>
 
-                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} onChange={e => onFaTotalChange(rowIndex, e.target.value)} disabled={isInputDisabled || (isTeacher && !isSubjectEditableForTeacher(rowData.subjectName))} /></td>
+                    <td><input type="number" className="fatotal-input" value={faTotal200M_display} onChange={e => onFaTotalChange(rowIndex, e.target.value)} disabled={isInputDisabled} /></td>
                     <td className="calculated">{derived.sa1Total}</td>
                     <td className="calculated">{derived.faAvgPlusSa1_100M}</td>
-                    <td className="internal calculated">{derived.internalMarks}</td>
+                    <td className="calculated">{derived.internalMarks}</td>
                     <td className="calculated">{derived.sa2Total}</td>
-                    <td className="final-total calculated">{derived.finalTotal100M}</td>
-                    <td className="final-grade calculated">{derived.finalGrade}</td>
+                    <td className="calculated">{derived.finalTotal100M}</td>
+                    <td className="calculated">{derived.finalGrade}</td>
                   </tr>
                 );
             })}
           </tbody>
         </table>
 
-        <p><strong>Final Grade in Curricular Areas:</strong> <input type="text" value={finalOverallGradeInput ?? calculateOverallFinalGrade()} onChange={e => onFinalOverallGradeInputChange(e.target.value)} className="final-grade-input calculated" readOnly={isStudent || isTeacher || isPageReadOnlyForAdmin} disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></p>
+        <p><strong>Final Grade in Curricular Areas:</strong> <input type="text" value={finalOverallGradeInput ?? calculateOverallFinalGrade()} onChange={e => onFinalOverallGradeInputChange(e.target.value)} className="final-grade-input" disabled={isStudent || isTeacher || isPageReadOnlyForAdmin} /></p>
         <p className="small-note">*(Internal 20M) Calculation assumes standard max marks. Grades based on percentage of max marks.</p>
         
         <table className="attendance-table">
@@ -396,4 +377,3 @@ const CBSEStateBack: React.FC<CBSEStateBackProps> = ({
 };
 
 export default CBSEStateBack;
-
