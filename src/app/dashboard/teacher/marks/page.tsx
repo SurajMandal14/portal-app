@@ -1,6 +1,7 @@
 
 "use client";
 
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox
 import { BookCopy, Loader2, Save, Info, Filter } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser, User as AppUser } from "@/types/user";
 import type { StudentMarkInput, MarksSubmissionPayload } from "@/types/marks";
@@ -540,14 +540,12 @@ export default function TeacherMarksEntryPage() {
                       {isCurrentAssessmentFA ? (
                         FA_TOOLS.map(tool => <TableHead key={tool.key} className="w-28 text-center">{tool.label} ({tool.maxMarks}M)</TableHead>)
                       ) : isCurrentAssessmentSA ? (
-                        <>
-                          {papersForSelectedSubject.map((paperName, index) => (
-                            <React.Fragment key={paperName}>
-                                <TableHead className="w-36 text-center">{paperName} Marks</TableHead>
-                                <TableHead className="w-32 text-center">{paperName} Max</TableHead>
-                            </React.Fragment>
-                          ))}
-                        </>
+                        papersForSelectedSubject.map(paperName => (
+                          <React.Fragment key={paperName}>
+                              <TableHead className="w-36 text-center">{paperName} Marks</TableHead>
+                              <TableHead className="w-32 text-center">{paperName} Max</TableHead>
+                          </React.Fragment>
+                        ))
                       ) : null }
                     </TableRow>
                   </TableHeader>
@@ -588,8 +586,7 @@ export default function TeacherMarksEntryPage() {
                             })
                           )}
                            {isCurrentAssessmentSA && currentMarksState && (
-                            <>
-                              {papersForSelectedSubject.map((paperName, index) => {
+                              papersForSelectedSubject.map((paperName, index) => {
                                 const pMarksKey = `p${index + 1}Marks` as 'p1Marks' | 'p2Marks';
                                 const pMaxKey = `p${index + 1}Max` as 'p1Max' | 'p2Max';
                                 return (
@@ -617,15 +614,7 @@ export default function TeacherMarksEntryPage() {
                                     </TableCell>
                                 </React.Fragment>
                                 )
-                              })}
-                               {/* Render empty cells if subject has only 1 paper */}
-                                {papersForSelectedSubject.length === 1 && (
-                                <>
-                                    <TableCell></TableCell>
-                                    <TableCell></TableCell>
-                                </>
-                                )}
-                            </>
+                              })
                             )}
                         </TableRow>
                       );
