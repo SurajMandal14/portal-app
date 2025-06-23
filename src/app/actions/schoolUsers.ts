@@ -59,6 +59,7 @@ export async function createSchoolUser(values: CreateSchoolUserServerActionFormD
       email,
       password: hashedPassword,
       role: role as UserRole,
+      status: 'active',
       schoolId: userSchoolId,
       classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined,
       admissionId: role === 'student' ? (admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined) : undefined,
@@ -135,6 +136,7 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         schoolId: user.schoolId?.toString(),
         classId: user.classId || undefined, 
         admissionId: user.admissionId || undefined,
+        status: user.status || 'active',
         busRouteLocation: user.busRouteLocation || undefined,
         busClassCategory: user.busClassCategory || undefined,
         fatherName: user.fatherName,
@@ -284,6 +286,7 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         schoolId: updatedUserDoc.schoolId?.toString(),
         classId: updatedUserDoc.classId || undefined, 
         admissionId: updatedUserDoc.admissionId || undefined,
+        status: updatedUserDoc.status || 'active',
         busRouteLocation: updatedUserDoc.busRouteLocation || undefined,
         busClassCategory: updatedUserDoc.busClassCategory || undefined,
         fatherName: updatedUserDoc.fatherName,
@@ -331,7 +334,7 @@ export async function deleteSchoolUser(userId: string, schoolId: string): Promis
     }
 
     revalidatePath('/dashboard/admin/users');
-    return { success: true, message: 'User deleted successfully!' };
+    return { success: true, message: 'User permanently deleted successfully!' };
 
   } catch (error) {
     console.error('Delete school user server action error:', error);
@@ -339,6 +342,46 @@ export async function deleteSchoolUser(userId: string, schoolId: string): Promis
     return { success: false, message: 'An unexpected error occurred during user deletion.', error: errorMessage };
   }
 }
+
+export interface UpdateUserStatusResult {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export async function updateUserStatus(userId: string, schoolId: string, status: 'active' | 'discontinued'): Promise<UpdateUserStatusResult> {
+  try {
+    if (!ObjectId.isValid(userId) || !ObjectId.isValid(schoolId)) {
+      return { success: false, message: 'Invalid User or School ID format.', error: 'Invalid ID.' };
+    }
+    if (status !== 'active' && status !== 'discontinued') {
+      return { success: false, message: 'Invalid status provided.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const usersCollection = db.collection<User>('users');
+
+    const result = await usersCollection.updateOne(
+      { _id: new ObjectId(userId) as any, schoolId: new ObjectId(schoolId) as any },
+      { $set: { status: status, updatedAt: new Date() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return { success: false, message: 'User not found.', error: 'User not found.' };
+    }
+
+    revalidatePath('/dashboard/admin/students');
+    revalidatePath('/dashboard/admin/teachers');
+
+    return { success: true, message: `User status successfully updated to ${status}.` };
+
+  } catch (error) {
+    console.error('Update user status server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, message: 'An unexpected error occurred during status update.', error: errorMessage };
+  }
+}
+
 
 export async function getStudentsByClass(schoolId: string, classId: string): Promise<GetSchoolUsersResult> {
   try {
@@ -374,6 +417,7 @@ export async function getStudentsByClass(schoolId: string, classId: string): Pro
         rollNo: student.rollNo,
         examNo: student.examNo,
         aadharNo: student.aadharNo,
+        status: student.status || 'active',
         createdAt: student.createdAt ? new Date(student.createdAt).toISOString() : undefined,
         updatedAt: student.updatedAt ? new Date(student.updatedAt).toISOString() : undefined,
       };

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, Briefcase, XCircle } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, Briefcase, XCircle, UserMinus } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
@@ -29,7 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser } from "@/app/actions/schoolUsers";
+import { createSchoolUser, getSchoolUsers, updateSchoolUser, deleteSchoolUser, updateUserStatus } from "@/app/actions/schoolUsers";
 import { 
     createTeacherFormSchema, type CreateTeacherFormData,
     updateSchoolUserFormSchema, type UpdateSchoolUserFormData,
@@ -57,8 +57,10 @@ export default function AdminTeacherManagementPage() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const [editingTeacher, setEditingTeacher] = useState<SchoolTeacher | null>(null);
-  const [teacherToDelete, setTeacherToDelete] = useState<SchoolTeacher | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [userToUpdate, setUserToUpdate] = useState<SchoolTeacher | null>(null);
+  const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
+  const [isConfirmDeleteDialogOpen, setIsConfirmDeleteDialogOpen] = useState(false);
+  const [isStatusUpdateLoading, setIsStatusUpdateLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   const teacherForm = useForm<CreateTeacherFormData>({
@@ -196,23 +198,42 @@ export default function AdminTeacherManagementPage() {
     setIsFormOpen(false);
     setEditingTeacher(null);
   };
+  
+  const handleActionClick = (user: SchoolTeacher) => {
+    setUserToUpdate(user);
+    setIsActionDialogOpen(true);
+  };
 
-  const handleDeleteClick = (teacher: SchoolTeacher) => setTeacherToDelete(teacher);
-
+  const handleDiscontinue = async () => {
+    if (!userToUpdate?._id || !authUser?.schoolId) return;
+    setIsStatusUpdateLoading(true);
+    const result = await updateUserStatus(userToUpdate._id.toString(), authUser.schoolId.toString(), 'discontinued');
+    if (result.success) {
+      toast({ title: "Status Updated", description: result.message });
+      fetchInitialData();
+    } else {
+      toast({ variant: "destructive", title: "Update Failed", description: result.error || result.message });
+    }
+    setIsStatusUpdateLoading(false);
+    setIsActionDialogOpen(false);
+    setUserToUpdate(null);
+  };
+  
   const handleConfirmDelete = async () => {
-    if (!teacherToDelete?._id || !authUser?.schoolId) return;
-    setIsDeleting(true);
-    const result = await deleteSchoolUser(teacherToDelete._id.toString(), authUser.schoolId.toString());
-    setIsDeleting(false);
+    if (!userToUpdate?._id || !authUser?.schoolId) return;
+    setIsStatusUpdateLoading(true);
+    const result = await deleteSchoolUser(userToUpdate._id.toString(), authUser.schoolId.toString());
     if (result.success) {
       toast({ title: "Teacher Deleted", description: result.message });
-      fetchInitialData(); 
+      fetchInitialData();
     } else {
       toast({ variant: "destructive", title: "Deletion Failed", description: result.error || result.message });
     }
-    setTeacherToDelete(null);
+    setIsStatusUpdateLoading(false);
+    setIsConfirmDeleteDialogOpen(false);
+    setUserToUpdate(null);
   };
-  
+
   const filteredTeachers = allSchoolTeachers.filter(user => 
     Object.values(user).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -294,25 +315,25 @@ export default function AdminTeacherManagementPage() {
              <div className="flex items-center justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading teachers...</p></div>
           ) : filteredTeachers.length > 0 ? (
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Class Teacher For</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Class Teacher For</TableHead><TableHead>Status</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredTeachers.map((teacher) => (
-                <TableRow key={teacher._id?.toString()}>
+                <TableRow key={teacher._id?.toString()} className={teacher.status === 'discontinued' ? 'opacity-50' : ''}>
                   <TableCell>{teacher.name}</TableCell>
                   <TableCell>{teacher.email}</TableCell>
                   <TableCell>{getClassNameFromId(teacher._id)}</TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${
+                        teacher.status === 'active' ? 'bg-green-100 text-green-800 border border-green-300' :
+                        'bg-gray-100 text-gray-800 border border-gray-300'
+                    }`}>
+                        {teacher.status || 'active'}
+                    </span>
+                  </TableCell>
                   <TableCell>{teacher.createdAt ? format(new Date(teacher.createdAt as string), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(teacher)} disabled={isSubmitting || isDeleting}><Edit3 className="h-4 w-4" /></Button>
-                    <AlertDialog open={teacherToDelete?._id === teacher._id} onOpenChange={(open) => !open && setTeacherToDelete(null)}>
-                      <AlertDialogTrigger asChild><Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteClick(teacher)} disabled={isSubmitting || isDeleting}><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
-                      {teacherToDelete && teacherToDelete._id === teacher._id && (
-                        <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>Delete <span className="font-semibold">{teacherToDelete.name} ({teacherToDelete.email})</span>?</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter><AlertDialogCancel onClick={() => setTeacherToDelete(null)} disabled={isDeleting}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">{isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                      )}
-                    </AlertDialog>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(teacher)} disabled={isSubmitting || isStatusUpdateLoading}><Edit3 className="h-4 w-4" /></Button>
+                    <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleActionClick(teacher)} disabled={isSubmitting || isStatusUpdateLoading}><Trash2 className="h-4 w-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -323,6 +344,46 @@ export default function AdminTeacherManagementPage() {
           )}
         </CardContent>
       </Card>
+      
+      {/* Action Dialog */}
+      <AlertDialog open={isActionDialogOpen} onOpenChange={setIsActionDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update status for {userToUpdate?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Mark the user as 'Discontinued' to deactivate their account while preserving records. Or, 'Delete Permanently' to remove all data, which cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setUserToUpdate(null)}>Cancel</AlertDialogCancel>
+            <Button variant="outline" onClick={handleDiscontinue} disabled={isStatusUpdateLoading}>
+              {isStatusUpdateLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserMinus className="mr-2 h-4 w-4"/>} Discontinue
+            </Button>
+            <Button variant="destructive" onClick={() => { setIsActionDialogOpen(false); setIsConfirmDeleteDialogOpen(true); }} disabled={isStatusUpdateLoading}>
+              <Trash2 className="mr-2 h-4 w-4"/> Delete Permanently
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm Permanent Deletion Dialog */}
+      <AlertDialog open={isConfirmDeleteDialogOpen} onOpenChange={setIsConfirmDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {userToUpdate?.name}. All associated data will be lost. This action is irreversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setUserToUpdate(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} disabled={isStatusUpdateLoading} className="bg-destructive hover:bg-destructive/90">
+              {isStatusUpdateLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -13,6 +13,7 @@ export interface User {
   password?: string;
   name: string;
   role: UserRole;
+  status?: 'active' | 'discontinued';
   schoolId?: ObjectId | string;
   classId?: string; // For students: class _id they belong to. For teachers: primary class _id they can mark attendance for.
   admissionId?: string; 
