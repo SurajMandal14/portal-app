@@ -19,6 +19,8 @@ import { getStudentsByClass } from "@/app/actions/schoolUsers";
 const ASSESSMENT_TYPES = ["FA1", "FA2", "FA3", "FA4", "SA1", "SA2"];
 const FA_ASSESSMENTS = ["FA1", "FA2", "FA3", "FA4"];
 const SA_ASSESSMENTS = ["SA1", "SA2"];
+const SA_PAPERS = ["Paper1", "Paper2"] as const;
+type SaPaperType = (typeof SA_PAPERS)[number];
 
 const FA_TOOLS = [
   { key: 'tool1', label: 'Tool 1', maxMarks: 10 },
@@ -29,12 +31,12 @@ const FA_TOOLS = [
 type FaToolKey = (typeof FA_TOOLS)[number]['key'];
 
 const SA_ASSESSMENT_SKILLS = [
-    { key: 'as1', label: 'AS 1', defaultMax: 20 },
-    { key: 'as2', label: 'AS 2', defaultMax: 20 },
-    { key: 'as3', label: 'AS 3', defaultMax: 20 },
-    { key: 'as4', label: 'AS 4', defaultMax: 20 },
-    { key: 'as5', label: 'AS 5', defaultMax: 20 },
-    { key: 'as6', label: 'AS 6', defaultMax: 20 },
+    { key: 'as1', label: 'AS 1' },
+    { key: 'as2', label: 'AS 2' },
+    { key: 'as3', label: 'AS 3' },
+    { key: 'as4', label: 'AS 4' },
+    { key: 'as5', label: 'AS 5' },
+    { key: 'as6', label: 'AS 6' },
 ] as const;
 type SaAsKey = (typeof SA_ASSESSMENT_SKILLS)[number]['key'];
 
@@ -75,6 +77,7 @@ export default function TeacherMarksEntryPage() {
   const [selectedSubject, setSelectedSubject] = useState<SubjectForTeacher | null>(null);
 
   const [selectedAssessment, setSelectedAssessment] = useState<string>("");
+  const [selectedPaper, setSelectedPaper] = useState<SaPaperType | "">("");
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(getCurrentAcademicYear());
 
   const [studentsForMarks, setStudentsForMarks] = useState<AppUser[]>([]);
@@ -125,18 +128,19 @@ export default function TeacherMarksEntryPage() {
   }, [authUser, fetchSubjects]);
 
   const fetchStudentsAndMarks = useCallback(async () => {
-    const shouldFetch = selectedSubject && selectedSubject.classId && selectedAssessment && selectedAcademicYear && authUser?.schoolId;
-    if (!shouldFetch) {
+    const shouldFetchFA = selectedSubject && isCurrentAssessmentFA && selectedAcademicYear && authUser?.schoolId;
+    const shouldFetchSA = selectedSubject && isCurrentAssessmentSA && selectedPaper && selectedAcademicYear && authUser?.schoolId;
+
+    if (!shouldFetchFA && !shouldFetchSA) {
         setStudentsForMarks([]);
         setStudentMarks({});
         setSelectedStudentIds({});
-        setIsLoadingStudentsAndMarks(false);
         return;
     }
 
     setIsLoadingStudentsAndMarks(true);
     try {
-      const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), selectedSubject.classId);
+      const studentsResult = await getStudentsByClass(authUser!.schoolId!.toString(), selectedSubject!.classId);
       if (studentsResult.success && studentsResult.users) {
         setStudentsForMarks(studentsResult.users);
         
@@ -148,11 +152,12 @@ export default function TeacherMarksEntryPage() {
         
         // Fetch existing marks
         const marksResult = await getMarksForAssessment(
-          authUser.schoolId.toString(),
-          selectedSubject.classId,
-          selectedSubject.subjectName,
+          authUser!.schoolId!.toString(),
+          selectedSubject!.classId,
+          selectedSubject!.subjectName,
           selectedAssessment,
-          selectedAcademicYear
+          selectedAcademicYear,
+          isCurrentAssessmentSA ? selectedPaper as SaPaperType : undefined
         );
 
         const initialMarks: Record<string, StudentMarksFAState | StudentMarksSAState> = {};
@@ -194,12 +199,13 @@ export default function TeacherMarksEntryPage() {
             if (marksResult.success && marksResult.marks) {
                 marksResult.marks.forEach(mark => {
                     const studentIdStr = mark.studentId.toString();
-                    const assessmentNameParts = mark.assessmentName.split('-');
-                    if (assessmentNameParts.length === 2) {
+                    const assessmentNameParts = mark.assessmentName.split('-'); // e.g., ["SA1", "Paper1", "AS1"]
+                    if (assessmentNameParts.length === 3) {
                         const saBaseName = assessmentNameParts[0];
-                        const asKey = assessmentNameParts[1].toLowerCase() as SaAsKey;
+                        const paperName = assessmentNameParts[1];
+                        const asKey = assessmentNameParts[2].toLowerCase() as SaAsKey;
 
-                        if (saBaseName === selectedAssessment && initialMarks[studentIdStr] && asKey in initialMarks[studentIdStr]!) {
+                        if (saBaseName === selectedAssessment && paperName === selectedPaper && initialMarks[studentIdStr] && asKey in initialMarks[studentIdStr]!) {
                             (initialMarks[studentIdStr] as StudentMarksSAState)[asKey] = mark.marksObtained;
                             (initialMarks[studentIdStr] as StudentMarksSAState)[`${asKey}Max`] = mark.maxMarks;
                         }
@@ -224,7 +230,7 @@ export default function TeacherMarksEntryPage() {
     } finally {
       setIsLoadingStudentsAndMarks(false);
     }
-  }, [authUser, selectedSubject, selectedAssessment, selectedAcademicYear, toast, isCurrentAssessmentFA, isCurrentAssessmentSA]);
+  }, [authUser, selectedSubject, selectedAssessment, selectedPaper, selectedAcademicYear, toast, isCurrentAssessmentFA, isCurrentAssessmentSA]);
 
   useEffect(() => {
     fetchStudentsAndMarks();
@@ -235,6 +241,7 @@ export default function TeacherMarksEntryPage() {
     const subjectInfo = availableSubjects.find(s => s.value === value);
     setSelectedSubject(subjectInfo || null);
     setSelectedAssessment("");
+    setSelectedPaper("");
     setStudentsForMarks([]);
     setStudentMarks({});
     setSelectedStudentIds({});
@@ -242,6 +249,7 @@ export default function TeacherMarksEntryPage() {
 
   const handleAssessmentChange = (value: string) => {
     setSelectedAssessment(value);
+    setSelectedPaper(""); // Reset paper selection when assessment changes
   };
 
   const handleMarksChange = (studentId: string, fieldKey: string, value: string) => {
@@ -280,6 +288,10 @@ export default function TeacherMarksEntryPage() {
   const handleSubmit = async () => {
     if (!authUser || !authUser._id || !authUser.schoolId || !selectedSubject || !selectedAssessment || !selectedAcademicYear) {
       toast({ variant: "destructive", title: "Missing Information", description: "Please select all filter fields." });
+      return;
+    }
+     if (isCurrentAssessmentSA && !selectedPaper) {
+      toast({ variant: "destructive", title: "Missing Information", description: "Please select a paper for the SA exam." });
       return;
     }
     
@@ -328,7 +340,7 @@ export default function TeacherMarksEntryPage() {
             assessmentName: `${selectedAssessment}-${tool.key.charAt(0).toUpperCase() + tool.key.slice(1)}`,
           });
         }
-      } else if (isCurrentAssessmentSA) {
+      } else if (isCurrentAssessmentSA && selectedPaper) {
         const saData = currentStudentMarkState as StudentMarksSAState;
         for (const skill of SA_ASSESSMENT_SKILLS) {
           const marksObtained = saData[skill.key];
@@ -347,7 +359,7 @@ export default function TeacherMarksEntryPage() {
           marksToSubmit.push({
               studentId: studentIdStr, studentName: student.name || "N/A",
               marksObtained: marksObtained, maxMarks: maxMarks,
-              assessmentName: `${selectedAssessment}-${skill.key.toUpperCase()}`,
+              assessmentName: `${selectedAssessment}-${selectedPaper}-${skill.key.toUpperCase()}`,
           });
         }
       }
@@ -407,7 +419,7 @@ export default function TeacherMarksEntryPage() {
         <CardHeader>
           <CardTitle>Selection Criteria</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
           <div>
             <Label htmlFor="subject-select">Subject (Class)</Label>
             <Select onValueChange={handleSubjectChange} value={selectedSubject?.value || ""} disabled={isLoadingSubjects || availableSubjects.length === 0}>
@@ -430,6 +442,17 @@ export default function TeacherMarksEntryPage() {
               </SelectContent>
             </Select>
           </div>
+          {isCurrentAssessmentSA && (
+            <div>
+                <Label htmlFor="paper-select">Paper</Label>
+                <Select onValueChange={(v) => setSelectedPaper(v as SaPaperType)} value={selectedPaper} disabled={!isCurrentAssessmentSA}>
+                <SelectTrigger id="paper-select"><SelectValue placeholder="Select paper" /></SelectTrigger>
+                <SelectContent>
+                    {SA_PAPERS.map(paper => <SelectItem key={paper} value={paper}>{paper}</SelectItem>)}
+                </SelectContent>
+                </Select>
+            </div>
+          )}
            <div>
             <Label htmlFor="academic-year-input">Academic Year</Label>
             <Input
@@ -443,15 +466,15 @@ export default function TeacherMarksEntryPage() {
         </CardContent>
       </Card>
 
-      {(isCurrentAssessmentFA || isCurrentAssessmentSA) && (
+      {(studentsForMarks.length > 0 || isLoadingStudentsAndMarks) && (
         <Card>
           <CardHeader>
-            <CardTitle>Enter Marks for: {selectedSubject?.label} - {selectedAssessment}</CardTitle>
+            <CardTitle>Enter Marks for: {selectedSubject?.label} - {selectedAssessment}{isCurrentAssessmentSA && selectedPaper && ` - ${selectedPaper}`}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoadingStudentsAndMarks ? (
               <div className="flex items-center justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading...</p></div>
-            ) : studentsForMarks.length > 0 ? (
+            ) : (
               <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
                  <div className="overflow-x-auto">
                 <Table>
@@ -554,13 +577,15 @@ export default function TeacherMarksEntryPage() {
                   </Button>
                 </div>
               </form>
-            ) : (
-              <p className="text-center text-muted-foreground py-4">
-                {selectedSubject ? `No students found for class ${selectedSubject.className}.` : "Select criteria to load students."}
-              </p>
             )}
           </CardContent>
         </Card>
+      )}
+
+      {!isLoadingStudentsAndMarks && studentsForMarks.length === 0 && selectedSubject && (
+          <p className="text-center text-muted-foreground py-4">
+            {isCurrentAssessmentSA && !selectedPaper ? "Please select a paper to load students." : `No students found for class ${selectedSubject.className}.`}
+          </p>
       )}
     </div>
   );

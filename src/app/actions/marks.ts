@@ -116,7 +116,8 @@ export async function getMarksForAssessment(
   classId: string,
   subjectNameParam: string,
   assessmentNameBase: string, // e.g., "FA1", "SA1"
-  academicYear: string
+  academicYear: string,
+  paper?: 'Paper1' | 'Paper2' // New optional parameter for SA papers
 ): Promise<GetMarksResult> {
   try {
     if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(classId)) {
@@ -129,9 +130,14 @@ export async function getMarksForAssessment(
     let queryAssessmentFilter: { $regex: string } | { $in: string[] };
 
     if (["FA1", "FA2", "FA3", "FA4"].includes(assessmentNameBase)) {
+      // Fetch all tools for a given FA
       queryAssessmentFilter = { $regex: `^${assessmentNameBase}-Tool` };
     } else if (["SA1", "SA2"].includes(assessmentNameBase)) {
-      queryAssessmentFilter = { $regex: `^${assessmentNameBase}-AS` }; // Only look for Assessment Skills now
+      if (!paper) {
+        return { success: false, message: 'Paper selection is required for SA assessments.', error: 'Paper not specified.' };
+      }
+      // Fetch all assessment skills for a given SA and Paper
+      queryAssessmentFilter = { $regex: `^${assessmentNameBase}-${paper}-AS` }; 
     } else {
       // For any other specific assessment names
       queryAssessmentFilter = { $in: [assessmentNameBase] };

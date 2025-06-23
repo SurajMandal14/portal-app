@@ -4,7 +4,6 @@ import { z } from 'zod';
 import type { ReportCardTemplateKey } from './school';
 import type { StudentData as FrontStudentData, MarksEntry as FrontMarksEntryType } from '@/components/report-cards/CBSEStateFront';
 
-// Define a structure for storing FA marks that includes the subject identifier
 export interface FormativeAssessmentEntryForStorage {
   subjectName: string;
   fa1: FrontMarksEntryType;
@@ -13,38 +12,28 @@ export interface FormativeAssessmentEntryForStorage {
   fa4: FrontMarksEntryType;
 }
 
-// Structure for the 6 Assessment Skill marks for a given SA period
-export interface SAPeriodMarks {
-  as1: number | null;
-  as2: number | null;
-  as3: number | null;
-  as4: number | null;
-  as5: number | null;
-  as6: number | null;
+export interface AssessmentSkillScore {
+  marks: number | null;
+  maxMarks: number | null;
 }
 
-// Structure for the max marks of the 6 Assessment Skills
-export interface SAMaxMarks {
-  as1: number;
-  as2: number;
-  as3: number;
-  as4: number;
-  as5: number;
-  as6: number;
+export interface SAPaperData {
+  as1: AssessmentSkillScore;
+  as2: AssessmentSkillScore;
+  as3: AssessmentSkillScore;
+  as4: AssessmentSkillScore;
+  as5: AssessmentSkillScore;
+  as6: AssessmentSkillScore;
 }
 
-// Main structure for Summative Assessment data per subject in a saved report
 export interface ReportCardSASubjectEntry {
   subjectName: string; 
-  sa1_marks: SAPeriodMarks;
-  sa1_max_marks: SAMaxMarks;
-  sa2_marks: SAPeriodMarks;
-  sa2_max_marks: SAMaxMarks;
-  faTotal200M: number | null; 
+  paper: string; // "I", "II", "Physics", "Biology"
+  sa1: SAPaperData;
+  sa2: SAPaperData;
+  faTotal200M: number | null;
 }
 
-
-// Structure for Attendance data for storage and display
 export interface ReportCardAttendanceMonth {
   workingDays: number | null;
   presentDays: number | null;
@@ -76,22 +65,25 @@ export interface ReportCardData {
 
 // --- Zod Schemas for Validation ---
 
-const saPeriodMarksSchema = z.object({
-  as1: z.number().nullable(), as2: z.number().nullable(), as3: z.number().nullable(),
-  as4: z.number().nullable(), as5: z.number().nullable(), as6: z.number().nullable(),
+const assessmentSkillScoreSchema = z.object({
+  marks: z.number().nullable(),
+  maxMarks: z.number().nullable(),
 });
 
-const saMaxMarksSchema = z.object({
-  as1: z.number(), as2: z.number(), as3: z.number(),
-  as4: z.number(), as5: z.number(), as6: z.number(),
+const saPaperDataSchema = z.object({
+  as1: assessmentSkillScoreSchema,
+  as2: assessmentSkillScoreSchema,
+  as3: assessmentSkillScoreSchema,
+  as4: assessmentSkillScoreSchema,
+  as5: assessmentSkillScoreSchema,
+  as6: assessmentSkillScoreSchema,
 });
 
 const reportCardSASubjectEntrySchemaForSave = z.object({
   subjectName: z.string(),
-  sa1_marks: saPeriodMarksSchema,
-  sa1_max_marks: saMaxMarksSchema,
-  sa2_marks: saPeriodMarksSchema,
-  sa2_max_marks: saMaxMarksSchema,
+  paper: z.string(),
+  sa1: saPaperDataSchema,
+  sa2: saPaperDataSchema,
   faTotal200M: z.number().nullable(),
 });
 

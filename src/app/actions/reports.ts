@@ -31,7 +31,7 @@ export async function saveReportCard(data: Omit<ReportCardData, '_id' | 'created
         formativeAssessments,
         coCurricularAssessments,
         secondLanguage,
-        summativeAssessments, // This now uses the new schema with AS1-AS6
+        summativeAssessments, 
         attendance,
         finalOverallGrade,
         generatedByAdminId: adminIdStr ? new ObjectId(adminIdStr) : undefined,
