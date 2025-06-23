@@ -58,6 +58,13 @@ const getCurrentAcademicYear = (): string => {
   }
 };
 
+const getPapersForSubject = (subjectName: string): string[] => {
+    if (!subjectName) return [];
+    if (subjectName === "Science") return ["Physics", "Biology"];
+    if (["English", "Maths", "Social"].includes(subjectName)) return ["I", "II"];
+    return ["I"];
+};
+
 export default function TeacherMarksEntryPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -79,6 +86,8 @@ export default function TeacherMarksEntryPage() {
 
   const isCurrentAssessmentFA = FA_ASSESSMENTS.includes(selectedAssessment);
   const isCurrentAssessmentSA = SA_ASSESSMENTS.includes(selectedAssessment);
+  const papersForSelectedSubject = isCurrentAssessmentSA && selectedSubject ? getPapersForSubject(selectedSubject.subjectName) : [];
+
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -532,10 +541,12 @@ export default function TeacherMarksEntryPage() {
                         FA_TOOLS.map(tool => <TableHead key={tool.key} className="w-28 text-center">{tool.label} ({tool.maxMarks}M)</TableHead>)
                       ) : isCurrentAssessmentSA ? (
                         <>
-                          <TableHead className="w-36 text-center">P1 Marks</TableHead>
-                          <TableHead className="w-32 text-center">P1 Max</TableHead>
-                          <TableHead className="w-36 text-center">P2 Marks</TableHead>
-                          <TableHead className="w-32 text-center">P2 Max</TableHead>
+                          {papersForSelectedSubject.map((paperName, index) => (
+                            <React.Fragment key={paperName}>
+                                <TableHead className="w-36 text-center">{paperName} Marks</TableHead>
+                                <TableHead className="w-32 text-center">{paperName} Max</TableHead>
+                            </React.Fragment>
+                          ))}
                         </>
                       ) : null }
                     </TableRow>
@@ -576,52 +587,46 @@ export default function TeacherMarksEntryPage() {
                               );
                             })
                           )}
-                          {isCurrentAssessmentSA && currentMarksState && (
+                           {isCurrentAssessmentSA && currentMarksState && (
                             <>
-                              <TableCell className="text-center">
-                                <Input
-                                  type="number"
-                                  value={(currentMarksState as StudentMarksSAState)?.p1Marks ?? ""}
-                                  onChange={e => handleMarksChange(studentIdStr, 'p1Marks', e.target.value)}
-                                  disabled={isSubmitting}
-                                  max={(currentMarksState as StudentMarksSAState)?.p1Max ?? defaultMaxMarksSApaper}
-                                  min="0"
-                                  className="mx-auto"
-                                />
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Input
-                                  type="number"
-                                  value={(currentMarksState as StudentMarksSAState)?.p1Max ?? defaultMaxMarksSApaper}
-                                  onChange={e => handleMarksChange(studentIdStr, 'p1Max', e.target.value)}
-                                  disabled={isSubmitting}
-                                  min="1"
-                                  className="mx-auto"
-                                />
-                              </TableCell>
-                               <TableCell className="text-center">
-                                <Input
-                                  type="number"
-                                  value={(currentMarksState as StudentMarksSAState)?.p2Marks ?? ""}
-                                  onChange={e => handleMarksChange(studentIdStr, 'p2Marks', e.target.value)}
-                                  disabled={isSubmitting}
-                                  max={(currentMarksState as StudentMarksSAState)?.p2Max ?? defaultMaxMarksSApaper}
-                                  min="0"
-                                  className="mx-auto"
-                                />
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Input
-                                  type="number"
-                                  value={(currentMarksState as StudentMarksSAState)?.p2Max ?? defaultMaxMarksSApaper}
-                                  onChange={e => handleMarksChange(studentIdStr, 'p2Max', e.target.value)}
-                                  disabled={isSubmitting}
-                                  min="1"
-                                  className="mx-auto"
-                                />
-                              </TableCell>
+                              {papersForSelectedSubject.map((paperName, index) => {
+                                const pMarksKey = `p${index + 1}Marks` as 'p1Marks' | 'p2Marks';
+                                const pMaxKey = `p${index + 1}Max` as 'p1Max' | 'p2Max';
+                                return (
+                                <React.Fragment key={paperName}>
+                                    <TableCell className="text-center">
+                                        <Input
+                                        type="number"
+                                        value={(currentMarksState as StudentMarksSAState)[pMarksKey] ?? ""}
+                                        onChange={e => handleMarksChange(studentIdStr, pMarksKey, e.target.value)}
+                                        disabled={isSubmitting}
+                                        max={(currentMarksState as StudentMarksSAState)[pMaxKey] ?? defaultMaxMarksSApaper}
+                                        min="0"
+                                        className="mx-auto"
+                                        />
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        <Input
+                                        type="number"
+                                        value={(currentMarksState as StudentMarksSAState)[pMaxKey] ?? defaultMaxMarksSApaper}
+                                        onChange={e => handleMarksChange(studentIdStr, pMaxKey, e.target.value)}
+                                        disabled={isSubmitting}
+                                        min="1"
+                                        className="mx-auto"
+                                        />
+                                    </TableCell>
+                                </React.Fragment>
+                                )
+                              })}
+                               {/* Render empty cells if subject has only 1 paper */}
+                                {papersForSelectedSubject.length === 1 && (
+                                <>
+                                    <TableCell></TableCell>
+                                    <TableCell></TableCell>
+                                </>
+                                )}
                             </>
-                          )}
+                            )}
                         </TableRow>
                       );
                     })}
@@ -645,4 +650,3 @@ export default function TeacherMarksEntryPage() {
     </div>
   );
 }
-

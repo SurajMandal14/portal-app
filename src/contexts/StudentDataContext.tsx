@@ -12,6 +12,7 @@ import { getStudentAttendanceRecords } from '@/app/actions/attendance';
 import { getFeePaymentsByStudent } from '@/app/actions/fees';
 import { getSchoolById } from '@/app/actions/schools';
 import { getFeeConcessionsForStudent } from '@/app/actions/concessions'; // Import action
+import { getClassDetailsById } from '@/app/actions/classes'; // Import action to get class details
 import { useToast } from '@/hooks/use-toast';
 
 // Helper to determine current academic year string (e.g., "2023-2024")
@@ -170,8 +171,18 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
         const studentPayments = feePaymentsResult.success && feePaymentsResult.payments ? feePaymentsResult.payments : [];
         const studentConcessions = concessionsResult.success && concessionsResult.concessions ? concessionsResult.concessions : [];
         
+        let studentClassNameForFee: string | undefined = undefined;
         if (authUser.classId) {
-            const totalAnnualTuitionFee = calculateAnnualTuitionFee(authUser.classId as string, currentSchoolDetails);
+            const classDetailsResult = await getClassDetailsById(authUser.classId, authUser.schoolId.toString());
+            if (classDetailsResult.success && classDetailsResult.classDetails) {
+                studentClassNameForFee = classDetailsResult.classDetails.name;
+            } else {
+                 toast({ variant: "warning", title: "Class Info Error", description: "Could not find your class details to calculate fees." });
+            }
+        }
+        
+        if (studentClassNameForFee) {
+            const totalAnnualTuitionFee = calculateAnnualTuitionFee(studentClassNameForFee, currentSchoolDetails);
             const totalPaid = studentPayments.reduce((sum, payment) => sum + payment.amountPaid, 0);
             const totalConcessionsAmount = studentConcessions.reduce((sum, concession) => sum + concession.amount, 0);
             const totalDue = totalAnnualTuitionFee - totalPaid - totalConcessionsAmount;
@@ -180,19 +191,21 @@ export const StudentDataProvider = ({ children }: StudentDataProviderProps) => {
             let percentagePaid = 0;
             if (netPayable > 0) {
               percentagePaid = Math.round((totalPaid / netPayable) * 100);
-            } else if (netPayable <= 0 && totalPaid > 0) {
-              percentagePaid = 100; // Fully paid or overpaid if net payable is zero/negative but something was paid
-            } else if (netPayable <= 0 && totalPaid <= 0) {
-              percentagePaid = 0; // Or 100 if fee is 0 and no payment, depends on interpretation
+            } else if (netPayable <= 0 && totalPaid >= 0) { // If fee is covered by concession
+              percentagePaid = 100;
             }
-            // Ensure percentage doesn't exceed 100 for display if overpaid relative to net
+            
             percentagePaid = Math.min(percentagePaid, 100);
 
 
             setFeeSummary({ totalFee: totalAnnualTuitionFee, totalPaid, totalConcessions: totalConcessionsAmount, totalDue, percentagePaid });
         } else {
             setFeeSummary({ totalFee: 0, totalPaid: 0, totalConcessions: 0, totalDue: 0, percentagePaid: 0 });
-            toast({ variant: "info", title: "Fee Info", description: "You are not assigned to a class, so fee details cannot be calculated." });
+            if (authUser.classId) { // Only show toast if they have a classId but it wasn't found
+                toast({ variant: "info", title: "Fee Info", description: "Your assigned class could not be found, so fee details cannot be calculated." });
+            } else {
+                 toast({ variant: "info", title: "Fee Info", description: "You are not assigned to a class, so fee details cannot be calculated." });
+            }
         }
       } else {
         setFeeSummary(null);

@@ -81,6 +81,7 @@ interface OverallFeeSummary {
 interface ClassOption {
   value: string; // class _id
   label: string; // "ClassName - Section"
+  name?: string;
 }
 
 
@@ -287,30 +288,33 @@ export default function AdminReportsPage() {
     allSchoolStudents.forEach(student => {
       if (student.classId) {
         const classObj = classOptions.find(c => c.value === student.classId);
-        const classNameForSummary = (classObj as any)?.name || student.classId; // Use original class name for tuition fee lookup
-        const displayClassName = classObj?.label || student.classId; // Use label for display
+        const classNameForTuitionLookup = classObj?.name; 
+        const displayClassName = classObj?.label || student.classId;
 
-        const studentTotalAnnualTuitionFee = calculateAnnualTuitionFee(classNameForSummary, schoolDetails);
-        const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id.toString());
-        const studentTotalPaid = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
+        // Only process fees if we can find the class name
+        if (classNameForTuitionLookup) {
+          const studentTotalAnnualTuitionFee = calculateAnnualTuitionFee(classNameForTuitionLookup, schoolDetails);
+          const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id!.toString());
+          const studentTotalPaid = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
 
-        const studentConcessionsForYear = allSchoolConcessions.filter(
-            c => c.studentId.toString() === student._id.toString() && c.academicYear === currentAcademicYear
-        );
-        const studentTotalConcessions = studentConcessionsForYear.reduce((sum, c) => sum + c.amount, 0);
+          const studentConcessionsForYear = allSchoolConcessions.filter(
+              c => c.studentId.toString() === student._id!.toString() && c.academicYear === currentAcademicYear
+          );
+          const studentTotalConcessions = studentConcessionsForYear.reduce((sum, c) => sum + c.amount, 0);
 
-        grandTotalExpected += studentTotalAnnualTuitionFee;
-        grandTotalCollected += studentTotalPaid;
-        grandTotalConcessions += studentTotalConcessions;
+          grandTotalExpected += studentTotalAnnualTuitionFee;
+          grandTotalCollected += studentTotalPaid;
+          grandTotalConcessions += studentTotalConcessions;
 
-        if (!classFeeMap.has(displayClassName)) {
-          classFeeMap.set(displayClassName, { totalExpected: 0, totalCollected: 0, totalConcessions: 0, studentCount: 0 });
+          if (!classFeeMap.has(displayClassName)) {
+            classFeeMap.set(displayClassName, { totalExpected: 0, totalCollected: 0, totalConcessions: 0, studentCount: 0 });
+          }
+          const classData = classFeeMap.get(displayClassName)!;
+          classData.totalExpected += studentTotalAnnualTuitionFee;
+          classData.totalCollected += studentTotalPaid;
+          classData.totalConcessions += studentTotalConcessions;
+          classData.studentCount++;
         }
-        const classData = classFeeMap.get(displayClassName)!;
-        classData.totalExpected += studentTotalAnnualTuitionFee;
-        classData.totalCollected += studentTotalPaid;
-        classData.totalConcessions += studentTotalConcessions;
-        classData.studentCount++;
       }
     });
 
@@ -944,5 +948,3 @@ export default function AdminReportsPage() {
     </div>
   );
 }
-
-    
