@@ -360,18 +360,17 @@ export default function GenerateCBSEStateReportPage() {
                     const saPeriod = (parts[0].toLowerCase() === 'sa1' ? 'sa1' : 'sa2') as 'sa1' | 'sa2';
                     const paperPart = parts[1]; // "Paper1" or "Paper2"
                     const asKey = parts[2].toLowerCase() as keyof SAPaperData; // "as1", "as2", etc.
-
+                    
                     const targetRow = tempSaDataForNewReport.find(row => {
-                        if (row.subjectName !== mark.subjectName) return false;
-                        const papersForSubject = getPapersForSubject(mark.subjectName);
-                        if (papersForSubject.length === 1) {
-                            return paperPart === "Paper1" && row.paper === "I";
-                        }
-                        if (papersForSubject.length === 2) {
-                            if (paperPart === "Paper1" && row.paper === papersForSubject[0]) return true;
-                            if (paperPart === "Paper2" && row.paper === papersForSubject[1]) return true;
-                        }
-                        return false;
+                         if (row.subjectName !== mark.subjectName) return false;
+                         const papersForSubject = getPapersForSubject(row.subjectName);
+
+                         if(papersForSubject.length === 1 && paperPart === 'Paper1' && row.paper === 'I') return true;
+                         if(papersForSubject.length === 2) {
+                            if(paperPart === 'Paper1' && row.paper === papersForSubject[0]) return true;
+                            if(paperPart === 'Paper2' && row.paper === papersForSubject[1]) return true;
+                         }
+                         return false;
                     });
                     
                     if (targetRow && targetRow[saPeriod] && asKey in targetRow[saPeriod]) {
