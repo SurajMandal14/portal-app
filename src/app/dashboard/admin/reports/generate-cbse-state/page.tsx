@@ -34,11 +34,6 @@ import type { MarkEntry as MarkEntryType } from '@/types/marks';
 
 type FrontMarksEntry = FrontMarksEntryTypeImport;
 
-const getPapersForSubject = (subjectName: string): string[] => {
-    if (subjectName === "Science") return ["Physics", "Biology"];
-    return ["I", "II"];
-};
-
 const getDefaultSaPaperData = (): SAPaperData => ({
     as1: { marks: null, maxMarks: 20 },
     as2: { marks: null, maxMarks: 20 },
@@ -47,38 +42,6 @@ const getDefaultSaPaperData = (): SAPaperData => ({
     as5: { marks: null, maxMarks: 20 },
     as6: { marks: null, maxMarks: 20 },
 });
-
-const initializeSaDataFromClassSubjects = (
-    classSubjects: SchoolClassSubject[],
-): ReportCardSASubjectEntry[] => {
-    if (!classSubjects || classSubjects.length === 0) return [];
-    
-    const saStructure: ReportCardSASubjectEntry[] = [];
-    classSubjects.forEach(subject => {
-        // Assume any subject *could* have one or two papers to build a flexible structure.
-        const papers = getPapersForSubject(subject.name);
-        // Only create one paper row by default
-        saStructure.push({
-            subjectName: subject.name,
-            paper: papers[0],
-            sa1: getDefaultSaPaperData(),
-            sa2: getDefaultSaPaperData(),
-            faTotal200M: null,
-        });
-        // Create a second paper row only for Science by default or if needed
-        if (subject.name === "Science") {
-             saStructure.push({
-                subjectName: subject.name,
-                paper: papers[1],
-                sa1: getDefaultSaPaperData(),
-                sa2: getDefaultSaPaperData(),
-                faTotal200M: null,
-            });
-        }
-    });
-    return saStructure;
-};
-
 
 const getDefaultFaMarksEntryFront = (): FrontMarksEntry => ({ tool1: null, tool2: null, tool3: null, tool4: null });
 const getDefaultSubjectFaDataFront = (subjects: SchoolClassSubject[]): Record<string, FrontSubjectFAData> => {
@@ -186,7 +149,7 @@ export default function GenerateCBSEStateReportPage() {
     setStudentData(defaultStudentDataFront);
     setFaMarks(getDefaultSubjectFaDataFront(subjects));
     setCoMarks(defaultCoMarksFront);
-    setSaData(initializeSaDataFromClassSubjects(subjects));
+    setSaData([]); // Reset SA data
     setAttendanceData(defaultAttendanceDataBack);
     setFinalOverallGradeInput(null);
     setLoadedReportId(null);
@@ -294,18 +257,7 @@ export default function GenerateCBSEStateReportPage() {
           setFaMarks(loadedFaMarksState);
           setCoMarks(report.coCurricularAssessments || defaultCoMarksFront);
           
-          let tempSaData = initializeSaDataFromClassSubjects(currentLoadedClassSubjects);
-          if (report.summativeAssessments && report.summativeAssessments.length > 0) {
-              tempSaData.forEach(templateRow => {
-                  const savedRow = report.summativeAssessments.find(
-                      saved => saved.subjectName === templateRow.subjectName && saved.paper === templateRow.paper
-                  );
-                  if (savedRow) {
-                      templateRow.sa1 = savedRow.sa1;
-                      templateRow.sa2 = savedRow.sa2;
-                  }
-              });
-          }
+          let tempSaData = report.summativeAssessments;
           tempSaData = tempSaData.map(row => ({
               ...row,
               faTotal200M: calculateFaTotal200MForRow(row.subjectName, row.paper, loadedFaMarksState)
@@ -330,11 +282,54 @@ export default function GenerateCBSEStateReportPage() {
           );
 
           const newFaMarksForState: Record<string, FrontSubjectFAData> = getDefaultSubjectFaDataFront(currentLoadedClassSubjects);
-          let tempSaDataForNewReport = initializeSaDataFromClassSubjects(currentLoadedClassSubjects);
+          let tempSaDataForNewReport: ReportCardSASubjectEntry[] = [];
+          
+          const allFetchedMarks = marksResult.success && marksResult.marks ? marksResult.marks : [];
+          
+          // Logic to dynamically build SA structure based on fetched marks
+          const paperNamesUsedBySubject = new Map<string, Set<string>>();
+          allFetchedMarks.forEach(mark => {
+              if (mark.assessmentName.startsWith("SA")) {
+                  const parts = mark.assessmentName.split('-');
+                  if (parts.length === 3) {
+                      const subjectName = mark.subjectName;
+                      const paperName = parts[1]; // "Paper1" or "Paper2"
+                      if (!paperNamesUsedBySubject.has(subjectName)) {
+                          paperNamesUsedBySubject.set(subjectName, new Set());
+                      }
+                      paperNamesUsedBySubject.get(subjectName)!.add(paperName);
+                  }
+              }
+          });
+
+          currentLoadedClassSubjects.forEach(subject => {
+              const papersForThisSubject = paperNamesUsedBySubject.get(subject.name);
+              const hasPaper2 = papersForThisSubject?.has('Paper2') || subject.name === 'Science';
+
+              // Always add Paper 1
+              tempSaDataForNewReport.push({
+                  subjectName: subject.name,
+                  paper: subject.name === "Science" ? "Physics" : "I",
+                  sa1: getDefaultSaPaperData(),
+                  sa2: getDefaultSaPaperData(),
+                  faTotal200M: null,
+              });
+
+              // Add Paper 2 only if needed
+              if (hasPaper2) {
+                  tempSaDataForNewReport.push({
+                      subjectName: subject.name,
+                      paper: subject.name === "Science" ? "Biology" : "II",
+                      sa1: getDefaultSaPaperData(),
+                      sa2: getDefaultSaPaperData(),
+                      faTotal200M: null,
+                  });
+              }
+          });
 
           if (marksResult.success && marksResult.marks) {
-            const allFetchedMarks = marksResult.marks;
-
+            
+            // Populate FA marks
             currentLoadedClassSubjects.forEach(subject => {
               const subjectIdentifier = subject.name; 
               const subjectSpecificFaMarks = allFetchedMarks.filter(
@@ -360,23 +355,26 @@ export default function GenerateCBSEStateReportPage() {
               });
             });
             
+            // Populate SA marks into the newly created structure
             allFetchedMarks.forEach((mark: MarkEntryType) => {
               if (mark.assessmentName.startsWith("SA")) {
-                  const parts = mark.assessmentName.split('-'); // e.g., ["SA1", "Paper1", "AS3"]
+                  const parts = mark.assessmentName.split('-'); 
                   if (parts.length !== 3) return;
 
                   const saPeriod = (parts[0].toLowerCase() === 'sa1' ? 'sa1' : 'sa2') as 'sa1' | 'sa2';
-                  const dbPaperPart = parts[1]; // "Paper1" or "Paper2" from database
+                  const dbPaperPart = parts[1];
                   const asKey = parts[2].toLowerCase() as keyof SAPaperData;
                   
-                  const subjectPaperRows = tempSaDataForNewReport.filter(row => row.subjectName === mark.subjectName);
-                  let targetRow: ReportCardSASubjectEntry | undefined = undefined;
-
-                  if (dbPaperPart === 'Paper1' && subjectPaperRows.length > 0) {
-                      targetRow = subjectPaperRows[0];
-                  } else if (dbPaperPart === 'Paper2' && subjectPaperRows.length > 1) {
-                      targetRow = subjectPaperRows[1];
+                  let displayPaperName: string;
+                  if (mark.subjectName === "Science") {
+                      displayPaperName = dbPaperPart === 'Paper1' ? 'Physics' : 'Biology';
+                  } else {
+                      displayPaperName = dbPaperPart === 'Paper1' ? 'I' : 'II';
                   }
+                  
+                  const targetRow = tempSaDataForNewReport.find(
+                      row => row.subjectName === mark.subjectName && row.paper === displayPaperName
+                  );
                   
                   if (targetRow && targetRow[saPeriod] && asKey in targetRow[saPeriod]) {
                       (targetRow[saPeriod] as any)[asKey] = {
