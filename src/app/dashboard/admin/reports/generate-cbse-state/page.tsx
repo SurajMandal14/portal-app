@@ -37,8 +37,9 @@ type FrontMarksEntry = FrontMarksEntryTypeImport;
 // Helper function to determine paper names for common subjects
 const getPapersForSubject = (subjectName: string): string[] => {
     if (subjectName === "Science") return ["Physics", "Biology"];
-    if (["English", "Maths", "Social"].includes(subjectName)) return ["I", "II"];
-    return ["I"];
+    // Assume all other subjects can have up to two papers to provide flexibility.
+    // This prevents Paper 2 marks from being ignored for subjects not explicitly listed.
+    return ["I", "II"];
 };
 
 const getDefaultSaPaperData = (): SAPaperData => ({
@@ -353,34 +354,25 @@ export default function GenerateCBSEStateReportPage() {
             });
             
             allFetchedMarks.forEach((mark: MarkEntryType) => {
-                if (mark.assessmentName.startsWith("SA")) {
-                    const parts = mark.assessmentName.split('-'); // e.g., ["SA1", "Paper1", "AS3"]
-                    if (parts.length !== 3) return;
+              if (mark.assessmentName.startsWith("SA")) {
+                  const parts = mark.assessmentName.split('-'); // e.g., ["SA1", "Paper1", "AS3"]
+                  if (parts.length !== 3) return;
 
-                    const saPeriod = (parts[0].toLowerCase() === 'sa1' ? 'sa1' : 'sa2') as 'sa1' | 'sa2';
-                    const paperPart = parts[1]; // "Paper1" or "Paper2"
-                    const asKey = parts[2].toLowerCase() as keyof SAPaperData; // "as1", "as2", etc.
-                    
-                    const targetRow = tempSaDataForNewReport.find(row => {
-                         if (row.subjectName !== mark.subjectName) return false;
-
-                         const papersForSubject = getPapersForSubject(row.subjectName);
-                         const paperIndex = paperPart === 'Paper1' ? 0 : 1;
-                     
-                         // Ensure the subject has a paper at this index
-                         if (papersForSubject[paperIndex] === undefined) return false;
-                         
-                         // Check if the current row's paper name matches the expected paper name for that index
-                         return row.paper === papersForSubject[paperIndex];
-                    });
-                    
-                    if (targetRow && targetRow[saPeriod] && asKey in targetRow[saPeriod]) {
-                        (targetRow[saPeriod] as any)[asKey] = {
-                            marks: mark.marksObtained,
-                            maxMarks: mark.maxMarks,
-                        };
-                    }
-                }
+                  const saPeriod = (parts[0].toLowerCase() === 'sa1' ? 'sa1' : 'sa2') as 'sa1' | 'sa2';
+                  const paperPart = parts[1]; // "Paper1" or "Paper2"
+                  const asKey = parts[2].toLowerCase() as keyof SAPaperData; // "as1", "as2", etc.
+                  
+                  const targetRow = tempSaDataForNewReport.find(row => 
+                      row.subjectName === mark.subjectName && row.paper === paperPart
+                  );
+                  
+                  if (targetRow && targetRow[saPeriod] && asKey in targetRow[saPeriod]) {
+                      (targetRow[saPeriod] as any)[asKey] = {
+                          marks: mark.marksObtained,
+                          maxMarks: mark.maxMarks,
+                      };
+                  }
+              }
             });
             setFaMarks(newFaMarksForState);
           } else { 
