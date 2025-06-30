@@ -363,19 +363,15 @@ export default function GenerateCBSEStateReportPage() {
                     
                     const targetRow = tempSaDataForNewReport.find(row => {
                          if (row.subjectName !== mark.subjectName) return false;
-                         
+
                          const papersForSubject = getPapersForSubject(row.subjectName);
-                         const isPaper1FromDb = paperPart === 'Paper1';
-                         const isPaper2FromDb = paperPart === 'Paper2';
-
-                         if (papersForSubject.length === 1 && isPaper1FromDb && row.paper === 'I') return true;
+                         const paperIndex = paperPart === 'Paper1' ? 0 : 1;
+                     
+                         // Ensure the subject has a paper at this index
+                         if (papersForSubject[paperIndex] === undefined) return false;
                          
-                         if (papersForSubject.length === 2) {
-                            if (isPaper1FromDb && row.paper === papersForSubject[0]) return true;
-                            if (isPaper2FromDb && row.paper === papersForSubject[1]) return true;
-                         }
-
-                         return false;
+                         // Check if the current row's paper name matches the expected paper name for that index
+                         return row.paper === papersForSubject[paperIndex];
                     });
                     
                     if (targetRow && targetRow[saPeriod] && asKey in targetRow[saPeriod]) {
