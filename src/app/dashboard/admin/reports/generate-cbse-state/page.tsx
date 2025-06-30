@@ -36,11 +36,13 @@ type FrontMarksEntry = FrontMarksEntryTypeImport;
 
 // Helper function to determine paper names for common subjects
 const getPapersForSubject = (subjectName: string): string[] => {
+    // Treat Science as a special case with two distinct papers
     if (subjectName === "Science") return ["Physics", "Biology"];
-    // Assume all other subjects can have up to two papers to provide flexibility.
-    // This prevents Paper 2 marks from being ignored for subjects not explicitly listed.
+    // For all other subjects, they can have one or two papers, generically named.
+    // The report card template will display these as Paper I and Paper II.
     return ["I", "II"];
 };
+
 
 const getDefaultSaPaperData = (): SAPaperData => ({
     as1: { marks: null, maxMarks: 20 },
@@ -58,7 +60,9 @@ const initializeSaDataFromClassSubjects = (
     
     const saStructure: ReportCardSASubjectEntry[] = [];
     classSubjects.forEach(subject => {
-        const papers = getPapersForSubject(subject.name);
+        // Assume any subject *could* have two papers to build a flexible structure.
+        // The display logic can then decide whether to show one or two rows.
+        const papers = getPapersForSubject(subject.name); 
         papers.forEach(paperName => {
             saStructure.push({
                 subjectName: subject.name,
@@ -359,18 +363,29 @@ export default function GenerateCBSEStateReportPage() {
                   if (parts.length !== 3) return;
 
                   const saPeriod = (parts[0].toLowerCase() === 'sa1' ? 'sa1' : 'sa2') as 'sa1' | 'sa2';
-                  const paperPart = parts[1]; // "Paper1" or "Paper2"
+                  const dbPaperPart = parts[1]; // "Paper1" or "Paper2" from database
                   const asKey = parts[2].toLowerCase() as keyof SAPaperData; // "as1", "as2", etc.
                   
-                  const targetRow = tempSaDataForNewReport.find(row => 
-                      row.subjectName === mark.subjectName && row.paper === paperPart
-                  );
+                  const papersForSubjectInReport = getPapersForSubject(mark.subjectName);
+                  let targetPaperNameInReport: string | undefined = undefined;
+
+                  if (dbPaperPart === 'Paper1' && papersForSubjectInReport.length > 0) {
+                      targetPaperNameInReport = papersForSubjectInReport[0];
+                  } else if (dbPaperPart === 'Paper2' && papersForSubjectInReport.length > 1) {
+                      targetPaperNameInReport = papersForSubjectInReport[1];
+                  }
                   
-                  if (targetRow && targetRow[saPeriod] && asKey in targetRow[saPeriod]) {
-                      (targetRow[saPeriod] as any)[asKey] = {
-                          marks: mark.marksObtained,
-                          maxMarks: mark.maxMarks,
-                      };
+                  if (targetPaperNameInReport) {
+                      const targetRow = tempSaDataForNewReport.find(row => 
+                          row.subjectName === mark.subjectName && row.paper === targetPaperNameInReport
+                      );
+                      
+                      if (targetRow && targetRow[saPeriod] && asKey in targetRow[saPeriod]) {
+                          (targetRow[saPeriod] as any)[asKey] = {
+                              marks: mark.marksObtained,
+                              maxMarks: mark.maxMarks,
+                          };
+                      }
                   }
               }
             });
