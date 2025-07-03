@@ -33,11 +33,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolClass, getSchoolClasses, updateSchoolClass, deleteSchoolClass } from "@/app/actions/classes";
 import { getSchoolUsers } from "@/app/actions/schoolUsers"; 
-import { getSchoolById } from "@/app/actions/schools"; // Import getSchoolById
+import { getSchoolById } from "@/app/actions/schools";
+import { getSubjects } from "@/app/actions/subjects"; // Import action to get master subjects
+import type { Subject } from "@/types/subject"; // Import subject type
 import type { SchoolClass, CreateClassFormData } from '@/types/classes';
 import { createClassFormSchema } from '@/types/classes';
 import type { AuthUser, User as AppUser } from "@/types/user";
-import type { School, ClassTuitionFeeConfig } from "@/types/school"; // Import School and ClassTuitionFeeConfig
+import type { School, ClassTuitionFeeConfig } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
 
 const NONE_TEACHER_VALUE = "__NONE_TEACHER_OPTION__";
@@ -50,6 +52,7 @@ export default function AdminClassManagementPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>([]);
   const [availableTeachers, setAvailableTeachers] = useState<AppUser[]>([]);
+  const [masterSubjects, setMasterSubjects] = useState<Subject[]>([]); // State for master subjects
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [availableClassNamesForSchool, setAvailableClassNamesForSchool] = useState<string[]>([]);
   
@@ -99,10 +102,11 @@ export default function AdminClassManagementPage() {
     }
     setIsLoadingData(true);
     try {
-      const [classesResult, teachersResult, schoolDetailsResult] = await Promise.all([
+      const [classesResult, teachersResult, schoolDetailsResult, masterSubjectsResult] = await Promise.all([
         getSchoolClasses(authUser.schoolId.toString()),
         getSchoolUsers(authUser.schoolId.toString()),
-        getSchoolById(authUser.schoolId.toString())
+        getSchoolById(authUser.schoolId.toString()),
+        getSubjects() // Fetch master subjects
       ]);
 
       if (classesResult.success && classesResult.classes) {
@@ -127,6 +131,12 @@ export default function AdminClassManagementPage() {
         toast({ variant: "destructive", title: "School Details Error", description: schoolDetailsResult.message || "Failed to load school configuration for class names."});
         setSchoolDetails(null);
         setAvailableClassNamesForSchool([]);
+      }
+      
+      if (masterSubjectsResult.success && masterSubjectsResult.subjects) {
+        setMasterSubjects(masterSubjectsResult.subjects);
+      } else {
+         toast({ variant: "warning", title: "Master Subjects", description: masterSubjectsResult.message || "Failed to load master subjects list." });
       }
 
     } catch (error) {
@@ -312,9 +322,23 @@ export default function AdminClassManagementPage() {
                         <FormField control={form.control} name={`subjects.${index}.name`} render={({ field }) => (
                           <FormItem className="md:col-span-1">
                             <FormLabel htmlFor={`subject-name-${index}`}>Subject Name {index + 1}</FormLabel>
-                            <FormControl>
-                              <Input id={`subject-name-${index}`} placeholder={`Subject ${index + 1}`} {...field} disabled={isSubmitting} />
-                            </FormControl>
+                            <Select
+                              onValueChange={(value) => field.onChange(value === NONE_SUBJECT_VALUE ? "" : value)}
+                              value={field.value || ""}
+                              disabled={isSubmitting || isLoadingData || masterSubjects.length === 0}
+                            >
+                              <FormControl>
+                                <SelectTrigger id={`subject-name-${index}`}>
+                                  <SelectValue placeholder={masterSubjects.length > 0 ? "Select subject" : "No master subjects"} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value={NONE_SUBJECT_VALUE}>-- Select Subject --</SelectItem>
+                                {masterSubjects.map(subject => (
+                                  <SelectItem key={subject._id} value={subject.name}>{subject.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             <FormMessage />
                           </FormItem>
                         )}/>
