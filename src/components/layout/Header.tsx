@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase, Award } from "lucide-react"; // Added Award
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase, Award, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,8 +24,17 @@ const navLinksBase = {
   superadmin: [
     { href: "/dashboard/super-admin", label: "SA Dashboard", icon: ShieldAlert },
     { href: "/dashboard/super-admin/schools", label: "Schools", icon: ScholrIcon },
-    { href: "/dashboard/super-admin/users", label: "School Admins", icon: Users },
+    { href: "/dashboard/super-admin/master-admins", label: "Master Admins", icon: UserCog },
     { href: "/dashboard/super-admin/concessions", label: "Concessions", icon: TicketPercent },
+  ],
+  masteradmin: [
+    { href: "/dashboard/master-admin", label: "Master Admin Panel", icon: UserCog },
+    { href: "/dashboard/master-admin/admins", label: "School Admins", icon: Users },
+    { href: "/dashboard/master-admin/promote", label: "Promote Students", icon: Award },
+    { href: "/dashboard/master-admin/concessions", label: "Concessions", icon: TicketPercent },
+    { href: "/dashboard/master-admin/subjects", label: "Subjects", icon: BookCopy },
+    { href: "/dashboard/master-admin/courses", label: "Courses", icon: BookUser },
+    { href: "/dashboard/master-admin/settings", label: "Settings", icon: Settings },
   ],
   admin: [
     { href: "/dashboard/admin", label: "Admin Dashboard", icon: LayoutDashboard },
@@ -47,7 +56,7 @@ const navLinksBase = {
     { href: "/dashboard/student", label: "Student Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/student/fees", label: "My Fees", icon: DollarSign },
     { href: "/dashboard/student/attendance", label: "My Attendance", icon: CheckSquare },
-    { href: "/dashboard/student/results", label: "Exam Results", icon: Award }, // Changed icon to Award
+    { href: "/dashboard/student/results", label: "Exam Results", icon: Award },
     { href: "/dashboard/student/profile", label: "My Profile", icon: BookUser },
   ],
 };
@@ -93,7 +102,7 @@ export function Header() {
         const parsedUser: AuthUser = JSON.parse(storedUser);
         if (parsedUser && parsedUser.role) {
           setAuthUser(parsedUser);
-          if (parsedUser.schoolId && parsedUser.role !== 'superadmin') {
+          if (parsedUser.schoolId && parsedUser.role !== 'superadmin' && parsedUser.role !== 'masteradmin') {
             fetchSchoolDetails(parsedUser.schoolId.toString());
           } else {
             setDisplaySchoolName(null);
@@ -148,7 +157,7 @@ export function Header() {
 
   const HeaderTitleContent = () => (
     <>
-      {authUser?.role !== 'superadmin' ? (
+      {authUser?.role !== 'superadmin' && authUser?.role !== 'masteradmin' ? (
         <>
           {displaySchoolLogoUrl ? (
             <img
@@ -158,7 +167,6 @@ export function Header() {
               className="h-8 w-8 rounded-sm object-contain"
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).style.display = 'none';
-                // Create a span to show ScholrIcon as a fallback if image errors
                 const fallbackIcon = document.createElement('span');
                 fallbackIcon.id="logo-fallback-icon";
                 const svgNS = "http://www.w3.org/2000/svg";

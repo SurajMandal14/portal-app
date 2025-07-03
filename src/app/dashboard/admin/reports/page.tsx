@@ -20,9 +20,9 @@ import type { User as AppUser } from "@/types/user";
 import type { School, TermFee } from "@/types/school";
 import type { FeePayment } from "@/types/fees";
 import type { FeeConcession } from "@/types/concessions";
-import { getReportCardsForClass, setReportPublicationStatusForClass } from "@/app/actions/reports"; // Added new actions
-import type { BulkPublishReportInfo } from "@/types/report"; // Added type
-import { getClassesForSchoolAsOptions } from "@/app/actions/classes"; // For class dropdown
+import { getReportCardsForClass, setReportPublicationStatusForClass } from "@/app/actions/reports"; 
+import type { BulkPublishReportInfo } from "@/types/report"; 
+import { getClassesForSchoolAsOptions } from "@/app/actions/classes"; 
 import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
 import { getFeePaymentsBySchool } from "@/app/actions/fees";
@@ -291,7 +291,6 @@ export default function AdminReportsPage() {
         const classNameForTuitionLookup = classObj?.name; 
         const displayClassName = classObj?.label || student.classId;
 
-        // Only process fees if we can find the class name
         if (classNameForTuitionLookup) {
           const studentTotalAnnualTuitionFee = calculateAnnualTuitionFee(classNameForTuitionLookup, schoolDetails);
           const studentPayments = allSchoolPayments.filter(p => p.studentId.toString() === student._id!.toString());
@@ -582,7 +581,6 @@ export default function AdminReportsPage() {
     const result = await setReportPublicationStatusForClass(authUser.schoolId.toString(), selectedClassForBulkPublish, academicYearForBulkPublish, publish);
     if (result.success) {
       toast({ title: "Bulk Update Successful", description: result.message});
-      // Refresh the list
       handleLoadReportsForBulkPublish();
     } else {
       toast({variant: "destructive", title: "Bulk Update Failed", description: result.message || "Could not update report statuses."});

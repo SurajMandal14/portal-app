@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, XCircle, SquarePen, DollarSign, Bus, Info, CalendarIcon, UserMinus, UserCheck } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, XCircle, SquarePen, DollarSign, Bus, Info, CalendarIcon, UserMinus, UserCheck, UserCircle2, ChevronsUpDown, Contact, GraduationCap } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
@@ -50,10 +50,10 @@ type SchoolStudent = Partial<AppUser>;
 const NONE_CLASS_VALUE = "__NONE_CLASS_ID__"; 
 
 interface ClassOption {
-  value: string; // class _id
-  label: string; // "ClassName - Section"
-  name?: string; // Original class name
-  section?: string; // Original section
+  value: string; 
+  label: string; 
+  name?: string; 
+  section?: string;
 }
 
 export default function AdminStudentManagementPage() {
@@ -257,6 +257,8 @@ export default function AdminStudentManagementPage() {
         rollNo: editingStudent.rollNo || "",
         examNo: editingStudent.examNo || "",
         aadharNo: editingStudent.aadharNo || "",
+        dateOfJoining: editingStudent.dateOfJoining || "",
+        dateOfLeaving: editingStudent.dateOfLeaving || "",
       });
     }
   }, [editingStudent, isFormOpen, editForm]);
@@ -385,6 +387,73 @@ export default function AdminStudentManagementPage() {
     return foundClass?.label || 'N/A (Invalid ID)';
   };
 
+  const currentForm = editingStudent ? editForm : studentForm;
+  
+  const FormFields = (
+    <div className="space-y-8">
+      <Card>
+          <CardHeader>
+              <CardTitle className="flex items-center text-lg"><UserCircle2 className="mr-2 h-5 w-5 text-primary"/>Student Details</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <FormField control={currentForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="fatherName" render={({ field }) => (<FormItem><FormLabel>Father's Name</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="motherName" render={({ field }) => (<FormItem><FormLabel>Mother's Name</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="dob" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Birth</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="aadharNo" render={({ field }) => (<FormItem><FormLabel>Aadhar Number</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+          </CardContent>
+      </Card>
+      
+      <Card>
+          <CardHeader>
+              <CardTitle className="flex items-center text-lg"><GraduationCap className="mr-2 h-5 w-5 text-primary"/>Academic & School Details</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <FormField control={currentForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Assign to Class</FormLabel><Select onValueChange={editingStudent ? handleClassChangeForEditForm : handleClassChangeForStudentForm} value={field.value || ""} disabled={isSubmitting || classOptions.length === 0}><FormControl><SelectTrigger><SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} /></SelectTrigger></FormControl><SelectContent><SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>{classOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select>{!editingStudent && calculatedTuitionFee !== null && (<FormDescription className="text-xs pt-1">Annual Tuition: <span className="font-sans">₹</span>{calculatedTuitionFee.toLocaleString()}{noTuitionFeeStructureFound && <span className="text-destructive"> (No fee structure)</span>}</FormDescription>)}<FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="section" render={({ field }) => (<FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="Auto from class" {...field} disabled readOnly/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="rollNo" render={({ field }) => (<FormItem><FormLabel>Roll Number</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="examNo" render={({ field }) => (<FormItem><FormLabel>Exam Number</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={currentForm.control} name="dateOfJoining" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Joining</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+              {editingStudent && <FormField control={currentForm.control} name="dateOfLeaving" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Leaving</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>}
+          </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-lg"><Contact className="mr-2 h-5 w-5 text-primary"/>Contact & Account Details</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField control={currentForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" {...field} disabled={isSubmitting}/></FormControl><FormMessage/></FormItem>)}/>
+          <FormField control={currentForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting}/></FormControl><FormDescription className="text-xs">{editingStudent ? "Leave blank to keep current password." : "Min. 6 characters."}</FormDescription><FormMessage/></FormItem>)}/>
+        </CardContent>
+      </Card>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-lg"><Bus className="mr-2 h-5 w-5 text-primary"/>Transportation Details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <FormField control={currentForm.control} name="enableBusTransport" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><div className="space-y-0.5"><FormLabel>Enable Bus Transportation</FormLabel><FormDescription>Assign bus fees based on location and category.</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={isSubmitting}/></FormControl></FormItem>)}/>
+          {(editingStudent ? editEnableBusTransport : studentForm.watch("enableBusTransport")) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField control={currentForm.control} name="busRouteLocation" render={({ field }) => (<FormItem><FormLabel>Bus Location/Route</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || selectedBusLocations.length === 0}><FormControl><SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger></FormControl><SelectContent>{selectedBusLocations.map(loc => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}</SelectContent></Select><FormMessage/></FormItem>)}/>
+                  <FormField control={currentForm.control} name="busClassCategory" render={({ field }) => (<FormItem><FormLabel>Bus Class Category</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || availableBusClassCategories.length === 0}><FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl><SelectContent>{schoolDetails?.busFeeStructures?.filter(bfs => bfs.location === currentForm.getValues("busRouteLocation")).map(bfs => bfs.classCategory).filter((value, index, self) => self.indexOf(value) === index && value).map(cat => <SelectItem key={cat} value={cat!}>{cat!}</SelectItem>)}</SelectContent></Select>{!editingStudent && calculatedBusFee !== null && (<FormDescription className="text-xs pt-1">Annual Bus Fee: <span className="font-sans">₹</span>{calculatedBusFee.toLocaleString()}{noBusFeeStructureFound && <span className="text-destructive"> (No fee structure found)</span>}</FormDescription>)}<FormMessage/></FormItem>)}/>
+              </div>
+          )}
+          {!editingStudent && (calculatedTuitionFee !== null || (studentForm.watch("enableBusTransport") && calculatedBusFee !== null)) && (
+            <div className="md:col-span-2 mt-2 p-3 border rounded-md bg-muted/50">
+              <h4 className="font-medium text-sm mb-1">Estimated Total Annual Fee:</h4>
+              <p className="text-lg font-semibold"><span className="font-sans">₹</span>{totalAnnualFee.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">(Annual Tuition: <span className="font-sans">₹</span>{(calculatedTuitionFee || 0).toLocaleString()}){studentForm.watch("enableBusTransport") && calculatedBusFee !== null && ` + (Annual Bus Fee: ₹${(calculatedBusFee || 0).toLocaleString()})`}</p>
+              {(noTuitionFeeStructureFound || (studentForm.watch("enableBusTransport") && noBusFeeStructureFound)) && <p className="text-xs text-destructive mt-1">Note: One or more fee structures were not found.</p>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
   if (!authUser && !isLoadingData) { 
     return (
       <Card><CardHeader><CardTitle>Access Denied</CardTitle></CardHeader><CardContent><p>Please log in as an admin.</p></CardContent></Card>
@@ -406,56 +475,29 @@ export default function AdminStudentManagementPage() {
             <CardTitle className="flex items-center">
               {editingStudent ? <><Edit3 className="mr-2 h-5 w-5"/>Edit Student: {editingStudent.name}</> : <><UserPlus className="mr-2 h-5 w-5"/>Add New Student</>}
             </CardTitle>
+             <CardDescription>
+              {editingStudent ? `Update the details for ${editingStudent.name}.` : "Fill out the form below to add a new student to the school."}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {editingStudent ? (
               <Form {...editForm}>
                 <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={editForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} /></FormControl><FormDescription className="text-xs">Leave blank to keep current password.</FormDescription><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel><FormControl><Input {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="fatherName" render={({ field }) => (<FormItem><FormLabel>Father's Name</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="motherName" render={({ field }) => (<FormItem><FormLabel>Mother's Name</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="dob" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Birth</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Assign to Class</FormLabel><Select onValueChange={handleClassChangeForEditForm} value={field.value || ""} disabled={isSubmitting || classOptions.length === 0}><FormControl><SelectTrigger><SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} /></SelectTrigger></FormControl><SelectContent><SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>{classOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select>{classOptions.length === 0 && <FormDescription className="text-xs">No classes created yet.</FormDescription>}<FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="section" render={({ field }) => (<FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="Auto from class" {...field} disabled readOnly /></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="rollNo" render={({ field }) => (<FormItem><FormLabel>Roll Number</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="examNo" render={({ field }) => (<FormItem><FormLabel>Exam Number</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="aadharNo" render={({ field }) => (<FormItem><FormLabel>Aadhar Number</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="enableBusTransport" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm md:col-span-2"><div className="space-y-0.5"><FormLabel>Enable Bus Transportation</FormLabel><FormDescription>Assign bus fees based on location and category.</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={isSubmitting} /></FormControl></FormItem>)}/>
-                    {editEnableBusTransport && (<><FormField control={editForm.control} name="busRouteLocation" render={({ field }) => (<FormItem><FormLabel>Bus Location/Route</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || selectedBusLocations.length === 0}><FormControl><SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger></FormControl><SelectContent>{selectedBusLocations.map(loc => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="busClassCategory" render={({ field }) => (<FormItem><FormLabel>Bus Class Category</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || availableBusClassCategories.length === 0}><FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl><SelectContent>{schoolDetails?.busFeeStructures?.filter(bfs => bfs.location === editForm.getValues("busRouteLocation")).map(bfs => bfs.classCategory).filter((value, index, self) => self.indexOf(value) === index && value).map(cat => <SelectItem key={cat} value={cat!}>{cat!}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                    </>)}
+                  {FormFields}
+                  <div className="flex gap-2 pt-4">
+                      <Button type="submit" disabled={isSubmitting || isLoadingData}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit3 className="mr-2 h-4 w-4" />} Update Student</Button>
+                      <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isSubmitting}><XCircle className="mr-2 h-4 w-4" />Cancel</Button>
                   </div>
-                  <div className="flex gap-2"><Button type="submit" disabled={isSubmitting || isLoadingData}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit3 className="mr-2 h-4 w-4" />} Update Student</Button><Button type="button" variant="outline" onClick={handleCancelClick} disabled={isSubmitting}><XCircle className="mr-2 h-4 w-4" />Cancel</Button></div>
                 </form>
               </Form>
             ) : (
               <Form {...studentForm}>
                   <form onSubmit={studentForm.handleSubmit(handleStudentSubmit)} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <FormField control={studentForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., John Doe" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="student@example.com" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><SquarePen className="mr-2 h-4 w-4"/>Admission ID</FormLabel><FormControl><Input placeholder="e.g., S1001" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Assign to Class</FormLabel><Select onValueChange={handleClassChangeForStudentForm} value={field.value || ""} disabled={isSubmitting || classOptions.length === 0}><FormControl><SelectTrigger><SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} /></SelectTrigger></FormControl><SelectContent><SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>{classOptions.map((opt)=>(<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select>{classOptions.length === 0 && <FormDescription className="text-xs">Create classes in Class Management first.</FormDescription>}{calculatedTuitionFee !== null && (<FormDescription className="text-xs pt-1">Annual Tuition Fee: <span className="font-sans">₹</span>{calculatedTuitionFee.toLocaleString()}{noTuitionFeeStructureFound && <span className="text-destructive"> (No fee structure found)</span>}</FormDescription>)}<FormMessage/></FormItem>)}/>
-                      <FormField control={studentForm.control} name="fatherName" render={({ field }) => (<FormItem><FormLabel>Father's Name</FormLabel><FormControl><Input placeholder="e.g., Robert Doe" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="motherName" render={({ field }) => (<FormItem><FormLabel>Mother's Name</FormLabel><FormControl><Input placeholder="e.g., Maria Doe" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="dob" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Birth</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="section" render={({ field }) => (<FormItem><FormLabel>Section</FormLabel><FormControl><Input placeholder="Auto from class" {...field} disabled readOnly /></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="rollNo" render={({ field }) => (<FormItem><FormLabel>Roll Number</FormLabel><FormControl><Input placeholder="e.g., 101" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="examNo" render={({ field }) => (<FormItem><FormLabel>Exam Number (Optional)</FormLabel><FormControl><Input {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="aadharNo" render={({ field }) => (<FormItem><FormLabel>Aadhar Number (Optional)</FormLabel><FormControl><Input placeholder="123456789012" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                      <div className="md:col-span-2" />
-                      <FormField control={studentForm.control} name="enableBusTransport" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm md:col-span-2"><div className="space-y-0.5"><FormLabel>Enable Bus Transportation</FormLabel><FormDescription>Assign bus fees based on location and category.</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={isSubmitting} /></FormControl></FormItem>)}/>
-                      {studentForm.watch("enableBusTransport") && (<><FormField control={studentForm.control} name="busRouteLocation" render={({ field }) => (<FormItem><FormLabel>Bus Location/Route</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || selectedBusLocations.length === 0}><FormControl><SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger></FormControl><SelectContent>{selectedBusLocations.map(loc => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                      <FormField control={studentForm.control} name="busClassCategory" render={({ field }) => (<FormItem><FormLabel>Bus Class Category</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || availableBusClassCategories.length === 0}><FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl><SelectContent>{availableBusClassCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select>{calculatedBusFee !== null && (<FormDescription className="text-xs pt-1">Annual Bus Fee: <span className="font-sans">₹</span>{calculatedBusFee.toLocaleString()}{noBusFeeStructureFound && <span className="text-destructive"> (No fee structure found)</span>}</FormDescription>)}<FormMessage /></FormItem>)}/>
-                      </>)}
-                      {(calculatedTuitionFee !== null || (studentForm.watch("enableBusTransport") && calculatedBusFee !== null)) && (<div className="md:col-span-2 mt-2 p-3 border rounded-md bg-muted/50"><h4 className="font-medium text-sm mb-1">Estimated Total Annual Fee:</h4><p className="text-lg font-semibold"><span className="font-sans">₹</span>{totalAnnualFee.toLocaleString()}</p><p className="text-xs text-muted-foreground">(Annual Tuition: <span className="font-sans">₹</span>{(calculatedTuitionFee || 0).toLocaleString()}){studentForm.watch("enableBusTransport") && calculatedBusFee !== null && ` + (Annual Bus Fee: ₹${(calculatedBusFee || 0).toLocaleString()})`}</p>{(noTuitionFeeStructureFound || (studentForm.watch("enableBusTransport") && noBusFeeStructureFound)) &&<p className="text-xs text-destructive mt-1">Note: One or more fee structures were not found.</p>}</div>)}
-                  </div>
-                  <div className="flex gap-2"><Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || isLoadingData}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Student</Button><Button type="button" variant="outline" onClick={handleCancelClick} disabled={isSubmitting}><XCircle className="mr-2 h-4 w-4" />Cancel</Button></div>
+                      {FormFields}
+                      <div className="flex gap-2 pt-4">
+                        <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || isLoadingData}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Student</Button>
+                        <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isSubmitting}><XCircle className="mr-2 h-4 w-4" />Cancel</Button>
+                      </div>
                   </form>
               </Form>
             )}
@@ -478,7 +520,7 @@ export default function AdminStudentManagementPage() {
              <div className="flex items-center justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading students...</p></div>
           ) : filteredStudents.length > 0 ? (
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Admission ID</TableHead><TableHead>Class</TableHead><TableHead>Status</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Admission ID</TableHead><TableHead>Class</TableHead><TableHead>Status</TableHead><TableHead>Joining Date</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredStudents.map((student) => (
                 <TableRow key={student._id?.toString()} className={student.status === 'discontinued' ? 'opacity-50' : ''}>
@@ -493,7 +535,7 @@ export default function AdminStudentManagementPage() {
                         {student.status || 'active'}
                     </span>
                   </TableCell>
-                  <TableCell>{student.createdAt ? format(new Date(student.createdAt as string), "PP") : 'N/A'}</TableCell>
+                  <TableCell>{student.dateOfJoining ? format(new Date(student.dateOfJoining), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(student)} disabled={isSubmitting || isStatusUpdateLoading}><Edit3 className="h-4 w-4" /></Button>
                     <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleActionClick(student)} disabled={isSubmitting || isStatusUpdateLoading}><Trash2 className="h-4 w-4" /></Button>
@@ -508,7 +550,6 @@ export default function AdminStudentManagementPage() {
         </CardContent>
       </Card>
       
-      {/* Action Dialog */}
       <AlertDialog open={isActionDialogOpen} onOpenChange={setIsActionDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -541,7 +582,6 @@ export default function AdminStudentManagementPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Confirm Permanent Deletion Dialog */}
       <AlertDialog open={isConfirmDeleteDialogOpen} onOpenChange={setIsConfirmDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

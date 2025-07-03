@@ -149,7 +149,7 @@ export default function GenerateCBSEStateReportPage() {
     setStudentData(defaultStudentDataFront);
     setFaMarks(getDefaultSubjectFaDataFront(subjects));
     setCoMarks(defaultCoMarksFront);
-    setSaData([]); // Reset SA data
+    setSaData([]); 
     setAttendanceData(defaultAttendanceDataBack);
     setFinalOverallGradeInput(null);
     setLoadedReportId(null);
@@ -286,7 +286,6 @@ export default function GenerateCBSEStateReportPage() {
           
           const allFetchedMarks = marksResult.success && marksResult.marks ? marksResult.marks : [];
           
-          // Logic to dynamically build SA structure based on fetched marks
           const paperNamesUsedBySubject = new Map<string, Set<string>>();
           allFetchedMarks.forEach(mark => {
               if (mark.assessmentName.startsWith("SA")) {
@@ -303,33 +302,30 @@ export default function GenerateCBSEStateReportPage() {
           });
 
           currentLoadedClassSubjects.forEach(subject => {
-              const papersForThisSubject = paperNamesUsedBySubject.get(subject.name);
-              const hasPaper2 = papersForThisSubject?.has('Paper2') || subject.name === 'Science';
+            tempSaDataForNewReport.push({
+                subjectName: subject.name,
+                paper: subject.name === "Science" ? "Physics" : "I",
+                sa1: getDefaultSaPaperData(),
+                sa2: getDefaultSaPaperData(),
+                faTotal200M: null,
+            });
 
-              // Always add Paper 1
+            const papersForThisSubject = paperNamesUsedBySubject.get(subject.name);
+            const hasPaper2 = papersForThisSubject?.has('Paper2') || subject.name === 'Science';
+            if(hasPaper2) {
               tempSaDataForNewReport.push({
                   subjectName: subject.name,
-                  paper: subject.name === "Science" ? "Physics" : "I",
+                  paper: subject.name === "Science" ? "Biology" : "II",
                   sa1: getDefaultSaPaperData(),
                   sa2: getDefaultSaPaperData(),
                   faTotal200M: null,
               });
-
-              // Add Paper 2 only if needed
-              if (hasPaper2) {
-                  tempSaDataForNewReport.push({
-                      subjectName: subject.name,
-                      paper: subject.name === "Science" ? "Biology" : "II",
-                      sa1: getDefaultSaPaperData(),
-                      sa2: getDefaultSaPaperData(),
-                      faTotal200M: null,
-                  });
-              }
+            }
           });
+          
 
           if (marksResult.success && marksResult.marks) {
             
-            // Populate FA marks
             currentLoadedClassSubjects.forEach(subject => {
               const subjectIdentifier = subject.name; 
               const subjectSpecificFaMarks = allFetchedMarks.filter(
@@ -355,14 +351,13 @@ export default function GenerateCBSEStateReportPage() {
               });
             });
             
-            // Populate SA marks into the newly created structure
             allFetchedMarks.forEach((mark: MarkEntryType) => {
               if (mark.assessmentName.startsWith("SA")) {
                   const parts = mark.assessmentName.split('-'); 
                   if (parts.length !== 3) return;
 
                   const saPeriod = (parts[0].toLowerCase() === 'sa1' ? 'sa1' : 'sa2') as 'sa1' | 'sa2';
-                  const dbPaperPart = parts[1];
+                  const dbPaperPart = parts[1]; // "Paper1" or "Paper2"
                   const asKey = parts[2].toLowerCase() as keyof SAPaperData;
                   
                   let displayPaperName: string;
@@ -464,7 +459,6 @@ export default function GenerateCBSEStateReportPage() {
             const skillData = paperData[fieldKey];
 
             if (skillData) {
-                // Assuming we are only changing marks, not maxMarks from this handler
                 skillData.marks = validatedValue;
             }
             return updatedRow;
@@ -594,7 +588,7 @@ export default function GenerateCBSEStateReportPage() {
             margin: 0 !important; padding: 0 !important; transform: scale(0.95); transform-origin: top left;
           }
           .no-print { display: none !important; }
-          .page-break { page-break-after: always; }
+          .page-break { page-break-after: always !important; }
         }
       `}</style>
       <Card className="no-print">
@@ -674,33 +668,33 @@ export default function GenerateCBSEStateReportPage() {
 
       {!isLoadingStudentAndClassData && loadedStudent && authUser && (
         <>
-          <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${showBackSide ? 'hidden' : ''}`}>
-            <CBSEStateFront
-              studentData={studentData} onStudentDataChange={handleStudentDataChange}
-              academicSubjects={loadedClassSubjects} 
-              faMarks={faMarks} onFaMarksChange={handleFaMarksChange} 
-              coMarks={coMarks} onCoMarksChange={handleCoMarksChange} 
-              secondLanguage={frontSecondLanguage} onSecondLanguageChange={(val) => { if(!isFieldDisabledForRole()) setFrontSecondLanguage(val)}}
-              academicYear={frontAcademicYear} onAcademicYearChange={(val) => {if(!isFieldDisabledForRole()) setFrontAcademicYear(val)}}
-              currentUserRole={currentUserRole}
-              editableSubjects={teacherEditableSubjects}
-            />
-          </div>
+            <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${showBackSide ? 'hidden print:!block' : 'block'}`}>
+                <CBSEStateFront
+                  studentData={studentData} onStudentDataChange={handleStudentDataChange}
+                  academicSubjects={loadedClassSubjects} 
+                  faMarks={faMarks} onFaMarksChange={handleFaMarksChange} 
+                  coMarks={coMarks} onCoMarksChange={handleCoMarksChange} 
+                  secondLanguage={frontSecondLanguage} onSecondLanguageChange={(val) => { if(!isFieldDisabledForRole()) setFrontSecondLanguage(val)}}
+                  academicYear={frontAcademicYear} onAcademicYearChange={(val) => {if(!isFieldDisabledForRole()) setFrontAcademicYear(val)}}
+                  currentUserRole={currentUserRole}
+                  editableSubjects={teacherEditableSubjects}
+                />
+            </div>
           
-          {showBackSide && <div className="page-break no-print"></div>}
+            <div className="hidden print:block page-break"></div>
 
-          <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${!showBackSide ? 'hidden' : ''}`}>
-            <CBSEStateBack
-              saData={saData}
-              onSaDataChange={handleSaDataChange}
-              onFaTotalChange={handleFaTotalChangeBack}
-              attendanceData={attendanceData} onAttendanceDataChange={handleAttendanceDataChange}
-              finalOverallGradeInput={finalOverallGradeInput} onFinalOverallGradeInputChange={setFinalOverallGradeInput}
-              secondLanguageSubjectName={frontSecondLanguage} 
-              currentUserRole={currentUserRole}
-              editableSubjects={teacherEditableSubjects} 
-            />
-          </div>
+            <div className={`printable-report-card bg-white p-2 sm:p-4 rounded-lg shadow-md ${!showBackSide ? 'hidden print:!block' : 'block'}`}>
+                <CBSEStateBack
+                  saData={saData}
+                  onSaDataChange={handleSaDataChange}
+                  onFaTotalChange={handleFaTotalChangeBack}
+                  attendanceData={attendanceData} onAttendanceDataChange={handleAttendanceDataChange}
+                  finalOverallGradeInput={finalOverallGradeInput} onFinalOverallGradeInputChange={setFinalOverallGradeInput}
+                  secondLanguageSubjectName={frontSecondLanguage} 
+                  currentUserRole={currentUserRole}
+                  editableSubjects={teacherEditableSubjects} 
+                />
+            </div>
         </>
       )}
       {!isLoadingStudentAndClassData && !loadedStudent && admissionIdInput && (
@@ -725,5 +719,3 @@ export default function GenerateCBSEStateReportPage() {
     </div>
   );
 }
-    
-    
