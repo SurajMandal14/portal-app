@@ -4,10 +4,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { School, Users, Settings, BarChart3, Loader2, TicketPercent } from "lucide-react"; // Added TicketPercent
+import { School, Users, Settings, BarChart3, Loader2, TicketPercent, UserShield } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getSchoolsCount } from "@/app/actions/schools";
-import { getSchoolAdminsCount } from "@/app/actions/adminUsers";
+import { getMasterAdminsCount } from "@/app/actions/masterAdmins";
 
 interface StatCardProps {
   title: string;
@@ -57,7 +57,7 @@ export default function SuperAdminDashboardPage() {
       setIsLoadingSchools(false);
 
       setIsLoadingAdmins(true);
-      const adminsResult = await getSchoolAdminsCount();
+      const adminsResult = await getMasterAdminsCount();
       if (adminsResult.success && adminsResult.count !== undefined) {
         setAdminCount(adminsResult.count);
       }
@@ -71,10 +71,10 @@ export default function SuperAdminDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline">Super Admin Dashboard</CardTitle>
-          <CardDescription>Oversee and manage the entire CampusFlow platform.</CardDescription>
+          <CardDescription>Oversee and manage the entire Scholr platform.</CardDescription>
         </CardHeader>
         <CardContent>
-          <p>Welcome, Super Administrator. From here you can manage schools, system settings, and view platform analytics.</p>
+          <p>Welcome, Super Administrator. From here you can manage schools, master admins, and view platform analytics.</p>
         </CardContent>
       </Card>
 
@@ -88,12 +88,12 @@ export default function SuperAdminDashboardPage() {
             linkText="Manage Schools"
         />
         <StatCard 
-            title="Total School Administrators" 
+            title="Total Master Administrators" 
             value={adminCount} 
-            icon={Users} 
+            icon={UserShield} 
             isLoading={isLoadingAdmins}
-            link="/dashboard/super-admin/users"
-            linkText="Manage Admins"
+            link="/dashboard/super-admin/master-admins"
+            linkText="Manage Master Admins"
         />
       </div>
 
@@ -104,7 +104,7 @@ export default function SuperAdminDashboardPage() {
             <CardTitle>School Management</CardTitle>
           </CardHeader>
           <CardContent>
-            <CardDescription>Create new schools, manage existing ones, and configure school-specific settings.</CardDescription>
+            <CardDescription>Create new schools, manage existing ones, and configure fee structures.</CardDescription>
             <Button asChild className="mt-4">
               <Link href="/dashboard/super-admin/schools">Manage Schools</Link>
             </Button>
@@ -113,26 +113,13 @@ export default function SuperAdminDashboardPage() {
 
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
-            <Users className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>User Management</CardTitle>
+            <UserShield className="h-10 w-10 text-primary mb-2" />
+            <CardTitle>Master Admin Management</CardTitle>
           </CardHeader>
           <CardContent>
-            <CardDescription>Manage administrator accounts for each school.</CardDescription>
+            <CardDescription>Manage Master Administrator accounts for the platform.</CardDescription>
             <Button asChild className="mt-4" variant="outline">
-              <Link href="/dashboard/super-admin/users">Manage Admins</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <TicketPercent className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>Fee Concessions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CardDescription>Apply and manage fee concessions for students across schools.</CardDescription>
-            <Button asChild className="mt-4" variant="outline">
-              <Link href="/dashboard/super-admin/concessions">Manage Concessions</Link>
+              <Link href="/dashboard/super-admin/master-admins">Manage Master Admins</Link>
             </Button>
           </CardContent>
         </Card>
@@ -150,7 +137,7 @@ export default function SuperAdminDashboardPage() {
           </CardContent>
         </Card>
         
-        <Card className="hover:shadow-lg transition-shadow md:col-span-2 lg:col-span-1">
+        <Card className="hover:shadow-lg transition-shadow md:col-span-2 lg:col-span-3">
             <CardHeader>
                 <BarChart3 className="h-10 w-10 text-primary mb-2" />
                 <CardTitle>Platform Analytics</CardTitle>

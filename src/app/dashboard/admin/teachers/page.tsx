@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, Briefcase, XCircle, UserMinus, UserCheck } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, Briefcase, XCircle, UserMinus, UserCheck, CalendarIcon } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
@@ -65,15 +65,14 @@ export default function AdminTeacherManagementPage() {
 
   const teacherForm = useForm<CreateTeacherFormData>({
     resolver: zodResolver(createTeacherFormSchema),
-    defaultValues: { name: "", email: "", password: "" },
+    defaultValues: { name: "", email: "", password: "", dateOfJoining: "" },
   });
 
   const editForm = useForm<UpdateSchoolUserFormData>({
     resolver: zodResolver(updateSchoolUserFormSchema),
     defaultValues: { 
         name: "", email: "", password: "", role: 'teacher',
-        admissionId: undefined, enableBusTransport: false, busRouteLocation: undefined, busClassCategory: undefined,
-        fatherName: undefined, motherName: undefined, dob: undefined, section: undefined, rollNo: undefined, examNo: undefined, aadharNo: undefined
+        dateOfJoining: "", dateOfLeaving: "",
     },
   });
 
@@ -145,6 +144,8 @@ export default function AdminTeacherManagementPage() {
         email: editingTeacher.email || "",
         password: "", 
         role: 'teacher',
+        dateOfJoining: editingTeacher.dateOfJoining || "",
+        dateOfLeaving: editingTeacher.dateOfLeaving || "",
       });
     }
   }, [editingTeacher, isFormOpen, editForm]);
@@ -288,7 +289,9 @@ export default function AdminTeacherManagementPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField control={editForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
                     <FormField control={editForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={editForm.control} name="password" render={({ field }) => (<FormItem className="md:col-span-2"><FormLabel>New Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} /></FormControl><FormDescription className="text-xs">Leave blank to keep current password.</FormDescription><FormMessage /></FormItem>)}/>
+                    <FormField control={editForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} /></FormControl><FormDescription className="text-xs">Leave blank to keep current password.</FormDescription><FormMessage /></FormItem>)}/>
+                    <FormField control={editForm.control} name="dateOfJoining" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Joining</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
+                    <FormField control={editForm.control} name="dateOfLeaving" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Leaving</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
                   </div>
                   <div className="flex gap-2">
                     <Button type="submit" disabled={isSubmitting || isLoadingData}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit3 className="mr-2 h-4 w-4" />}Update Teacher</Button>
@@ -302,7 +305,8 @@ export default function AdminTeacherManagementPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField control={teacherForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Jane Teacher" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
                     <FormField control={teacherForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="teacher@example.com" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={teacherForm.control} name="password" render={({ field }) => (<FormItem className="md:col-span-2"><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
+                    <FormField control={teacherForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
+                    <FormField control={teacherForm.control} name="dateOfJoining" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><CalendarIcon className="mr-2 h-4 w-4"/>Date of Joining</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting}/></FormControl><FormMessage /></FormItem>)}/>
                   </div>
                   <div className="flex gap-2">
                     <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || isLoadingData}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}Add Teacher</Button>
@@ -330,13 +334,14 @@ export default function AdminTeacherManagementPage() {
              <div className="flex items-center justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading teachers...</p></div>
           ) : filteredTeachers.length > 0 ? (
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Class Teacher For</TableHead><TableHead>Status</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Class Teacher For</TableHead><TableHead>Joining Date</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredTeachers.map((teacher) => (
                 <TableRow key={teacher._id?.toString()} className={teacher.status === 'discontinued' ? 'opacity-50' : ''}>
                   <TableCell>{teacher.name}</TableCell>
                   <TableCell>{teacher.email}</TableCell>
                   <TableCell>{getClassNameFromId(teacher._id)}</TableCell>
+                  <TableCell>{teacher.dateOfJoining ? format(new Date(teacher.dateOfJoining), "PP") : 'N/A'}</TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${
                         teacher.status === 'active' ? 'bg-green-100 text-green-800 border border-green-300' :
@@ -345,7 +350,6 @@ export default function AdminTeacherManagementPage() {
                         {teacher.status || 'active'}
                     </span>
                   </TableCell>
-                  <TableCell>{teacher.createdAt ? format(new Date(teacher.createdAt as string), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(teacher)} disabled={isSubmitting || isStatusUpdateLoading}><Edit3 className="h-4 w-4" /></Button>
                     <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleActionClick(teacher)} disabled={isSubmitting || isStatusUpdateLoading}><Trash2 className="h-4 w-4" /></Button>

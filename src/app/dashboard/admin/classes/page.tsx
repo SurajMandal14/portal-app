@@ -39,7 +39,6 @@ import { createClassFormSchema } from '@/types/classes';
 import type { AuthUser, User as AppUser } from "@/types/user";
 import type { School, ClassTuitionFeeConfig } from "@/types/school"; // Import School and ClassTuitionFeeConfig
 import { useEffect, useState, useCallback } from "react";
-import { format } from 'date-fns';
 
 const NONE_TEACHER_VALUE = "__NONE_TEACHER_OPTION__";
 const NONE_SUBJECT_VALUE = "__NONE_SUBJECT_OPTION__";
@@ -412,9 +411,9 @@ export default function AdminClassManagementPage() {
               <TableRow>
                 <TableHead>Class (Name - Section)</TableHead>
                 <TableHead>Class Teacher</TableHead>
+                <TableHead>No. of Students</TableHead>
                 <TableHead>Subjects (Teachers)</TableHead>
                 <TableHead>2nd Lang</TableHead>
-                <TableHead>Created On</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -423,6 +422,7 @@ export default function AdminClassManagementPage() {
                 <TableRow key={cls._id.toString()}>
                   <TableCell className="font-medium">{classDisplayName(cls)}</TableCell>
                   <TableCell>{cls.classTeacherName || (cls.classTeacherId ? 'N/A' : 'Not Assigned')}</TableCell>
+                  <TableCell className="text-center">{cls.studentCount ?? 0}</TableCell>
                   <TableCell>
                     {cls.subjects.length > 0 ? (
                         <ul className="list-disc pl-4 text-xs">
@@ -433,7 +433,6 @@ export default function AdminClassManagementPage() {
                     ) : 'None'}
                   </TableCell>
                   <TableCell>{cls.secondLanguageSubjectName || 'N/A'}</TableCell>
-                  <TableCell>{format(new Date(cls.createdAt), "PP")}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditClick(cls)} disabled={isSubmitting || isDeleting}><Edit3 className="h-4 w-4" /></Button>
                     <AlertDialog open={classToDelete?._id === cls._id} onOpenChange={(open) => !open && setClassToDelete(null)}>
@@ -469,4 +468,3 @@ export default function AdminClassManagementPage() {
     </div>
   );
 }
-    

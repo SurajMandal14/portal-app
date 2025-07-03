@@ -33,7 +33,7 @@ export async function createSchoolUser(values: CreateSchoolUserServerActionFormD
     const { 
         name, email, password, role, classId, admissionId, 
         busRouteLocation, busClassCategory,
-        fatherName, motherName, dob, section, rollNo, examNo, aadharNo // New fields
+        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining
     } = validatedFields.data;
 
     const { db } = await connectToDatabase();
@@ -73,6 +73,7 @@ export async function createSchoolUser(values: CreateSchoolUserServerActionFormD
       rollNo: role === 'student' ? rollNo : undefined,
       examNo: role === 'student' ? examNo : undefined,
       aadharNo: role === 'student' ? aadharNo : undefined,
+      dateOfJoining: dateOfJoining || undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -146,6 +147,8 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         rollNo: user.rollNo,
         examNo: user.examNo,
         aadharNo: user.aadharNo,
+        dateOfJoining: user.dateOfJoining,
+        dateOfLeaving: user.dateOfLeaving,
         createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
         updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : undefined,
       };
@@ -182,7 +185,7 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
     const { 
         name, email, password, role, classId, admissionId, 
         enableBusTransport, busRouteLocation, busClassCategory,
-        fatherName, motherName, dob, section, rollNo, examNo, aadharNo // New fields
+        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining, dateOfLeaving
     } = validatedFields.data;
 
     const { db } = await connectToDatabase();
@@ -215,10 +218,12 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
       email,
       classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined,
       updatedAt: new Date(),
+      dateOfJoining: dateOfJoining || undefined,
+      dateOfLeaving: dateOfLeaving || undefined,
     };
 
     if (role && (role === 'teacher' || role === 'student')) {
-        updateData.role = role; // Role shouldn't change, but schema expects it
+        updateData.role = role; 
         if (role === 'student') {
             updateData.admissionId = admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined;
             updateData.busRouteLocation = enableBusTransport && busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined;
@@ -227,7 +232,6 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
                 updateData.busRouteLocation = undefined;
                 updateData.busClassCategory = undefined;
             }
-            // Update new student fields
             updateData.fatherName = fatherName;
             updateData.motherName = motherName;
             updateData.dob = dob;
@@ -239,7 +243,6 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
             updateData.admissionId = undefined;
             updateData.busRouteLocation = undefined;
             updateData.busClassCategory = undefined;
-            // Clear student-specific fields for teachers
             updateData.fatherName = undefined;
             updateData.motherName = undefined;
             updateData.dob = undefined;
@@ -284,20 +287,6 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         ...userWithoutPassword,
         _id: updatedUserDoc._id.toString(),
         schoolId: updatedUserDoc.schoolId?.toString(),
-        classId: updatedUserDoc.classId || undefined, 
-        admissionId: updatedUserDoc.admissionId || undefined,
-        status: updatedUserDoc.status || 'active',
-        busRouteLocation: updatedUserDoc.busRouteLocation || undefined,
-        busClassCategory: updatedUserDoc.busClassCategory || undefined,
-        fatherName: updatedUserDoc.fatherName,
-        motherName: updatedUserDoc.motherName,
-        dob: updatedUserDoc.dob,
-        section: updatedUserDoc.section,
-        rollNo: updatedUserDoc.rollNo,
-        examNo: updatedUserDoc.examNo,
-        aadharNo: updatedUserDoc.aadharNo,
-        createdAt: updatedUserDoc.createdAt ? new Date(updatedUserDoc.createdAt).toISOString() : undefined,
-        updatedAt: updatedUserDoc.updatedAt ? new Date(updatedUserDoc.updatedAt).toISOString() : undefined,
       }
     };
 
@@ -401,25 +390,9 @@ export async function getStudentsByClass(schoolId: string, classId: string): Pro
     const users = studentsFromDb.map(studentDoc => {
       const student = studentDoc as unknown as User;
       return {
+        ...student,
         _id: student._id.toString(),
-        name: student.name,
-        email: student.email,
-        role: student.role,
         schoolId: student.schoolId?.toString(),
-        classId: student.classId || undefined,
-        admissionId: student.admissionId || undefined,
-        busRouteLocation: student.busRouteLocation || undefined,
-        busClassCategory: student.busClassCategory || undefined,
-        fatherName: student.fatherName,
-        motherName: student.motherName,
-        dob: student.dob,
-        section: student.section,
-        rollNo: student.rollNo,
-        examNo: student.examNo,
-        aadharNo: student.aadharNo,
-        status: student.status || 'active',
-        createdAt: student.createdAt ? new Date(student.createdAt).toISOString() : undefined,
-        updatedAt: student.updatedAt ? new Date(student.updatedAt).toISOString() : undefined,
       };
     });
 

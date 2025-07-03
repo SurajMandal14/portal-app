@@ -1,9 +1,6 @@
 
 'use server';
 
-// THIS FILE IS DEPRECATED in favor of schoolAdminManagement.ts and masterAdmins.ts
-// It is kept for reference but should not be used for new functionality.
-
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/lib/mongodb';
@@ -72,7 +69,7 @@ export async function createSchoolAdmin(values: SchoolAdminFormData): Promise<Cr
       return { success: false, message: 'Failed to create school admin.', error: 'Database insertion failed.' };
     }
 
-    revalidatePath('/dashboard/super-admin/users');
+    revalidatePath('/dashboard/master-admin/admins');
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _p, ...userWithoutPassword } = newUser;
     return {
@@ -156,7 +153,7 @@ export async function updateSchoolAdmin(userId: string, values: SchoolAdminFormD
       return { success: false, message: 'Admin user not found for update.', error: 'User not found.' };
     }
     
-    revalidatePath('/dashboard/super-admin/users');
+    revalidatePath('/dashboard/master-admin/admins');
     
     const updatedUser = await usersCollection.findOne({ _id: new ObjectId(userId) as any });
     if (!updatedUser) {
@@ -264,32 +261,12 @@ export async function deleteSchoolAdmin(userId: string): Promise<DeleteSchoolAdm
       return { success: false, message: 'Admin user not found or already deleted.', error: 'User not found.' };
     }
 
-    revalidatePath('/dashboard/super-admin/users');
+    revalidatePath('/dashboard/master-admin/admins');
     return { success: true, message: 'School Admin deleted successfully!' };
 
   } catch (error) {
     console.error('Delete school admin server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, message: 'An unexpected error occurred during admin deletion.', error: errorMessage };
-  }
-}
-
-export interface GetSchoolAdminsCountResult {
-  success: boolean;
-  count?: number;
-  error?: string;
-  message?: string;
-}
-
-export async function getSchoolAdminsCount(): Promise<GetSchoolAdminsCountResult> {
-  try {
-    const { db } = await connectToDatabase();
-    const usersCollection = db.collection<User>('users');
-    const count = await usersCollection.countDocuments({ role: 'admin' });
-    return { success: true, count };
-  } catch (error) {
-    console.error('Get school admins count server action error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
-    return { success: false, error: errorMessage, message: 'Failed to fetch school admins count.' };
   }
 }

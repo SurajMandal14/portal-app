@@ -29,7 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { createSchoolAdmin, getSchoolAdmins, updateSchoolAdmin, deleteSchoolAdmin } from "@/app/actions/masterAdminActions"; // Actions to manage school admins
+import { createSchoolAdmin, getSchoolAdmins, updateSchoolAdmin, deleteSchoolAdmin } from "@/app/actions/schoolAdminManagement"; // Actions to manage school admins
 import { getSchools } from "@/app/actions/schools";
 import type { SchoolAdminFormData, User } from "@/types/user";
 import { schoolAdminFormSchema } from "@/types/user"; 
@@ -183,13 +183,13 @@ export default function MasterAdminManageAdminsPage() {
                 <TableRow key={admin._id?.toString()}>
                   <TableCell>{admin.name}</TableCell><TableCell>{admin.email}</TableCell>
                   <TableCell>{admin.schoolName || (admin.schoolId ? `ID: ${admin.schoolId.toString().substring(0,8)}...` : 'N/A')}</TableCell>
-                  <TableCell>{admin.createdAt ? format(new Date(admin.createdAt), "PP") : 'N/A'}</TableCell>
+                  <TableCell>{admin.createdAt ? format(new Date(admin.createdAt as string), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setEditingAdmin(admin)} disabled={isSubmitting || isDeleting}><Edit3 className="h-4 w-4" /></Button>
                     <AlertDialog open={adminToDelete?._id === admin._id} onOpenChange={(open) => !open && setAdminToDelete(null)}>
                       <AlertDialogTrigger asChild><Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => setAdminToDelete(admin)} disabled={isSubmitting || isDeleting}><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
                       <AlertDialogContent>
-                        <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle>
                           <AlertDialogDescription>This will permanently delete the admin account for <span className="font-semibold">{adminToDelete?.name}</span>.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

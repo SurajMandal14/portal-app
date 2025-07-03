@@ -104,12 +104,12 @@ export default function AdminReportsPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [lastFetchedSchoolId, setLastFetchedSchoolId] = useState<string | null>(null);
-  const currentAcademicYear = getCurrentAcademicYear();
+  const [filterAcademicYear, setFilterAcademicYear] = useState<string>(getCurrentAcademicYear());
 
   // States for Bulk Report Publishing
   const [classOptions, setClassOptions] = useState<ClassOption[]>([]);
   const [selectedClassForBulkPublish, setSelectedClassForBulkPublish] = useState<string>("");
-  const [academicYearForBulkPublish, setAcademicYearForBulkPublish] = useState<string>(currentAcademicYear);
+  const [academicYearForBulkPublish, setAcademicYearForBulkPublish] = useState<string>(getCurrentAcademicYear());
   const [reportsForBulkPublish, setReportsForBulkPublish] = useState<BulkPublishReportInfo[]>([]);
   const [isLoadingBulkReports, setIsLoadingBulkReports] = useState(false);
   const [isBulkPublishing, setIsBulkPublishing] = useState(false);
@@ -298,7 +298,7 @@ export default function AdminReportsPage() {
           const studentTotalPaid = studentPayments.reduce((sum, p) => sum + p.amountPaid, 0);
 
           const studentConcessionsForYear = allSchoolConcessions.filter(
-              c => c.studentId.toString() === student._id!.toString() && c.academicYear === currentAcademicYear
+              c => c.studentId.toString() === student._id!.toString() && c.academicYear === filterAcademicYear
           );
           const studentTotalConcessions = studentConcessionsForYear.reduce((sum, c) => sum + c.amount, 0);
 
@@ -347,7 +347,7 @@ export default function AdminReportsPage() {
     });
     setFeeClassSummaries(feeSummaries.sort((a,b) => a.className.localeCompare(b.className)));
 
-  }, [allSchoolStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, calculateAnnualTuitionFee, currentAcademicYear, classOptions]);
+  }, [allSchoolStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, calculateAnnualTuitionFee, filterAcademicYear, classOptions]);
 
 
   useEffect(() => {
@@ -374,7 +374,7 @@ export default function AdminReportsPage() {
           getSchoolUsers(authUser.schoolId.toString()),
           getSchoolById(authUser.schoolId.toString()),
           getFeePaymentsBySchool(authUser.schoolId.toString()),
-          getFeeConcessionsForSchool(authUser.schoolId.toString(), currentAcademicYear),
+          getFeeConcessionsForSchool(authUser.schoolId.toString(), filterAcademicYear),
           getClassesForSchoolAsOptions(authUser.schoolId.toString())
         ]);
 
@@ -438,13 +438,13 @@ export default function AdminReportsPage() {
     }
 
     setIsLoading(false);
-  }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length, currentAcademicYear]);
+  }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length, filterAcademicYear]);
 
   useEffect(() => {
     if (authUser && authUser.schoolId) {
       loadReportData(false);
     }
-  }, [authUser, reportDate, loadReportData]);
+  }, [authUser, reportDate, loadReportData, filterAcademicYear]);
 
 
   const handleDownloadAttendancePdf = async () => {
@@ -544,7 +544,7 @@ export default function AdminReportsPage() {
       const y = (pdfHeight - newImgHeight) / 2;
 
       pdf.addImage(imgData, 'PNG', x, y, newImgWidth, newImgHeight);
-      pdf.save(`Fee_Collection_Report_${schoolDetails.schoolName.replace(/\s+/g, '_')}_${currentAcademicYear}.pdf`);
+      pdf.save(`Fee_Collection_Report_${schoolDetails.schoolName.replace(/\s+/g, '_')}_${filterAcademicYear}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast({ variant: "destructive", title: "PDF Error", description: "Could not generate fee report PDF. See console for details."});
@@ -600,7 +600,7 @@ export default function AdminReportsPage() {
           <CardTitle className="text-2xl font-headline flex items-center">
             <BarChartBig className="mr-2 h-6 w-6" /> School Reports
           </CardTitle>
-          <CardDescription>View summaries and reports for school operations. Access report card generation tools. Fee reports are for academic year: {currentAcademicYear}.</CardDescription>
+          <CardDescription>View summaries and reports for school operations. Access report card generation tools.</CardDescription>
         </CardHeader>
       </Card>
 
@@ -846,17 +846,23 @@ export default function AdminReportsPage() {
       <Card>
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-                 <CardTitle>Fee Collection Summary Report (Annual Tuition - {currentAcademicYear})</CardTitle>
-                 <Button
-                    variant="outline"
-                    onClick={handleDownloadFeePdf}
-                    disabled={isLoading || isDownloadingFeePdf || !authUser || !feeOverallSummary || !schoolDetails}
-                    className="w-full sm:w-auto"
-                >
-                    {isDownloadingFeePdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-0 sm:mr-2 h-4 w-4"/>}
-                    <span className="sm:inline hidden">Download PDF</span>
-                    <span className="sm:hidden inline">PDF</span>
-                </Button>
+                <div>
+                    <CardTitle>Fee Collection Summary Report</CardTitle>
+                    <CardDescription>Fee reports are for academic year: {filterAcademicYear}</CardDescription>
+                </div>
+                 <div className="flex items-center gap-2">
+                    <Input id="fee-academic-year" value={filterAcademicYear} onChange={(e) => setFilterAcademicYear(e.target.value)} placeholder="YYYY-YYYY" className="w-[150px]"/>
+                    <Button
+                        variant="outline"
+                        onClick={handleDownloadFeePdf}
+                        disabled={isLoading || isDownloadingFeePdf || !authUser || !feeOverallSummary || !schoolDetails}
+                        className="w-full sm:w-auto"
+                    >
+                        {isDownloadingFeePdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-0 sm:mr-2 h-4 w-4"/>}
+                        <span className="sm:inline hidden">Download PDF</span>
+                        <span className="sm:hidden inline">PDF</span>
+                    </Button>
+                 </div>
             </div>
         </CardHeader>
         <CardContent>
@@ -871,7 +877,7 @@ export default function AdminReportsPage() {
                 <div id="feeReportContent" className="p-4 bg-card rounded-md">
                 <Card className="mb-6 bg-secondary/30">
                     <CardHeader>
-                        <CardTitle className="text-lg">Overall School Fee Summary - {schoolDetails?.schoolName || 'School'} ({currentAcademicYear})</CardTitle>
+                        <CardTitle className="text-lg">Overall School Fee Summary - {schoolDetails?.schoolName || 'School'} ({filterAcademicYear})</CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                         <div>

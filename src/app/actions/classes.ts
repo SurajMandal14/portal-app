@@ -8,6 +8,7 @@ import { createClassFormSchema, updateClassFormSchema } from '@/types/classes';
 import type { User } from '@/types/user';
 import { ObjectId } from 'mongodb';
 import { revalidatePath } from 'next/cache';
+import { getStudentCountByClass } from './schoolUsers'; // Import the new action
 
 // Helper function to update teacher's User.classId field.
 // This field indicates the class for which the teacher is the primary attendance marker.
@@ -136,6 +137,7 @@ export async function createSchoolClass(schoolId: string, values: CreateClassFor
         createdAt: newClassDataForDb.createdAt.toISOString(),
         updatedAt: newClassDataForDb.updatedAt.toISOString(),
         classTeacherId: newClassDataForDb.classTeacherId ? newClassDataForDb.classTeacherId.toString() : undefined,
+        studentCount: 0,
     };
 
     return {
@@ -184,6 +186,25 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
       },
       { $unwind: { path: '$subjectTeacherInfo', preserveNullAndEmptyArrays: true } },
       {
+        $lookup: { // New lookup to count students
+          from: 'users',
+          let: { class_id_str: { $toString: "$_id" } },
+          pipeline: [
+             { $match: 
+                { $expr: 
+                   { $and: [
+                       { $eq: [ "$role", "student" ] },
+                       { $eq: [ "$classId", "$$class_id_str" ] },
+                       { $eq: [ "$schoolId", new ObjectId(schoolId) ] }
+                   ]}
+                }
+             },
+             { $count: "count" }
+          ],
+          as: 'studentCountArr'
+        }
+      },
+      {
         $group: { 
           _id: '$_id',
           name: { $first: '$name' },
@@ -194,6 +215,7 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
           secondLanguageSubjectName: { $first: '$secondLanguageSubjectName' },
           createdAt: { $first: '$createdAt' },
           updatedAt: { $first: '$updatedAt' },
+          studentCount: { $first: { $arrayElemAt: [ "$studentCountArr.count", 0 ] } },
           subjects: { 
             $push: { 
               name: '$subjects.name',
@@ -205,7 +227,7 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
       },
       {
         $project: { 
-          _id: 1, name: 1, section:1, schoolId: 1, classTeacherId: 1, classTeacherName: 1, secondLanguageSubjectName: 1, createdAt: 1, updatedAt: 1,
+          _id: 1, name: 1, section:1, schoolId: 1, classTeacherId: 1, classTeacherName: 1, secondLanguageSubjectName: 1, createdAt: 1, updatedAt: 1, studentCount: 1,
           subjects: {
             $filter: { 
                  input: "$subjects",
@@ -234,6 +256,7 @@ export async function getSchoolClasses(schoolId: string): Promise<SchoolClassesR
       updatedAt: cls.updatedAt ? new Date(cls.updatedAt).toISOString() : new Date().toISOString(),
       classTeacherId: cls.classTeacherId ? (cls.classTeacherId as ObjectId).toString() : undefined,
       classTeacherName: (cls as any).classTeacherName || undefined,
+      studentCount: (cls as any).studentCount || 0,
     }));
 
     return { success: true, classes };
@@ -371,6 +394,7 @@ export async function updateSchoolClass(classId: string, schoolId: string, value
         updatedAt: new Date(updatedClassDocAfterDb.updatedAt).toISOString(),
         classTeacherId: updatedClassDocAfterDb.classTeacherId ? (updatedClassDocAfterDb.classTeacherId as ObjectId).toString() : undefined,
         classTeacherName: undefined, 
+        studentCount: 0,
     };
     return { success: true, message: 'Class updated successfully!', class: clientUpdatedClass };
 
@@ -530,6 +554,8 @@ export async function getClassDetailsById(classId: string, schoolId: string): Pr
       return { success: false, message: 'Class not found.' };
     }
     
+    const studentCountResult = await getStudentCountByClass(schoolId, classId);
+
     const cls = classDetailsArray[0];
     const classDetails: SchoolClass = {
       _id: (cls._id as ObjectId).toString(),
@@ -546,6 +572,7 @@ export async function getClassDetailsById(classId: string, schoolId: string): Pr
       updatedAt: cls.updatedAt ? new Date(cls.updatedAt).toISOString() : new Date().toISOString(),
       classTeacherId: cls.classTeacherId ? (cls.classTeacherId as ObjectId).toString() : undefined,
       classTeacherName: cls.classTeacherName || undefined,
+      studentCount: studentCountResult.success ? studentCountResult.count : 0,
     };
 
     return { success: true, classDetails };

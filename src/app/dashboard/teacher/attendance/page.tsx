@@ -3,35 +3,54 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CheckSquare, CalendarDays, Save, Loader2, Info } from "lucide-react";
+import { CheckSquare, ChevronLeft, ChevronRight, Save, Loader2, Info } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getDay, isSameDay, isToday } from "date-fns";
 import { submitAttendance } from "@/app/actions/attendance";
 import { getStudentsByClass } from "@/app/actions/schoolUsers";
 import { getClassDetailsById } from "@/app/actions/classes"; 
 import type { AttendanceEntry, AttendanceStatus, AttendanceSubmissionPayload } from "@/types/attendance";
 import type { AuthUser } from "@/types/user";
 import type { SchoolClass } from "@/types/classes";
+import { cn } from "@/lib/utils";
+
+const DayCell = ({ day, selectedDate, onDateSelect, isToday }: { day: Date; selectedDate: Date; onDateSelect: (date: Date) => void; isToday: boolean }) => {
+  return (
+    <button
+      type="button"
+      onClick={() => onDateSelect(day)}
+      className={cn(
+        "flex items-center justify-center w-10 h-10 rounded-full transition-colors",
+        isSameDay(day, selectedDate) && "bg-primary text-primary-foreground",
+        !isSameDay(day, selectedDate) && isToday && "bg-accent text-accent-foreground",
+        !isSameDay(day, selectedDate) && !isToday && "hover:bg-muted"
+      )}
+    >
+      {format(day, 'd')}
+    </button>
+  );
+};
+
 
 export default function TeacherAttendancePage() {
-  const [attendanceDate, setAttendanceDate] = useState<Date | undefined>(undefined);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [studentAttendance, setStudentAttendance] = useState<AttendanceEntry[]>([]);
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
-  const [isLoadingClassDetails, setIsLoadingClassDetails] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [assignedClassDetails, setAssignedClassDetails] = useState<SchoolClass | null>(null);
+  
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthDays = eachDayOfInterval({
+    start: startOfMonth(currentMonth),
+    end: endOfMonth(currentMonth),
+  });
+  const firstDayOfMonth = getDay(startOfMonth(currentMonth));
 
-  useEffect(() => {
-    setAttendanceDate(new Date());
-  }, []); 
 
   useEffect(() => {
     const storedUser = localStorage.getItem('loggedInUser');
@@ -41,44 +60,28 @@ export default function TeacherAttendancePage() {
             if (parsedUser && parsedUser.role === 'teacher') {
                 setAuthUser(parsedUser); 
             } else {
-                setAuthUser(null); 
-                if (parsedUser && parsedUser.role !== 'teacher') {
-                    toast({ variant: "destructive", title: "Access Denied", description: "You must be a teacher to mark attendance." });
-                }
+                setAuthUser(null);
             }
         } catch(e) {
             setAuthUser(null);
-            console.error("TeacherAttendancePage: Failed to parse user from localStorage:", e);
         }
     } else {
       setAuthUser(null);
     }
-  }, [toast]); 
+  }, []); 
 
   const fetchClassDetailsAndStudents = useCallback(async () => {
-    if (!authUser || !authUser.schoolId || !authUser.classId) { // authUser.classId should be the class _id
-      setAssignedClassDetails(null);
-      setStudentAttendance([]);
-      setIsLoadingClassDetails(false);
-      setIsLoadingStudents(false);
-      if (authUser && !authUser.classId) {
-        console.log("TeacherAttendancePage: fetchClassDetails - authUser.classId (expected class _id) is missing.");
-      }
+    if (!authUser || !authUser.schoolId || !authUser.classId) {
+      setIsLoading(false);
       return;
     }
 
-    setIsLoadingClassDetails(true);
-    // Fetch the specific class details using classId from authUser
+    setIsLoading(true);
     const classResult = await getClassDetailsById(authUser.classId, authUser.schoolId.toString());
 
     if (classResult.success && classResult.classDetails) {
-      const foundClass = classResult.classDetails;
-      setAssignedClassDetails(foundClass);
-      
-      // Now fetch students for this class using its _id
-      setIsLoadingStudents(true);
-      // Use foundClass._id which is the correct class ID
-      const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), foundClass._id); 
+      setAssignedClassDetails(classResult.classDetails);
+      const studentsResult = await getStudentsByClass(authUser.schoolId.toString(), classResult.classDetails._id); 
       if (studentsResult.success && studentsResult.users) {
         const studentsForAttendance: AttendanceEntry[] = studentsResult.users.map(student => ({
           studentId: student._id!.toString(),
@@ -86,59 +89,48 @@ export default function TeacherAttendancePage() {
           status: 'present' as AttendanceStatus, 
         }));
         setStudentAttendance(studentsForAttendance);
-        if (studentsForAttendance.length === 0) {
-          toast({ title: "No Students", description: `No students found in your assigned class: ${foundClass.name}. Please contact admin.` });
-        }
       } else {
-        toast({ variant: "destructive", title: "Error Loading Students", description: studentsResult.message || "Could not fetch students." });
-        setStudentAttendance([]);
+        toast({ variant: "destructive", title: "Error Loading Students", description: studentsResult.message });
       }
-      setIsLoadingStudents(false);
     } else {
-      toast({ variant: "destructive", title: "Class Not Found", description: `Your assigned class (ID: ${authUser.classId}) details could not be found. Contact admin.` });
-      setAssignedClassDetails(null);
-      setStudentAttendance([]);
+      toast({ variant: "destructive", title: "Class Not Found", description: `Your assigned class could not be found.` });
     }
-    setIsLoadingClassDetails(false);
+    setIsLoading(false);
   }, [authUser, toast]);
 
   useEffect(() => {
-    if (authUser && authUser.schoolId && authUser.classId) {
+    if (authUser?.classId) {
       fetchClassDetailsAndStudents();
     } else {
-      setAssignedClassDetails(null);
-      setStudentAttendance([]);
+        setIsLoading(false);
     }
   }, [authUser, fetchClassDetailsAndStudents]);
 
 
   const handleAttendanceChange = (studentId: string, status: AttendanceStatus) => {
-    setStudentAttendance(prev =>
-      prev.map(s => (s.studentId === studentId ? { ...s, status } : s))
-    );
+    setStudentAttendance(prev => prev.map(s => (s.studentId === studentId ? { ...s, status } : s)));
   };
 
   const handleMarkAll = (status: AttendanceStatus) => {
     setStudentAttendance(prev => prev.map(s => ({...s, status })));
-  }
+  };
 
   const handleSubmitAttendance = async () => {
-    if (!authUser || !authUser.schoolId || !authUser._id || !authUser.classId || !assignedClassDetails) { 
-      toast({ variant: "destructive", title: "Error", description: "User or class information not found. Please log in again or contact admin if class is not assigned."});
+    if (!authUser || !authUser.schoolId || !authUser._id || !assignedClassDetails) { 
+      toast({ variant: "destructive", title: "Error", description: "User or class information not found."});
       return;
     }
-    if (!attendanceDate || studentAttendance.length === 0) {
-      toast({ variant: "destructive", title: "Error", description: "Please select a date and ensure students are listed."});
+    if (studentAttendance.length === 0) {
+      toast({ variant: "destructive", title: "Error", description: "No students to submit attendance for."});
       return;
     }
 
     setIsSubmitting(true);
-
     const payload: AttendanceSubmissionPayload = {
-      classId: assignedClassDetails._id, // Use the actual _id of the class
+      classId: assignedClassDetails._id,
       className: assignedClassDetails.name, 
       schoolId: authUser.schoolId.toString(),
-      date: attendanceDate,
+      date: selectedDate,
       entries: studentAttendance,
       markedByTeacherId: authUser._id.toString(),
     };
@@ -152,145 +144,106 @@ export default function TeacherAttendancePage() {
       toast({ variant: "destructive", title: "Submission Failed", description: result.error || result.message });
     }
   };
+
+  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
   
-  const currentClassName = assignedClassDetails?.name || "your assigned class";
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading your class details...</p></div>;
+  }
+  
+  if (!authUser) {
+     return <Card><CardHeader><CardTitle>Access Denied</CardTitle></CardHeader><CardContent><p>Please log in as a teacher.</p></CardContent></Card>;
+  }
+  
+  if (!assignedClassDetails) {
+     return (
+        <Card className="text-center py-10">
+            <Info className="mx-auto h-12 w-12 text-muted-foreground" />
+            <CardHeader><CardTitle>Not Assigned to a Class</CardTitle></CardHeader>
+            <CardContent>
+                <p className="text-muted-foreground">You are not currently assigned to a class. Please contact your school administrator.</p>
+            </CardContent>
+        </Card>
+     );
+  }
+
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline flex items-center">
-            <CheckSquare className="mr-2 h-6 w-6" /> Mark Student Attendance
+            <CheckSquare className="mr-2 h-6 w-6" /> Monthly Attendance
           </CardTitle>
           <CardDescription>
-            {assignedClassDetails 
-              ? `Marking attendance for class: ${assignedClassDetails.name}.`
-              : authUser?.classId ? "Loading class details..." : "Please ensure you are assigned to a class to mark attendance."}
+            Select a day from the calendar to mark attendance for class: <span className="font-semibold">{assignedClassDetails.name}</span>.
           </CardDescription>
         </CardHeader>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full md:w-auto">
-                {assignedClassDetails && <p className="font-semibold text-lg">Class: {assignedClassDetails.name}</p>}
-                 <div>
-                    <Label htmlFor="date-picker" className="mb-1 block text-sm font-medium">Select Date</Label>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                        <Button
-                            id="date-picker"
-                            variant={"outline"}
-                            className="w-full sm:w-[280px] justify-start text-left font-normal"
-                            disabled={isSubmitting || !authUser || !assignedClassDetails || !attendanceDate}
-                        >
-                            <CalendarDays className="mr-2 h-4 w-4" />
-                            {attendanceDate ? format(attendanceDate, "PPP") : <span>Pick a date</span>}
-                        </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                        <Calendar
-                            mode="single"
-                            selected={attendanceDate}
-                            onSelect={setAttendanceDate}
-                            initialFocus
-                            disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
-                        />
-                        </PopoverContent>
-                    </Popover>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-lg">{format(currentMonth, 'MMMM yyyy')}</CardTitle>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={prevMonth}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button variant="outline" size="icon" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-7 gap-2 text-center text-sm font-medium text-muted-foreground">
+              {weekdays.map(day => <div key={day}>{day}</div>)}
+            </div>
+            <div className="grid grid-cols-7 gap-2 mt-2">
+              {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`empty-${i}`} />)}
+              {monthDays.map(day => <DayCell key={day.toString()} day={day} selectedDate={selectedDate} onDateSelect={setSelectedDate} isToday={isToday(day)} />)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+            <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                    <div>
+                        <CardTitle>Mark Attendance for: {format(selectedDate, "PPP")}</CardTitle>
+                        <CardDescription>Class: {assignedClassDetails.name}</CardDescription>
+                    </div>
+                     <div className="flex gap-2 mt-2 sm:mt-0">
+                        <Button variant="outline" size="sm" onClick={() => handleMarkAll('present')} disabled={isSubmitting || studentAttendance.length === 0}>All Present</Button>
+                        <Button variant="outline" size="sm" onClick={() => handleMarkAll('absent')} disabled={isSubmitting || studentAttendance.length === 0}>All Absent</Button>
+                    </div>
                 </div>
-            </div>
-           {authUser && assignedClassDetails && studentAttendance.length > 0 && (
-            <div className="flex gap-2 mt-4 md:mt-0 self-start md:self-center">
-                <Button variant="outline" size="sm" onClick={() => handleMarkAll('present')} disabled={isSubmitting || isLoadingStudents || isLoadingClassDetails}>Mark All Present</Button>
-                <Button variant="outline" size="sm" onClick={() => handleMarkAll('absent')} disabled={isSubmitting || isLoadingStudents || isLoadingClassDetails}>Mark All Absent</Button>
-            </div>
-           )}
-        </CardHeader>
-        <CardContent>
-          {!authUser ? (
-            <div className="text-center py-6">
-                 <Info className="mx-auto h-12 w-12 text-muted-foreground" />
-                <p className="mt-4 text-lg font-semibold">User Not Loaded</p>
-                <p className="text-muted-foreground">Please try refreshing or logging in again.</p>
-            </div>
-          ) : isLoadingClassDetails ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2">Loading class details...</p>
-            </div>
-          ) : !assignedClassDetails ? (
-             <div className="text-center py-6">
-                <Info className="mx-auto h-12 w-12 text-muted-foreground" />
-                <p className="mt-4 text-lg font-semibold">Not Assigned to a Class</p>
-                <p className="text-muted-foreground">You are not currently assigned to a class, or your assigned class (ID: {authUser.classId || 'N/A'}) could not be found. Please contact your school administrator.</p>
-                 <p className="text-xs text-muted-foreground mt-2">(Ensure you have logged out and back in if your class was recently assigned.)</p>
-            </div>
-          ) : isLoadingStudents ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2">Loading students for {currentClassName}...</p>
-            </div>
-          ) : studentAttendance.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student ID</TableHead>
-                  <TableHead>Student Name</TableHead>
-                  <TableHead className="text-center">Present</TableHead>
-                  <TableHead className="text-center">Absent</TableHead>
-                  <TableHead className="text-center">Late</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {studentAttendance.map((student) => (
-                  <TableRow key={student.studentId}>
-                    <TableCell>{student.studentId.substring(0,8)}...</TableCell>
-                    <TableCell>{student.studentName}</TableCell>
-                    <TableCell className="text-center">
-                      <Checkbox
-                        checked={student.status === 'present'}
-                        onCheckedChange={(checked) => checked && handleAttendanceChange(student.studentId, 'present')}
-                        aria-label={`Mark ${student.studentName} present`}
-                        disabled={isSubmitting}
-                      />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Checkbox
-                        checked={student.status === 'absent'}
-                        onCheckedChange={(checked) => checked && handleAttendanceChange(student.studentId, 'absent')}
-                        aria-label={`Mark ${student.studentName} absent`}
-                        disabled={isSubmitting}
-                      />
-                    </TableCell>
-                     <TableCell className="text-center">
-                      <Checkbox
-                        checked={student.status === 'late'}
-                        onCheckedChange={(checked) => checked && handleAttendanceChange(student.studentId, 'late')}
-                        aria-label={`Mark ${student.studentName} late`}
-                        disabled={isSubmitting}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-center text-muted-foreground py-4">
-              No students found for your assigned class: {currentClassName}. Please ensure students are assigned by the admin.
-            </p>
-          )}
-           {authUser && assignedClassDetails && studentAttendance.length > 0 && (
-            <div className="mt-6 flex justify-end">
-                <Button onClick={handleSubmitAttendance} disabled={isSubmitting || isLoadingStudents || isLoadingClassDetails || !attendanceDate}>
-                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {isSubmitting ? "Submitting..." : <><Save className="mr-2 h-4 w-4" /> Submit Attendance</>}
-                </Button>
-            </div>
-           )}
-        </CardContent>
-      </Card>
+            </CardHeader>
+            <CardContent>
+                {studentAttendance.length > 0 ? (
+                <>
+                    <Table>
+                    <TableHeader><TableRow><TableHead>Student Name</TableHead><TableHead className="text-center">Present</TableHead><TableHead className="text-center">Absent</TableHead><TableHead className="text-center">Late</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {studentAttendance.map((student) => (
+                        <TableRow key={student.studentId}>
+                            <TableCell>{student.studentName}</TableCell>
+                            <TableCell className="text-center"><input type="radio" name={`attendance-${student.studentId}`} checked={student.status === 'present'} onChange={() => handleAttendanceChange(student.studentId, 'present')} disabled={isSubmitting} className="h-4 w-4" /></TableCell>
+                            <TableCell className="text-center"><input type="radio" name={`attendance-${student.studentId}`} checked={student.status === 'absent'} onChange={() => handleAttendanceChange(student.studentId, 'absent')} disabled={isSubmitting} className="h-4 w-4" /></TableCell>
+                            <TableCell className="text-center"><input type="radio" name={`attendance-${student.studentId}`} checked={student.status === 'late'} onChange={() => handleAttendanceChange(student.studentId, 'late')} disabled={isSubmitting} className="h-4 w-4" /></TableCell>
+                        </TableRow>
+                        ))}
+                    </TableBody>
+                    </Table>
+                    <div className="mt-6 flex justify-end">
+                        <Button onClick={handleSubmitAttendance} disabled={isSubmitting}>
+                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <Save className="mr-2 h-4 w-4" /> Submit for {format(selectedDate, "do MMM")}
+                        </Button>
+                    </div>
+                </>
+                ) : (
+                <p className="text-center text-muted-foreground py-4">No students found in your assigned class.</p>
+                )}
+            </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
-

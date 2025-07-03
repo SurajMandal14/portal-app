@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, UserCog, ShieldAlert, BookUser, User as UserIcon, DollarSign, CheckSquare, Users, LayoutDashboard, Home, Loader2, School as ScholrIcon } from "lucide-react"; 
+import { ArrowRight, UserCog, ShieldAlert, BookUser, User as UserIcon, DollarSign, CheckSquare, Users, LayoutDashboard, Home, Loader2, School as ScholrIcon, UserShield } from "lucide-react"; 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { AuthUser } from "@/types/user"; 
@@ -14,7 +14,11 @@ const roleSpecificLinks = {
   superadmin: [
     { href: "/dashboard/super-admin", title: "Super Admin Panel", description: "Oversee all operations.", icon: ShieldAlert },
     { href: "/dashboard/super-admin/schools", title: "Manage Schools", description: "Create and configure schools.", icon: UserCog },
-    { href: "/dashboard/super-admin/users", title: "Manage School Admins", description: "Manage school administrator accounts.", icon: Users },
+    { href: "/dashboard/super-admin/master-admins", title: "Manage Master Admins", description: "Manage master administrator accounts.", icon: UserShield },
+  ],
+  masteradmin: [
+    { href: "/dashboard/master-admin", title: "Master Admin Panel", description: "Oversee schools and admins.", icon: UserShield },
+    { href: "/dashboard/master-admin/admins", title: "Manage School Admins", description: "Manage school administrator accounts.", icon: Users },
   ],
   admin: [
     { href: "/dashboard/admin", title: "Admin Dashboard", description: "Manage your school's operations.", icon: LayoutDashboard },
@@ -52,6 +56,7 @@ export default function DashboardPage() {
           setAuthUser(parsedUser);
           if (pathname === '/dashboard') {
             if (parsedUser.role === 'superadmin') router.replace("/dashboard/super-admin");
+            else if (parsedUser.role === 'masteradmin') router.replace("/dashboard/master-admin");
             else if (parsedUser.role === 'admin') router.replace("/dashboard/admin");
             else if (parsedUser.role === 'teacher') router.replace("/dashboard/teacher");
             else if (parsedUser.role === 'student') router.replace("/dashboard/student");

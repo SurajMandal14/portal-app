@@ -20,6 +20,7 @@ export interface SchoolClass {
   createdAt: string; // ISOString
   updatedAt: string; // ISOString
   secondLanguageSubjectName?: string; // Name of the designated second language subject
+  studentCount?: number; // New field for number of students
 }
 
 // Schema for creating a new class

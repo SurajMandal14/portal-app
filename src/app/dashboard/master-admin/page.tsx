@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, Settings, BarChart3, Loader2, TicketPercent, GraduationCap, School, BookCopy, CalendarClock, Lock } from "lucide-react";
+import { Users, Settings, BarChart3, Loader2, TicketPercent, GraduationCap, School, BookCopy, CalendarClock, Lock, UserShield } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { AuthUser } from "@/types/user";
 

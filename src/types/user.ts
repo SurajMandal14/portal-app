@@ -5,7 +5,7 @@
 import type { ObjectId } from 'mongodb';
 import { z } from 'zod';
 
-export type UserRole = 'superadmin' | 'admin' | 'teacher' | 'student';
+export type UserRole = 'superadmin' | 'masteradmin' | 'admin' | 'teacher' | 'student';
 
 export interface User {
   _id: ObjectId | string;
@@ -26,11 +26,14 @@ export interface User {
   // New fields for student report card
   fatherName?: string;
   motherName?: string;
-  dob?: string; // Store as string for simplicity, can be Date if strict typing needed
-  section?: string; // Student's section, potentially derived from class
+  dob?: string; 
+  section?: string; 
   rollNo?: string;
   examNo?: string;
   aadharNo?: string;
+
+  dateOfJoining?: string; // New field
+  dateOfLeaving?: string; // New field
 
   createdAt: Date | string; // Allow string for client-side
   updatedAt: Date | string; // Allow string for client-side
@@ -70,6 +73,7 @@ export const createStudentFormSchema = z.object({
   aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
     message: "Aadhar Number must be exactly 12 digits.",
   }),
+  dateOfJoining: z.string().optional(),
 }).refine(data => {
   if (data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
     return false;
@@ -86,7 +90,7 @@ export const createTeacherFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  // classId is removed from here to simplify logic. It's managed from the Classes page.
+  dateOfJoining: z.string().optional(),
 });
 export type CreateTeacherFormData = z.infer<typeof createTeacherFormSchema>;
 
@@ -111,6 +115,7 @@ export const createSchoolUserFormSchema = z.object({
   aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
     message: "Aadhar Number must be exactly 12 digits.",
   }),
+  dateOfJoining: z.string().optional(),
 }).refine(data => {
   if (data.role === 'student' && (!data.admissionId || data.admissionId.trim() === "")) {
     return false;
@@ -144,6 +149,8 @@ export const updateSchoolUserFormSchema = z.object({
   aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
     message: "Aadhar Number must be exactly 12 digits.",
   }),
+  dateOfJoining: z.string().optional(),
+  dateOfLeaving: z.string().optional(),
 }).refine(data => {
   if (data.role === 'student' && data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
     return false;
@@ -174,6 +181,7 @@ export interface CreateSchoolUserServerActionFormData {
   rollNo?: string;
   examNo?: string;
   aadharNo?: string;
+  dateOfJoining?: string;
 }
 
 
@@ -184,3 +192,11 @@ export const updateProfileFormSchema = z.object({
   avatarUrl: z.string().url("Invalid URL format for avatar.").optional().or(z.literal('')),
 });
 export type UpdateProfileFormData = z.infer<typeof updateProfileFormSchema>;
+
+// Zod schema for super admin creating/updating master admins
+export const masterAdminFormSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  email: z.string().email({ message: "Invalid email address." }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters." }).optional().or(z.literal('')),
+});
+export type MasterAdminFormData = z.infer<typeof masterAdminFormSchema>;
