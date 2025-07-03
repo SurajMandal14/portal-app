@@ -1,33 +1,253 @@
 
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { School, Construction } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { School, BookCopy, PlusCircle, Trash2, Loader2, Info, FileUp } from "lucide-react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { getSchools } from "@/app/actions/schools";
+import { getClassesForSchoolAsOptions } from "@/app/actions/classes";
+import { createCourseMaterial, getCourseMaterialsForClass, deleteCourseMaterial } from "@/app/actions/courses";
+import { getSubjects } from "@/app/actions/subjects";
+import type { School as SchoolType } from "@/types/school";
+import type { CourseMaterial, CourseMaterialFormData } from "@/types/course";
+import { courseMaterialSchema } from "@/types/course";
+import type { Subject } from "@/types/subject";
+import { useEffect, useState, useCallback } from "react";
+import { format } from 'date-fns';
+
+interface ClassOption {
+  value: string;
+  label: string;
+}
 
 export default function MasterAdminCoursesPage() {
+  const { toast } = useToast();
+  const [schools, setSchools] = useState<SchoolType[]>([]);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
+  const [classesInSchool, setClassesInSchool] = useState<ClassOption[]>([]);
+  const [masterSubjects, setMasterSubjects] = useState<Subject[]>([]);
+  const [materials, setMaterials] = useState<CourseMaterial[]>([]);
+  const [materialToDelete, setMaterialToDelete] = useState<CourseMaterial | null>(null);
+
+  const [isLoadingSchools, setIsLoadingSchools] = useState(true);
+  const [isLoadingClasses, setIsLoadingClasses] = useState(false);
+  const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
+  const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const form = useForm<CourseMaterialFormData>({
+    resolver: zodResolver(courseMaterialSchema),
+    defaultValues: { schoolId: "", classId: "", subjectName: "", title: "", pdfUrl: "" },
+  });
+
+  const selectedClassId = form.watch("classId");
+
+  const fetchInitialData = useCallback(async () => {
+    setIsLoadingSchools(true);
+    const schoolsResult = await getSchools();
+    if (schoolsResult.success && schoolsResult.schools) {
+      setSchools(schoolsResult.schools);
+    } else {
+      toast({ variant: "destructive", title: "Error", description: "Failed to load schools." });
+    }
+    setIsLoadingSchools(false);
+    
+    setIsLoadingSubjects(true);
+    const subjectsResult = await getSubjects();
+    if (subjectsResult.success && subjectsResult.subjects) {
+      setMasterSubjects(subjectsResult.subjects);
+    } else {
+      toast({ variant: "destructive", title: "Error", description: "Failed to load master subjects." });
+    }
+    setIsLoadingSubjects(false);
+
+  }, [toast]);
+
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  const fetchClassesForSchool = useCallback(async (schoolId: string) => {
+    if (!schoolId) {
+      setClassesInSchool([]);
+      form.resetField("classId");
+      return;
+    }
+    setIsLoadingClasses(true);
+    const classesResult = await getClassesForSchoolAsOptions(schoolId);
+    setClassesInSchool(classesResult);
+    setIsLoadingClasses(false);
+  }, [form]);
+  
+  const fetchMaterialsForClass = useCallback(async (classId: string) => {
+    if (!classId) {
+      setMaterials([]);
+      return;
+    }
+    setIsLoadingMaterials(true);
+    const result = await getCourseMaterialsForClass(classId);
+    if(result.success && result.materials) {
+        setMaterials(result.materials);
+    } else {
+        toast({variant: 'warning', title: 'Could not load materials', description: result.message});
+        setMaterials([]);
+    }
+    setIsLoadingMaterials(false);
+  }, [toast]);
+
+
+  useEffect(() => {
+    if (selectedSchoolId) {
+      fetchClassesForSchool(selectedSchoolId);
+      form.setValue("schoolId", selectedSchoolId);
+    }
+  }, [selectedSchoolId, fetchClassesForSchool, form]);
+  
+  useEffect(() => {
+    if (selectedClassId) {
+      fetchMaterialsForClass(selectedClassId);
+    } else {
+      setMaterials([]);
+    }
+  }, [selectedClassId, fetchMaterialsForClass]);
+
+  async function onSubmit(values: CourseMaterialFormData) {
+    setIsSubmitting(true);
+    const result = await createCourseMaterial(values);
+    setIsSubmitting(false);
+    if (result.success) {
+      toast({ title: "Material Added", description: result.message });
+      form.reset({ ...values, title: "", pdfUrl: "" });
+      fetchMaterialsForClass(values.classId);
+    } else {
+      toast({ variant: "destructive", title: "Failed to Add", description: result.error || result.message });
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!materialToDelete) return;
+    setIsDeleting(true);
+    const result = await deleteCourseMaterial(materialToDelete._id);
+    setIsDeleting(false);
+    setMaterialToDelete(null);
+    if (result.success) {
+      toast({ title: "Deleted", description: result.message });
+      if(selectedClassId) fetchMaterialsForClass(selectedClassId);
+    } else {
+      toast({ variant: "destructive", title: "Deletion Failed", description: result.message });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-headline flex items-center">
-            <School className="mr-2 h-6 w-6" /> Course Materials
+            <FileUp className="mr-2 h-6 w-6" /> Course Materials
           </CardTitle>
           <CardDescription>
-            Upload and manage PDF links for class subjects.
+            Upload and manage PDF links for class subjects, which will be visible to students.
           </CardDescription>
         </CardHeader>
+      </Card>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle>Add New Course Material</CardTitle>
+        </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg">
-            <Construction className="h-16 w-16 text-muted-foreground mb-4" />
-            <h3 className="text-xl font-semibold text-muted-foreground">
-              Feature Coming Soon
-            </h3>
-            <p className="text-muted-foreground">
-              The course material management tool will be available here.
-            </p>
-          </div>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField control={form.control} name="schoolId" render={({ field }) => (
+                  <FormItem><FormLabel>School</FormLabel>
+                    <Select onValueChange={(value) => { field.onChange(value); setSelectedSchoolId(value); }} value={field.value} disabled={isLoadingSchools}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select a school" /></SelectTrigger></FormControl>
+                      <SelectContent>{schools.map(school => <SelectItem key={school._id} value={school._id}>{school.schoolName}</SelectItem>)}</SelectContent>
+                    </Select><FormMessage />
+                  </FormItem>
+                )}/>
+                <FormField control={form.control} name="classId" render={({ field }) => (
+                  <FormItem><FormLabel>Class</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingClasses || !selectedSchoolId}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select a class" /></SelectTrigger></FormControl>
+                      <SelectContent>{classesInSchool.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent>
+                    </Select><FormMessage />
+                  </FormItem>
+                )}/>
+                 <FormField control={form.control} name="subjectName" render={({ field }) => (
+                  <FormItem><FormLabel>Subject</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingSubjects}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select a subject" /></SelectTrigger></FormControl>
+                      <SelectContent>{masterSubjects.map(sub => <SelectItem key={sub._id} value={sub.name}>{sub.name}</SelectItem>)}</SelectContent>
+                    </Select><FormMessage />
+                  </FormItem>
+                )}/>
+                 <FormField control={form.control} name="title" render={({ field }) => (<FormItem><FormLabel>Title / Topic Name</FormLabel><FormControl><Input placeholder="e.g., Chapter 1: Algebra Basics" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                 <FormField control={form.control} name="pdfUrl" render={({ field }) => (<FormItem className="md:col-span-2"><FormLabel>PDF URL</FormLabel><FormControl><Input type="url" placeholder="https://example.com/document.pdf" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+              </div>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}
+                Add Material
+              </Button>
+            </form>
+          </Form>
         </CardContent>
       </Card>
+      
+      <Card>
+        <CardHeader>
+            <CardTitle>Uploaded Materials</CardTitle>
+            <CardDescription>
+                {selectedClassId ? `Showing materials for the selected class.` : `Please select a school and class to view materials.`}
+            </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingMaterials ? (
+            <div className="text-center py-6"><Loader2 className="h-6 w-6 animate-spin"/></div>
+          ) : materials.length > 0 ? (
+            <Table>
+              <TableHeader><TableRow><TableHead>Subject</TableHead><TableHead>Title</TableHead><TableHead>URL</TableHead><TableHead>Added On</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {materials.map(mat => (
+                  <TableRow key={mat._id}>
+                    <TableCell>{mat.subjectName}</TableCell>
+                    <TableCell>{mat.title}</TableCell>
+                    <TableCell><a href={mat.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block max-w-xs">{mat.pdfUrl}</a></TableCell>
+                    <TableCell>{format(new Date(mat.createdAt), "PP")}</TableCell>
+                    <TableCell>
+                      <AlertDialog open={materialToDelete?._id === mat._id} onOpenChange={(open) => !open && setMaterialToDelete(null)}>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setMaterialToDelete(mat)}><Trash2 className="h-4 w-4"/></Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader><AlertDialogTitle>Delete this material?</AlertDialogTitle><AlertDialogDescription>Delete "{materialToDelete?.title}"? This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setMaterialToDelete(null)}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting} className="bg-destructive">{isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Delete</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+             <p className="text-center text-muted-foreground py-4">{selectedClassId ? "No materials uploaded for this class yet." : "Select a class to see materials."}</p>
+          )}
+        </CardContent>
+      </Card>
+
     </div>
   );
 }

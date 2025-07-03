@@ -38,6 +38,13 @@ export interface School {
   busFeeStructures?: BusFeeLocationCategory[]; // Added new field
   reportCardTemplate?: ReportCardTemplateKey;
   allowStudentsToViewPublishedReports?: boolean; // New field
+  // Operational Settings
+  attendanceType?: 'daily' | 'monthly' | 'qr';
+  activeAcademicYear?: string;
+  marksEntryLocks?: {
+    FA1: boolean; FA2: boolean; FA3: boolean; FA4: boolean;
+    SA1: boolean; SA2: boolean;
+  };
   createdAt: Date | string; // Allow string for client-side
   updatedAt: Date | string; // Allow string for client-side
   academicYear?: string; // Added from student data context
@@ -71,8 +78,23 @@ export const schoolFormSchema = z.object({
   reportCardTemplate: z.custom<ReportCardTemplateKey>((val) => {
     return typeof val === 'string' && Object.keys(REPORT_CARD_TEMPLATES).includes(val);
   }, { message: "Invalid report card template selected." }).optional().default('none'),
-  allowStudentsToViewPublishedReports: z.boolean().default(false).optional(), // New field in schema
+  allowStudentsToViewPublishedReports: z.boolean().default(false).optional(),
 });
 
 export type SchoolFormData = z.infer<typeof schoolFormSchema>;
 
+// Zod schema for operational settings form
+export const operationalSettingsSchema = z.object({
+  attendanceType: z.enum(['daily', 'monthly', 'qr']).default('monthly'),
+  activeAcademicYear: z.string().regex(/^\d{4}-\d{4}$/, "Invalid academic year format (e.g., 2024-2025)").optional(),
+  marksEntryLocks: z.object({
+    FA1: z.boolean().default(false),
+    FA2: z.boolean().default(false),
+    FA3: z.boolean().default(false),
+    FA4: z.boolean().default(false),
+    SA1: z.boolean().default(false),
+    SA2: z.boolean().default(false),
+  }).default({ FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false }),
+});
+
+export type OperationalSettingsFormData = z.infer<typeof operationalSettingsSchema>;

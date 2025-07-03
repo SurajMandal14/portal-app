@@ -3,8 +3,8 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { School, SchoolFormData, ReportCardTemplateKey, ClassTuitionFeeConfig, TermFee, BusFeeLocationCategory } from '@/types/school';
-import { schoolFormSchema } from '@/types/school';
+import type { School, SchoolFormData, ReportCardTemplateKey, ClassTuitionFeeConfig, TermFee, BusFeeLocationCategory, OperationalSettingsFormData } from '@/types/school';
+import { schoolFormSchema, operationalSettingsSchema } from '@/types/school';
 import { revalidatePath } from 'next/cache';
 import { ObjectId } from 'mongodb';
 
@@ -47,7 +47,11 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
       })) : [],
       schoolLogoUrl: schoolLogoUrl || undefined,
       reportCardTemplate: reportCardTemplate || 'none',
-      allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false, // Initialize new field
+      allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false,
+      // Default operational settings
+      attendanceType: 'monthly',
+      activeAcademicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+      marksEntryLocks: { FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false },
     };
 
     const schoolToInsert = {
@@ -170,13 +174,6 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
 }
 
 
-export interface GetSchoolsResult {
-  success: boolean;
-  schools?: School[];
-  error?: string;
-  message?: string;
-}
-
 export async function getSchools(): Promise<GetSchoolsResult> {
   try {
     const { db } = await connectToDatabase();
@@ -198,7 +195,10 @@ export async function getSchools(): Promise<GetSchoolsResult> {
         terms: (bfs.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
       reportCardTemplate: doc.reportCardTemplate,
-      allowStudentsToViewPublishedReports: doc.allowStudentsToViewPublishedReports === undefined ? false : doc.allowStudentsToViewPublishedReports, // Default to false if missing
+      allowStudentsToViewPublishedReports: doc.allowStudentsToViewPublishedReports === undefined ? false : doc.allowStudentsToViewPublishedReports,
+      attendanceType: doc.attendanceType || 'monthly',
+      activeAcademicYear: doc.activeAcademicYear,
+      marksEntryLocks: doc.marksEntryLocks || { FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false },
       createdAt: new Date(doc.createdAt).toISOString(),
       updatedAt: new Date(doc.updatedAt).toISOString(),
     }));
@@ -211,9 +211,9 @@ export async function getSchools(): Promise<GetSchoolsResult> {
   }
 }
 
-export interface GetSchoolByIdResult {
+export interface GetSchoolsResult {
   success: boolean;
-  school?: School;
+  schools?: School[];
   error?: string;
   message?: string;
 }
@@ -247,7 +247,10 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
         terms: (bfs.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
       reportCardTemplate: schoolDoc.reportCardTemplate,
-      allowStudentsToViewPublishedReports: schoolDoc.allowStudentsToViewPublishedReports === undefined ? false : schoolDoc.allowStudentsToViewPublishedReports, // Default to false if missing
+      allowStudentsToViewPublishedReports: schoolDoc.allowStudentsToViewPublishedReports === undefined ? false : doc.allowStudentsToViewPublishedReports, // Default to false if missing
+      attendanceType: schoolDoc.attendanceType || 'monthly',
+      activeAcademicYear: schoolDoc.activeAcademicYear,
+      marksEntryLocks: schoolDoc.marksEntryLocks || { FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false },
       createdAt: new Date(schoolDoc.createdAt).toISOString(),
       updatedAt: new Date(schoolDoc.updatedAt).toISOString(),
     };
@@ -260,9 +263,9 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
   }
 }
 
-export interface GetSchoolsCountResult {
+export interface GetSchoolByIdResult {
   success: boolean;
-  count?: number;
+  school?: School;
   error?: string;
   message?: string;
 }
@@ -278,6 +281,13 @@ export async function getSchoolsCount(): Promise<GetSchoolsCountResult> {
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch schools count.' };
   }
+}
+
+export interface GetSchoolsCountResult {
+  success: boolean;
+  count?: number;
+  error?: string;
+  message?: string;
 }
 
 // New action for School Admin to toggle visibility
@@ -329,12 +339,6 @@ export async function setSchoolReportVisibility(schoolId: string, allowVisibilit
 }
 
 
-export interface DeleteSchoolResult {
-  success: boolean;
-  message: string;
-  error?: string;
-}
-
 export async function deleteSchool(schoolId: string): Promise<DeleteSchoolResult> {
   try {
     if (!ObjectId.isValid(schoolId)) {
@@ -350,12 +354,6 @@ export async function deleteSchool(schoolId: string): Promise<DeleteSchoolResult
       return { success: false, message: 'Cannot delete school. Please remove all assigned users (Admins, Teachers, Students) first.' };
     }
 
-    // Optional: Add checks for other collections if needed
-    // const classesCount = await db.collection('school_classes').countDocuments({ schoolId: schoolObjectId });
-    // if (classesCount > 0) {
-    //   return { success: false, message: 'Cannot delete school. Please remove all assigned classes first.' };
-    // }
-
     const result = await db.collection('schools').deleteOne({ _id: schoolObjectId as any });
     if (result.deletedCount === 0) {
       return { success: false, message: 'School not found or already deleted.' };
@@ -369,5 +367,70 @@ export async function deleteSchool(schoolId: string): Promise<DeleteSchoolResult
     console.error('Delete school server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, message: 'An unexpected error occurred during school deletion.', error: errorMessage };
+  }
+}
+
+export interface DeleteSchoolResult {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+
+// Action for Master Admin to update operational settings
+export async function updateSchoolOperationalSettings(schoolId: string, values: OperationalSettingsFormData): Promise<UpdateSchoolResult> {
+  try {
+    if (!ObjectId.isValid(schoolId)) {
+      return { success: false, message: 'Invalid school ID format.' };
+    }
+
+    const validatedFields = operationalSettingsSchema.safeParse(values);
+    if (!validatedFields.success) {
+      const errors = validatedFields.error.errors.map(e => `${e.path.join('.')} - ${e.message}`).join('; ');
+      return { success: false, message: 'Validation failed', error: errors };
+    }
+
+    const { attendanceType, activeAcademicYear, marksEntryLocks } = validatedFields.data;
+
+    const { db } = await connectToDatabase();
+    const schoolsCollection = db.collection<School>('schools');
+
+    const updateData = {
+      attendanceType,
+      activeAcademicYear,
+      marksEntryLocks,
+      updatedAt: new Date(),
+    };
+
+    const result = await schoolsCollection.updateOne(
+      { _id: new ObjectId(schoolId) as any },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return { success: false, message: 'School not found for update.', error: 'School not found.' };
+    }
+    
+    revalidatePath('/dashboard/master-admin/settings');
+    
+    const updatedSchoolDoc = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
+    if (!updatedSchoolDoc) return { success: false, message: 'Failed to retrieve school after update.'};
+
+    const clientSchool: School = {
+      ...updatedSchoolDoc,
+      _id: updatedSchoolDoc._id.toString(),
+      createdAt: new Date(updatedSchoolDoc.createdAt).toISOString(),
+      updatedAt: new Date(updatedSchoolDoc.updatedAt).toISOString(),
+    };
+
+    return {
+      success: true,
+      message: 'School operational settings updated successfully!',
+      school: clientSchool,
+    };
+  } catch (error) {
+    console.error('Update operational settings error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, message: 'An unexpected error occurred.', error: errorMessage };
   }
 }
