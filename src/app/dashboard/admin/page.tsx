@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, DollarSign, CheckSquare, BarChart2, Settings, Briefcase, BookOpen, Percent, Loader2, BookCopy, BookUser } from "lucide-react";
+import { Users, DollarSign, CheckSquare, BarChart2, Settings, Briefcase, BookOpen, Percent, Loader2, BookCopy, BookUser, FileQuestion } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { AuthUser } from "@/types/user";
 import type { School } from "@/types/school";
@@ -247,6 +247,19 @@ export default function AdminDashboardPage() {
                 <CardDescription>Generate reports on student performance, fees, and attendance.</CardDescription>
                 <Button asChild className="mt-4" variant="outline">
                     <Link href="/dashboard/admin/reports">View Reports</Link>
+                </Button>
+            </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+                <FileQuestion className="h-10 w-10 text-primary mb-2" />
+                <CardTitle>Question Papers</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <CardDescription>Upload and manage previous years' question papers for students.</CardDescription>
+                <Button asChild className="mt-4" variant="outline">
+                    <Link href="/dashboard/admin/question-papers">Manage Papers</Link>
                 </Button>
             </CardContent>
         </Card>

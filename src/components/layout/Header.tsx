@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase, Award, UserCog } from "lucide-react";
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase, Award, UserCog, FileQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -44,6 +44,7 @@ const navLinksBase = {
     { href: "/dashboard/admin/fees", label: "Fees", icon: DollarSign },
     { href: "/dashboard/admin/attendance", label: "Attendance", icon: CheckSquare },
     { href: "/dashboard/admin/reports", label: "Reports", icon: BarChart2 },
+    { href: "/dashboard/admin/question-papers", label: "Question Papers", icon: FileQuestion },
     { href: "/dashboard/admin/settings", label: "School Settings", icon: Settings },
   ],
   teacher: [
@@ -57,6 +58,8 @@ const navLinksBase = {
     { href: "/dashboard/student/fees", label: "My Fees", icon: DollarSign },
     { href: "/dashboard/student/attendance", label: "My Attendance", icon: CheckSquare },
     { href: "/dashboard/student/results", label: "Exam Results", icon: Award },
+    { href: "/dashboard/student/courses", label: "Course Materials", icon: BookOpen },
+    { href: "/dashboard/student/question-papers", label: "Question Papers", icon: FileQuestion },
     { href: "/dashboard/student/profile", label: "My Profile", icon: BookUser },
   ],
 };

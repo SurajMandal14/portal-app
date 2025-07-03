@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, CheckSquare, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks, RefreshCw, AlertTriangle, Award } from "lucide-react";
+import { DollarSign, CheckSquare, BookOpen, UserCircle, Loader2, CalendarClock, ListChecks, RefreshCw, AlertTriangle, Award, FileQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useStudentData } from '@/contexts/StudentDataContext'; // StudentDataProvider is no longer imported here
@@ -142,6 +142,9 @@ function StudentDashboardContent() {
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <Button variant="outline" className="w-full justify-start" asChild>
                 <Link href="/dashboard/student/courses"><BookOpen className="mr-2 h-5 w-5"/> My Courses</Link>
+            </Button>
+             <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/dashboard/student/question-papers"><FileQuestion className="mr-2 h-5 w-5"/> Question Papers</Link>
             </Button>
             <Button variant="outline" className="w-full justify-start" asChild>
                 <Link href="/dashboard/student/profile"><UserCircle className="mr-2 h-5 w-5"/> My Profile</Link>
