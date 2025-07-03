@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { School, Users, Settings, BarChart3, Loader2, TicketPercent, UserShield } from "lucide-react";
+import { School, Users, Settings, BarChart3, Loader2, TicketPercent, UserCog } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getSchoolsCount } from "@/app/actions/schools";
 import { getMasterAdminsCount } from "@/app/actions/masterAdmins";
@@ -90,7 +90,7 @@ export default function SuperAdminDashboardPage() {
         <StatCard 
             title="Total Master Administrators" 
             value={adminCount} 
-            icon={UserShield} 
+            icon={UserCog} 
             isLoading={isLoadingAdmins}
             link="/dashboard/super-admin/master-admins"
             linkText="Manage Master Admins"
@@ -113,7 +113,7 @@ export default function SuperAdminDashboardPage() {
 
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
-            <UserShield className="h-10 w-10 text-primary mb-2" />
+            <UserCog className="h-10 w-10 text-primary mb-2" />
             <CardTitle>Master Admin Management</CardTitle>
           </CardHeader>
           <CardContent>

@@ -2,7 +2,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Info, Briefcase, BookUser, UserShield } from "lucide-react";
+import { Users, Info, Briefcase, BookUser, UserCog } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -21,7 +21,7 @@ export default function SuperAdminUserManagementRedirectPage() {
         <CardContent className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 py-10">
             <Button asChild className="w-full sm:w-auto">
                 <Link href="/dashboard/super-admin/master-admins" className="flex items-center">
-                    <UserShield className="mr-2 h-5 w-5"/> Manage Master Admins
+                    <UserCog className="mr-2 h-5 w-5"/> Manage Master Admins
                 </Link>
             </Button>
             <p className="text-muted-foreground text-sm">To manage School Admins, please log in as a Master Admin.</p>
