@@ -247,7 +247,7 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
         terms: (bfs.terms || []).map((t: any) => ({ term: t.term, amount: t.amount }))
       })),
       reportCardTemplate: schoolDoc.reportCardTemplate,
-      allowStudentsToViewPublishedReports: schoolDoc.allowStudentsToViewPublishedReports === undefined ? false : doc.allowStudentsToViewPublishedReports, // Default to false if missing
+      allowStudentsToViewPublishedReports: schoolDoc.allowStudentsToViewPublishedReports === undefined ? false : schoolDoc.allowStudentsToViewPublishedReports, // Default to false if missing
       attendanceType: schoolDoc.attendanceType || 'monthly',
       activeAcademicYear: schoolDoc.activeAcademicYear,
       marksEntryLocks: schoolDoc.marksEntryLocks || { FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false },
