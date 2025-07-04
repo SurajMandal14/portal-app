@@ -1,4 +1,5 @@
 
+
 // Basic User type definition
 // This will be expanded as we add more user-specific fields.
 
@@ -31,6 +32,7 @@ export interface User {
   rollNo?: string;
   examNo?: string;
   aadharNo?: string;
+  academicYear?: string;
 
   dateOfJoining?: string; // New field
   dateOfLeaving?: string; // New field
