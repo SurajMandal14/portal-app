@@ -27,6 +27,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchoolAdmin, getSchoolAdmins, updateSchoolAdmin, deleteSchoolAdmin } from "@/app/actions/schoolAdminManagement"; // Actions to manage school admins
