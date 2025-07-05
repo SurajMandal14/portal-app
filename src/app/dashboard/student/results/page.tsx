@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Award, Printer, RotateCcw, Loader2, Info, AlertTriangle, Eye, EyeOff } from 'lucide-react'; // Added Eye, EyeOff
+import { Award, Printer, RotateCcw, Loader2, Info, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { AuthUser, UserRole } from '@/types/user';
 import { getStudentReportCard } from '@/app/actions/reports';
@@ -19,8 +19,8 @@ import CBSEStateBack, {
     type SARowData as BackSARowData,
     type AttendanceMonthData as BackAttendanceMonthData,
 } from '@/components/report-cards/CBSEStateBack';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const getCurrentAcademicYear = (): string => {
   const today = new Date();
@@ -33,6 +33,20 @@ const getCurrentAcademicYear = (): string => {
   }
 };
 
+const generateAcademicYears = (range = 5): string[] => {
+  const years: string[] = [];
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
+  const endYearOfCurrent = currentMonth >= 5 ? currentYear + 1 : currentYear;
+
+  for (let i = 0; i < range; i++) {
+    const end = endYearOfCurrent - i;
+    const start = end - 1;
+    years.push(`${start}-${end}`);
+  }
+  return years;
+};
+
 
 export default function StudentResultsPage() {
   const { toast } = useToast();
@@ -42,6 +56,7 @@ export default function StudentResultsPage() {
   const [error, setError] = useState<string | null>(null);
   const [targetAcademicYear, setTargetAcademicYear] = useState<string>(getCurrentAcademicYear());
   const [showBackSide, setShowBackSide] = useState(false);
+  const [academicYears, setAcademicYears] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -62,6 +77,7 @@ export default function StudentResultsPage() {
     } else {
       setError("No active session. Please log in.");
     }
+    setAcademicYears(generateAcademicYears());
   }, []);
 
   const fetchReport = useCallback(async () => {
@@ -193,14 +209,22 @@ export default function StudentResultsPage() {
         <CardContent className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-grow">
                 <Label htmlFor="academicYearSelect">Select Academic Year</Label>
-                <Input 
-                    id="academicYearSelect"
-                    value={targetAcademicYear}
-                    onChange={(e) => setTargetAcademicYear(e.target.value)}
-                    placeholder="YYYY-YYYY"
-                    className="max-w-xs"
-                    disabled={isLoading}
-                />
+                <Select
+                  value={targetAcademicYear}
+                  onValueChange={setTargetAcademicYear}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger id="academicYearSelect" className="max-w-xs">
+                    <SelectValue placeholder="Select Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {academicYears.map(year => (
+                      <SelectItem key={year} value={year}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
             </div>
             <Button onClick={fetchReport} disabled={isLoading || !targetAcademicYear.match(/^\d{4}-\d{4}$/)}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RotateCcw className="mr-2 h-4 w-4"/>}
