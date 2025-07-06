@@ -16,7 +16,7 @@ import type { AuthUser } from "@/types/user";
 import type { SchoolClass } from "@/types/classes";
 import { cn } from "@/lib/utils";
 
-const DayCell = ({ day, selectedDate, onDateSelect, isToday }: { day: Date; selectedDate: Date; onDateSelect: (date: Date) => void; isToday: boolean }) => {
+const DayCell = ({ day, selectedDate, onDateSelect, isToday: dayIsTodayFlag }: { day: Date; selectedDate: Date; onDateSelect: (date: Date) => void; isToday: boolean }) => {
   return (
     <button
       type="button"
@@ -24,8 +24,8 @@ const DayCell = ({ day, selectedDate, onDateSelect, isToday }: { day: Date; sele
       className={cn(
         "flex items-center justify-center w-10 h-10 rounded-full transition-colors",
         isSameDay(day, selectedDate) && "bg-primary text-primary-foreground",
-        !isSameDay(day, selectedDate) && isToday && "bg-accent text-accent-foreground",
-        !isSameDay(day, selectedDate) && !isToday && "hover:bg-muted"
+        !isSameDay(day, selectedDate) && dayIsTodayFlag && "bg-accent text-accent-foreground",
+        !isSameDay(day, selectedDate) && !dayIsTodayFlag && "hover:bg-muted"
       )}
     >
       {format(day, 'd')}
@@ -128,7 +128,7 @@ export default function TeacherAttendancePage() {
     setIsSubmitting(true);
     const payload: AttendanceSubmissionPayload = {
       classId: assignedClassDetails._id,
-      className: assignedClassDetails.name, 
+      className: `${assignedClassDetails.name}${assignedClassDetails.section ? ` - ${assignedClassDetails.section}` : ''}`, 
       schoolId: authUser.schoolId.toString(),
       date: selectedDate,
       entries: studentAttendance,
@@ -177,7 +177,7 @@ export default function TeacherAttendancePage() {
             <CheckSquare className="mr-2 h-6 w-6" /> Monthly Attendance
           </CardTitle>
           <CardDescription>
-            Select a day from the calendar to mark attendance for class: <span className="font-semibold">{assignedClassDetails.name}</span>.
+            Select a day from the calendar to mark attendance for class: <span className="font-semibold">{`${assignedClassDetails.name}${assignedClassDetails.section ? ` - ${assignedClassDetails.section}` : ''}`}</span>.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -207,7 +207,7 @@ export default function TeacherAttendancePage() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
                     <div>
                         <CardTitle>Mark Attendance for: {format(selectedDate, "PPP")}</CardTitle>
-                        <CardDescription>Class: {assignedClassDetails.name}</CardDescription>
+                        <CardDescription>Class: {`${assignedClassDetails.name}${assignedClassDetails.section ? ` - ${assignedClassDetails.section}` : ''}`}</CardDescription>
                     </div>
                      <div className="flex gap-2 mt-2 sm:mt-0">
                         <Button variant="outline" size="sm" onClick={() => handleMarkAll('present')} disabled={isSubmitting || studentAttendance.length === 0}>All Present</Button>

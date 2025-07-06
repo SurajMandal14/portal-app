@@ -79,6 +79,7 @@ export const schoolFormSchema = z.object({
     return typeof val === 'string' && Object.keys(REPORT_CARD_TEMPLATES).includes(val);
   }, { message: "Invalid report card template selected." }).optional().default('none'),
   allowStudentsToViewPublishedReports: z.boolean().default(false).optional(),
+  attendanceType: z.enum(['daily', 'monthly', 'qr']).default('monthly').optional(),
 });
 
 export type SchoolFormData = z.infer<typeof schoolFormSchema>;

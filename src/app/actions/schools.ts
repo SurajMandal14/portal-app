@@ -23,7 +23,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate, busFeeStructures, allowStudentsToViewPublishedReports } = validatedFields.data;
+    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate, busFeeStructures, allowStudentsToViewPublishedReports, attendanceType } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<Omit<School, '_id'>>('schools');
@@ -49,7 +49,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
       reportCardTemplate: reportCardTemplate || 'none',
       allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false,
       // Default operational settings
-      attendanceType: 'monthly',
+      attendanceType: attendanceType || 'monthly',
       activeAcademicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
       marksEntryLocks: { FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false },
     };
@@ -105,7 +105,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl, busFeeStructures, allowStudentsToViewPublishedReports } = validatedFields.data;
+    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl, busFeeStructures, allowStudentsToViewPublishedReports, attendanceType } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<School>('schools');
@@ -128,7 +128,8 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
         })),
       })) : [],
       reportCardTemplate: reportCardTemplate || 'none',
-      allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false, // Update new field
+      allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false,
+      attendanceType: attendanceType || 'monthly',
       updatedAt: new Date(),
     };
     
