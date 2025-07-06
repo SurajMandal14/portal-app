@@ -48,8 +48,6 @@ import type { AuthUser } from "@/types/attendance";
 
 type SchoolStudent = Partial<AppUser>; 
 
-const NONE_CLASS_VALUE = "__NONE_CLASS_ID__"; 
-
 interface ClassOption {
   value: string; 
   label: string; 
@@ -92,7 +90,7 @@ export default function AdminStudentManagementPage() {
         return zodResolver(schema)(data, context, options);
     },
     defaultValues: { 
-        name: "", email: "", password: "", admissionId: "", classId: "", 
+        name: "", email: "", password: "", admissionId: "", classId: "", role: 'student',
         academicYear: getCurrentAcademicYear(),
         enableBusTransport: false, busRouteLocation: "", busClassCategory: "",
         fatherName: "", motherName: "", dob: "", section: "", rollNo: "", examNo: "", aadharNo: "",
@@ -163,6 +161,7 @@ export default function AdminStudentManagementPage() {
   }, [authUser, fetchInitialData]);
 
   const handleClassChange = (classIdValue: string) => {
+    const NONE_CLASS_VALUE = "__NONE_CLASS_ID__"; 
     currentForm.setValue('classId', classIdValue === NONE_CLASS_VALUE ? "" : classIdValue);
     const selectedClass = classOptions.find(opt => opt.value === classIdValue);
     currentForm.setValue('section', selectedClass?.section || '');
@@ -331,7 +330,7 @@ export default function AdminStudentManagementPage() {
       
       <Card><CardHeader><CardTitle className="flex items-center text-xl"><ShieldQuestion className="mr-2 h-6 w-6 text-primary"/>Academic & Other Details</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <FormField control={currentForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Class in which admitted</FormLabel><Select onValueChange={handleClassChange} value={field.value} disabled={classOptions.length === 0}><FormControl><SelectTrigger><SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} /></SelectTrigger></FormControl><SelectContent><SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>{classOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage/></FormItem>)}/>
+            <FormField control={currentForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Class in which admitted</FormLabel><Select onValueChange={handleClassChange} value={field.value} disabled={classOptions.length === 0}><FormControl><SelectTrigger><SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} /></SelectTrigger></FormControl><SelectContent>{classOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage/></FormItem>)}/>
             <FormField control={currentForm.control} name="academicYear" render={({ field }) => (<FormItem><FormLabel>Academic Year of Admission</FormLabel><FormControl><Input placeholder="YYYY-YYYY" {...field} /></FormControl><FormMessage/></FormItem>)}/>
             <FormField control={currentForm.control} name="previousSchool" render={({ field }) => (<FormItem className="lg:col-span-1"><FormLabel>Details of school last admitted to</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)}/>
             <FormField control={currentForm.control} name="childIdNumber" render={({ field }) => (<FormItem><FormLabel>Child ID Number</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)}/>
