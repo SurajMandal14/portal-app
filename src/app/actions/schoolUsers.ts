@@ -4,8 +4,8 @@
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { User, UserRole } from '@/types/user';
-import { createSchoolUserFormSchema, type CreateSchoolUserFormData, updateSchoolUserFormSchema, type UpdateSchoolUserFormData, type CreateSchoolUserServerActionFormData } from '@/types/user';
+import type { User, UserRole, Address } from '@/types/user';
+import { createSchoolUserFormSchema, type CreateSchoolUserFormData, updateSchoolUserFormSchema, type UpdateSchoolUserFormData } from '@/types/user';
 import { revalidatePath } from 'next/cache';
 import { ObjectId } from 'mongodb';
 
@@ -17,12 +17,11 @@ export interface CreateSchoolUserResult {
   user?: Partial<User>;
 }
 
-export async function createSchoolUser(values: CreateSchoolUserServerActionFormData, schoolId: string): Promise<CreateSchoolUserResult> {
+export async function createSchoolUser(values: CreateSchoolUserFormData, schoolId: string): Promise<CreateSchoolUserResult> {
   try {
-    // Validate against the more comprehensive schema that includes student-specific new fields
     const validatedFields = createSchoolUserFormSchema.safeParse(values);
     if (!validatedFields.success) {
-      const errors = validatedFields.error.errors.map(e => e.message).join(' ');
+      const errors = validatedFields.error.errors.map(e => `${e.path.join('.')} - ${e.message}`).join('; ');
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
@@ -33,7 +32,12 @@ export async function createSchoolUser(values: CreateSchoolUserServerActionFormD
     const { 
         name, email, password, role, classId, admissionId, 
         busRouteLocation, busClassCategory,
-        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining
+        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining,
+        // New detailed fields
+        bloodGroup, nationality, religion, caste, subcaste, identificationMarks,
+        presentAddress, permanentAddress, fatherMobile, motherMobile, fatherAadhar, motherAadhar,
+        fatherQualification, motherQualification, fatherOccupation, motherOccupation,
+        rationCardNumber, isTcAttached, previousSchool, childIdNumber, motherTongue
     } = validatedFields.data;
 
     const { db } = await connectToDatabase();
@@ -65,7 +69,6 @@ export async function createSchoolUser(values: CreateSchoolUserServerActionFormD
       admissionId: role === 'student' ? (admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined) : undefined,
       busRouteLocation: role === 'student' ? (busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined) : undefined,
       busClassCategory: role === 'student' ? (busClassCategory && busClassCategory.trim() !== "" ? busClassCategory.trim() : undefined) : undefined,
-      // New fields
       fatherName: role === 'student' ? fatherName : undefined,
       motherName: role === 'student' ? motherName : undefined,
       dob: role === 'student' ? dob : undefined,
@@ -74,6 +77,11 @@ export async function createSchoolUser(values: CreateSchoolUserServerActionFormD
       examNo: role === 'student' ? examNo : undefined,
       aadharNo: role === 'student' ? aadharNo : undefined,
       dateOfJoining: dateOfJoining || undefined,
+      // New fields
+      bloodGroup, nationality, religion, caste, subcaste, identificationMarks,
+      presentAddress, permanentAddress, fatherMobile, motherMobile, fatherAadhar, motherAadhar,
+      fatherQualification, motherQualification, fatherOccupation, motherOccupation,
+      rationCardNumber, isTcAttached, previousSchool, childIdNumber, motherTongue,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -135,26 +143,10 @@ export async function getSchoolUsers(schoolId: string): Promise<GetSchoolUsersRe
         ...userWithoutPassword,
         _id: user._id.toString(),
         schoolId: user.schoolId?.toString(),
-        classId: user.classId || undefined, 
-        admissionId: user.admissionId || undefined,
-        status: user.status || 'active',
-        busRouteLocation: user.busRouteLocation || undefined,
-        busClassCategory: user.busClassCategory || undefined,
-        fatherName: user.fatherName,
-        motherName: user.motherName,
-        dob: user.dob,
-        section: user.section,
-        rollNo: user.rollNo,
-        examNo: user.examNo,
-        aadharNo: user.aadharNo,
-        dateOfJoining: user.dateOfJoining,
-        dateOfLeaving: user.dateOfLeaving,
-        createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
-        updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : undefined,
       };
     });
 
-    return { success: true, users };
+    return { success: true, users: users as Partial<User>[] };
   } catch (error) {
     console.error('Get school users server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -178,14 +170,19 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
 
     const validatedFields = updateSchoolUserFormSchema.safeParse(values);
     if (!validatedFields.success) {
-      const errors = validatedFields.error.errors.map(e => e.message).join(' ');
+      const errors = validatedFields.error.errors.map(e => `${e.path.join('.')} - ${e.message}`).join('; ');
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
     const { 
         name, email, password, role, classId, admissionId, 
         enableBusTransport, busRouteLocation, busClassCategory,
-        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining, dateOfLeaving
+        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining, dateOfLeaving,
+        // New detailed fields
+        bloodGroup, nationality, religion, caste, subcaste, identificationMarks,
+        presentAddress, permanentAddress, fatherMobile, motherMobile, fatherAadhar, motherAadhar,
+        fatherQualification, motherQualification, fatherOccupation, motherOccupation,
+        rationCardNumber, isTcAttached, previousSchool, childIdNumber, motherTongue
     } = validatedFields.data;
 
     const { db } = await connectToDatabase();
@@ -213,44 +210,27 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
         }
     }
 
-    const updateData: Partial<Omit<User, '_id' | 'role' | 'createdAt'>> & { role?: UserRole; updatedAt: Date } = {
+    const updateData: Partial<Omit<User, '_id' | 'createdAt'>> & { updatedAt: Date } = {
       name,
       email,
       classId: (classId && classId.trim() !== "" && ObjectId.isValid(classId)) ? classId.trim() : undefined,
       updatedAt: new Date(),
       dateOfJoining: dateOfJoining || undefined,
       dateOfLeaving: dateOfLeaving || undefined,
+      role: role as UserRole,
+      admissionId: (role === 'student' && admissionId && admissionId.trim() !== "") ? admissionId.trim() : undefined,
+      busRouteLocation: (role === 'student' && enableBusTransport && busRouteLocation && busRouteLocation.trim() !== "") ? busRouteLocation.trim() : undefined,
+      busClassCategory: (role === 'student' && enableBusTransport && busClassCategory && busClassCategory.trim() !== "") ? busClassCategory.trim() : undefined,
+      fatherName, motherName, dob, section, rollNo, examNo, aadharNo,
+      bloodGroup, nationality, religion, caste, subcaste, identificationMarks,
+      presentAddress, permanentAddress, fatherMobile, motherMobile, fatherAadhar, motherAadhar,
+      fatherQualification, motherQualification, fatherOccupation, motherOccupation,
+      rationCardNumber, isTcAttached, previousSchool, childIdNumber, motherTongue,
     };
-
-    if (role && (role === 'teacher' || role === 'student')) {
-        updateData.role = role; 
-        if (role === 'student') {
-            updateData.admissionId = admissionId && admissionId.trim() !== "" ? admissionId.trim() : undefined;
-            updateData.busRouteLocation = enableBusTransport && busRouteLocation && busRouteLocation.trim() !== "" ? busRouteLocation.trim() : undefined;
-            updateData.busClassCategory = enableBusTransport && busClassCategory && busClassCategory.trim() !== "" ? busClassCategory.trim() : undefined;
-             if (!enableBusTransport) { 
-                updateData.busRouteLocation = undefined;
-                updateData.busClassCategory = undefined;
-            }
-            updateData.fatherName = fatherName;
-            updateData.motherName = motherName;
-            updateData.dob = dob;
-            updateData.section = section;
-            updateData.rollNo = rollNo;
-            updateData.examNo = examNo;
-            updateData.aadharNo = aadharNo;
-        } else { 
-            updateData.admissionId = undefined;
-            updateData.busRouteLocation = undefined;
-            updateData.busClassCategory = undefined;
-            updateData.fatherName = undefined;
-            updateData.motherName = undefined;
-            updateData.dob = undefined;
-            updateData.section = undefined;
-            updateData.rollNo = undefined;
-            updateData.examNo = undefined;
-            updateData.aadharNo = undefined;
-        }
+    
+    if (role === 'student' && !enableBusTransport) {
+      updateData.busRouteLocation = undefined;
+      updateData.busClassCategory = undefined;
     }
 
 
@@ -396,7 +376,7 @@ export async function getStudentsByClass(schoolId: string, classId: string): Pro
       };
     });
 
-    return { success: true, users: users };
+    return { success: true, users: users as Partial<User>[] };
   } catch (error) {
     console.error('Get students by class server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';

@@ -1,12 +1,18 @@
 
 
-// Basic User type definition
-// This will be expanded as we add more user-specific fields.
-
 import type { ObjectId } from 'mongodb';
 import { z } from 'zod';
 
 export type UserRole = 'superadmin' | 'masteradmin' | 'admin' | 'teacher' | 'student';
+
+export interface Address {
+  houseNo?: string;
+  street?: string;
+  village?: string;
+  mandal?: string;
+  district?: string;
+  state?: string;
+}
 
 export interface User {
   _id: ObjectId | string;
@@ -16,15 +22,15 @@ export interface User {
   role: UserRole;
   status?: 'active' | 'discontinued';
   schoolId?: ObjectId | string;
-  classId?: string; // For students: class _id they belong to. For teachers: primary class _id they can mark attendance for.
+  classId?: string; 
   admissionId?: string; 
   avatarUrl?: string;
   phone?: string;
-  busRouteLocation?: string; // For students using bus transport
-  busClassCategory?: string; // For students using bus transport, to match specific bus fee tier
-  subjectsTaught?: string[]; // For teachers, list of subject names or IDs they teach (Future use)
+  busRouteLocation?: string; 
+  busClassCategory?: string; 
+  subjectsTaught?: string[]; 
   
-  // New fields for student report card
+  // New fields for student report card & detailed form
   fatherName?: string;
   motherName?: string;
   dob?: string; 
@@ -34,60 +40,46 @@ export interface User {
   aadharNo?: string;
   academicYear?: string;
 
-  dateOfJoining?: string; // New field
-  dateOfLeaving?: string; // New field
+  dateOfJoining?: string;
+  dateOfLeaving?: string;
 
-  createdAt: Date | string; // Allow string for client-side
-  updatedAt: Date | string; // Allow string for client-side
+  // New detailed student form fields
+  bloodGroup?: string;
+  nationality?: string;
+  religion?: string;
+  caste?: string;
+  subcaste?: string;
+  identificationMarks?: string;
+  presentAddress?: Address;
+  permanentAddress?: Address;
+  fatherMobile?: string;
+  motherMobile?: string;
+  fatherAadhar?: string;
+  motherAadhar?: string;
+  fatherQualification?: string;
+  motherQualification?: string;
+  fatherOccupation?: string;
+  motherOccupation?: string;
+  rationCardNumber?: string;
+  isTcAttached?: boolean;
+  previousSchool?: string;
+  childIdNumber?: string;
+  motherTongue?: string;
+
+  createdAt: Date | string; 
+  updatedAt: Date | string; 
 }
 
-// Centralized AuthUser type
 export type AuthUser = Pick<User, 'email' | 'name' | 'role' | '_id' | 'schoolId' | 'classId' | 'avatarUrl' | 'admissionId'>;
 
-
-// Zod schema for Super Admin creating/updating School Admins
 export const schoolAdminFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }).optional().or(z.literal('')), // Optional for update
+  password: z.string().min(6, { message: "Password must be at least 6 characters." }).optional().or(z.literal('')), 
   schoolId: z.string().min(1, { message: "School selection is required." }),
 });
 export type SchoolAdminFormData = z.infer<typeof schoolAdminFormSchema>;
 
-
-// Zod schema for admin creating students
-export const createStudentFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-  admissionId: z.string().min(1, { message: "Admission ID is required for students."}),
-  classId: z.string().min(1, { message: "Class assignment is required." }), // This will be the class _id
-  enableBusTransport: z.boolean().default(false).optional(),
-  busRouteLocation: z.string().optional(),
-  busClassCategory: z.string().optional(),
-  // New fields for student
-  fatherName: z.string().optional(),
-  motherName: z.string().optional(),
-  dob: z.string().optional(), 
-  section: z.string().optional(), // Section might be auto-populated based on class
-  rollNo: z.string().optional(),
-  examNo: z.string().optional(),
-  aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
-    message: "Aadhar Number must be exactly 12 digits.",
-  }),
-  dateOfJoining: z.string().optional(),
-}).refine(data => {
-  if (data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Bus Location and Class Category are required if bus transport is enabled.",
-  path: ["busRouteLocation"], 
-});
-export type CreateStudentFormData = z.infer<typeof createStudentFormSchema>;
-
-// Zod schema for admin creating teachers
 export const createTeacherFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
@@ -97,97 +89,77 @@ export const createTeacherFormSchema = z.object({
 export type CreateTeacherFormData = z.infer<typeof createTeacherFormSchema>;
 
 
-// Generic Zod schema for admin creating school users (teachers, students) - used by server action
+const addressSchema = z.object({
+  houseNo: z.string().optional(),
+  street: z.string().optional(),
+  village: z.string().optional(),
+  mandal: z.string().optional(),
+  district: z.string().optional(),
+  state: z.string().optional(),
+}).optional();
+
 export const createSchoolUserFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Invalid email address." }),
+  // System fields (may be grouped separately in UI)
+  admissionId: z.string().min(1, { message: "Admission ID is required."}),
+  email: z.string().email({ message: "A valid email is required." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
   role: z.enum(['teacher', 'student'], { required_error: "Role is required." }),
-  classId: z.string().optional(), // This will be class _id
-  admissionId: z.string().optional(),
-  busRouteLocation: z.string().optional(),
-  busClassCategory: z.string().optional(),
-  // New fields for student
-  fatherName: z.string().optional(),
-  motherName: z.string().optional(),
-  dob: z.string().optional(),
+  
+  // Admission Details
+  name: z.string().min(2, { message: "Full Name is required." }),
+  dob: z.string().min(1, { message: "Date of Birth is required." }),
+  bloodGroup: z.string().optional(),
+  nationality: z.string().optional(),
+  religion: z.string().optional(),
+  caste: z.string().optional(),
+  subcaste: z.string().optional(),
+  aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), { message: "Aadhar must be 12 digits." }),
+  identificationMarks: z.string().optional(),
+  
+  // Address Details
+  presentAddress: addressSchema,
+  isPermanentSameAsPresent: z.boolean().optional(),
+  permanentAddress: addressSchema,
+  
+  // Parent/Guardian Details
+  fatherName: z.string().min(2, "Father's/Guardian's Name is required."),
+  motherName: z.string().min(2, "Mother's Name is required."),
+  fatherMobile: z.string().optional(),
+  motherMobile: z.string().optional(),
+  fatherAadhar: z.string().optional(),
+  motherAadhar: z.string().optional(),
+  fatherQualification: z.string().optional(),
+  motherQualification: z.string().optional(),
+  fatherOccupation: z.string().optional(),
+  motherOccupation: z.string().optional(),
+  rationCardNumber: z.string().optional(),
+  
+  // Academic & Other Details
+  classId: z.string().min(1, { message: "Class assignment is required." }),
+  previousSchool: z.string().optional(),
+  isTcAttached: z.boolean().optional(),
+  childIdNumber: z.string().optional(),
+  motherTongue: z.string().optional(),
+  dateOfJoining: z.string().optional(),
+
+  // These are system-managed but part of the base user type
   section: z.string().optional(),
   rollNo: z.string().optional(),
   examNo: z.string().optional(),
-  aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
-    message: "Aadhar Number must be exactly 12 digits.",
-  }),
-  dateOfJoining: z.string().optional(),
-}).refine(data => {
-  if (data.role === 'student' && (!data.admissionId || data.admissionId.trim() === "")) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Admission ID is required for students and cannot be empty.",
-  path: ["admissionId"],
-});
-export type CreateSchoolUserFormData = z.infer<typeof createSchoolUserFormSchema>;
-
-
-// Zod schema for admin updating school users (teachers, students)
-export const updateSchoolUserFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(6, { message: "New password must be at least 6 characters." }).optional().or(z.literal('')), // Optional for update
-  role: z.enum(['teacher', 'student'], { required_error: "Role is required." }), 
-  classId: z.string().optional(), // This will be class _id
-  admissionId: z.string().optional(), 
+  dateOfLeaving: z.string().optional(),
   enableBusTransport: z.boolean().default(false).optional(),
   busRouteLocation: z.string().optional(),
   busClassCategory: z.string().optional(),
-  // New fields for student
-  fatherName: z.string().optional(),
-  motherName: z.string().optional(),
-  dob: z.string().optional(),
-  section: z.string().optional(),
-  rollNo: z.string().optional(),
-  examNo: z.string().optional(),
-  aadharNo: z.string().optional().refine(val => !val || /^\d{12}$/.test(val), {
-    message: "Aadhar Number must be exactly 12 digits.",
-  }),
-  dateOfJoining: z.string().optional(),
-  dateOfLeaving: z.string().optional(),
-}).refine(data => {
-  if (data.role === 'student' && data.enableBusTransport && (!data.busRouteLocation || !data.busClassCategory)) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Bus Location and Class Category are required if bus transport is enabled for student.",
-  path: ["busRouteLocation"],
 });
+
+export type CreateSchoolUserFormData = z.infer<typeof createSchoolUserFormSchema>;
+
+export const updateSchoolUserFormSchema = createSchoolUserFormSchema.extend({
+  password: z.string().min(6, { message: "New password must be at least 6 characters." }).optional().or(z.literal('')), // Optional for update
+});
+
 export type UpdateSchoolUserFormData = z.infer<typeof updateSchoolUserFormSchema>;
 
-
-// Added for school admin creating teachers/students (used by createSchoolUser action parameter)
-export interface CreateSchoolUserServerActionFormData {
-  name: string;
-  email: string;
-  password: string; // Required for create by server action
-  role: 'teacher' | 'student';
-  classId?: string; // This will be class _id
-  admissionId?: string;
-  busRouteLocation?: string;
-  busClassCategory?: string;
-  // New fields for student
-  fatherName?: string;
-  motherName?: string;
-  dob?: string;
-  section?: string; // From class
-  rollNo?: string;
-  examNo?: string;
-  aadharNo?: string;
-  dateOfJoining?: string;
-}
-
-
-// Schema for updating basic profile info (name, phone, avatar)
 export const updateProfileFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   phone: z.string().optional(),
@@ -195,7 +167,6 @@ export const updateProfileFormSchema = z.object({
 });
 export type UpdateProfileFormData = z.infer<typeof updateProfileFormSchema>;
 
-// Zod schema for super admin creating/updating master admins
 export const masterAdminFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
