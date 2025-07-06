@@ -136,6 +136,7 @@ export const createSchoolUserFormSchema = z.object({
   
   // Academic & Other Details
   classId: z.string().min(1, { message: "Class assignment is required." }),
+  academicYear: z.string().optional(),
   previousSchool: z.string().optional(),
   isTcAttached: z.boolean().optional(),
   childIdNumber: z.string().optional(),
@@ -174,3 +175,5 @@ export const masterAdminFormSchema = z.object({
   schoolId: z.string().min(1, "School assignment is required."),
 });
 export type MasterAdminFormData = z.infer<typeof masterAdminFormSchema>;
+
+    

@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, XCircle, SquarePen, DollarSign, Bus, Info, CalendarIcon, UserMinus, UserCheck, UserCircle2, ChevronsUpDown, Contact, GraduationCap, Home, Heart, ShieldQuestion } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Search, Loader2, UserPlus, BookUser, XCircle, SquarePen, DollarSign, Bus, Info, CalendarIcon, UserMinus, UserCheck, UserCircle2, ChevronsUpDown, Contact, GraduationCap, Home, Heart, ShieldQuestion, CalendarClock } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
 import {
@@ -57,6 +57,18 @@ interface ClassOption {
   section?: string;
 }
 
+const getCurrentAcademicYear = (): string => {
+  const today = new Date();
+  const currentMonth = today.getMonth(); // 0 (Jan) to 11 (Dec)
+  const currentYear = today.getFullYear();
+  // Assuming academic year starts in June (month 5)
+  if (currentMonth >= 5) { 
+    return `${currentYear}-${currentYear + 1}`;
+  } else { 
+    return `${currentYear - 1}-${currentYear}`;
+  }
+};
+
 export default function AdminStudentManagementPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -78,6 +90,7 @@ export default function AdminStudentManagementPage() {
     resolver: zodResolver(createSchoolUserFormSchema),
     defaultValues: { 
         name: "", email: "", password: "", admissionId: "", classId: "", 
+        academicYear: getCurrentAcademicYear(),
         enableBusTransport: false, busRouteLocation: "", busClassCategory: "",
         fatherName: "", motherName: "", dob: "", section: "", rollNo: "", examNo: "", aadharNo: "",
         // New detailed fields
@@ -155,6 +168,7 @@ export default function AdminStudentManagementPage() {
       currentForm.reset({
         name: editingStudent.name || "", email: editingStudent.email || "", password: "", role: 'student',
         admissionId: editingStudent.admissionId || "", classId: editingStudent.classId || "",
+        academicYear: editingStudent.academicYear || getCurrentAcademicYear(),
         enableBusTransport: !!editingStudent.busRouteLocation, busRouteLocation: editingStudent.busRouteLocation || "",
         busClassCategory: editingStudent.busClassCategory || "", fatherName: editingStudent.fatherName || "",
         motherName: editingStudent.motherName || "", dob: editingStudent.dob || "",
@@ -299,7 +313,8 @@ export default function AdminStudentManagementPage() {
       <Card><CardHeader><CardTitle className="flex items-center text-xl"><ShieldQuestion className="mr-2 h-6 w-6 text-primary"/>Academic & Other Details</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <FormField control={currentForm.control} name="classId" render={({ field }) => (<FormItem><FormLabel>Class in which admitted</FormLabel><Select onValueChange={handleClassChange} value={field.value} disabled={classOptions.length === 0}><FormControl><SelectTrigger><SelectValue placeholder={classOptions.length > 0 ? "Select class" : "No classes available"} /></SelectTrigger></FormControl><SelectContent><SelectItem value={NONE_CLASS_VALUE}>-- None --</SelectItem>{classOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage/></FormItem>)}/>
-            <FormField control={currentForm.control} name="previousSchool" render={({ field }) => (<FormItem className="lg:col-span-2"><FormLabel>Details of school last admitted to</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)}/>
+            <FormField control={currentForm.control} name="academicYear" render={({ field }) => (<FormItem><FormLabel>Academic Year of Admission</FormLabel><FormControl><Input placeholder="YYYY-YYYY" {...field} /></FormControl><FormMessage/></FormItem>)}/>
+            <FormField control={currentForm.control} name="previousSchool" render={({ field }) => (<FormItem className="lg:col-span-1"><FormLabel>Details of school last admitted to</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)}/>
             <FormField control={currentForm.control} name="childIdNumber" render={({ field }) => (<FormItem><FormLabel>Child ID Number</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)}/>
             <FormField control={currentForm.control} name="motherTongue" render={({ field }) => (<FormItem><FormLabel>Mother Tongue of Pupil</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)}/>
             <FormField control={currentForm.control} name="dateOfJoining" render={({ field }) => (<FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>)}/>
@@ -378,3 +393,5 @@ export default function AdminStudentManagementPage() {
     </div>
   );
 }
+
+    

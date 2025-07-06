@@ -32,7 +32,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
     const { 
         name, email, password, role, classId, admissionId, 
         busRouteLocation, busClassCategory,
-        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining,
+        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining, academicYear,
         // New detailed fields
         bloodGroup, nationality, religion, caste, subcaste, identificationMarks,
         presentAddress, permanentAddress, fatherMobile, motherMobile, fatherAadhar, motherAadhar,
@@ -77,6 +77,7 @@ export async function createSchoolUser(values: CreateSchoolUserFormData, schoolI
       examNo: role === 'student' ? examNo : undefined,
       aadharNo: role === 'student' ? aadharNo : undefined,
       dateOfJoining: dateOfJoining || undefined,
+      academicYear: academicYear,
       // New fields
       bloodGroup, nationality, religion, caste, subcaste, identificationMarks,
       presentAddress, permanentAddress, fatherMobile, motherMobile, fatherAadhar, motherAadhar,
@@ -177,7 +178,7 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
     const { 
         name, email, password, role, classId, admissionId, 
         enableBusTransport, busRouteLocation, busClassCategory,
-        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining, dateOfLeaving,
+        fatherName, motherName, dob, section, rollNo, examNo, aadharNo, dateOfJoining, dateOfLeaving, academicYear,
         // New detailed fields
         bloodGroup, nationality, religion, caste, subcaste, identificationMarks,
         presentAddress, permanentAddress, fatherMobile, motherMobile, fatherAadhar, motherAadhar,
@@ -217,6 +218,7 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
       updatedAt: new Date(),
       dateOfJoining: dateOfJoining || undefined,
       dateOfLeaving: dateOfLeaving || undefined,
+      academicYear: academicYear,
       role: role as UserRole,
       admissionId: (role === 'student' && admissionId && admissionId.trim() !== "") ? admissionId.trim() : undefined,
       busRouteLocation: (role === 'student' && enableBusTransport && busRouteLocation && busRouteLocation.trim() !== "") ? busRouteLocation.trim() : undefined,
@@ -513,3 +515,5 @@ export async function getStudentDetailsForReportCard(admissionIdQuery: string, s
     return { success: false, error: errorMessage, message: 'Failed to fetch student details for report card.' };
   }
 }
+
+    
