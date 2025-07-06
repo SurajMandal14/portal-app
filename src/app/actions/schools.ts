@@ -388,7 +388,7 @@ export async function updateSchoolOperationalSettings(schoolId: string, values: 
       return { success: false, message: 'Validation failed', error: errors };
     }
 
-    const { activeAcademicYear, marksEntryLocks, attendanceType } = validatedFields.data;
+    const { activeAcademicYear, marksEntryLocks } = validatedFields.data; // Intentionally omitting attendanceType
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<School>('schools');
@@ -396,7 +396,6 @@ export async function updateSchoolOperationalSettings(schoolId: string, values: 
     const updateData = {
       activeAcademicYear,
       marksEntryLocks,
-      attendanceType,
       updatedAt: new Date(),
     };
 
@@ -410,7 +409,7 @@ export async function updateSchoolOperationalSettings(schoolId: string, values: 
     }
     
     revalidatePath('/dashboard/master-admin/settings');
-    revalidatePath('/dashboard/teacher/attendance'); // Revalidate in case type changed
+    revalidatePath('/dashboard/teacher/attendance');
     
     const updatedSchoolDoc = await schoolsCollection.findOne({ _id: new ObjectId(schoolId) as any });
     if (!updatedSchoolDoc) return { success: false, message: 'Failed to retrieve school after update.'};

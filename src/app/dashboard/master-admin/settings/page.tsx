@@ -95,7 +95,7 @@ export default function MasterAdminSettingsPage() {
             <Settings className="mr-2 h-6 w-6" /> School Operational Settings
           </CardTitle>
           <CardDescription>
-            Manage attendance types, academic years, and marks entry permissions for schools.
+            Manage academic years and marks entry permissions for schools. Attendance type is managed by the Super Admin.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -118,33 +118,6 @@ export default function MasterAdminSettingsPage() {
       {selectedSchool && !isLoadingSchoolDetails && (
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg">Attendance Settings for {selectedSchool.schoolName}</CardTitle>
-                    <CardDescription>Control how attendance is marked.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <FormField
-                        control={form.control}
-                        name="attendanceType"
-                        render={({ field }) => (
-                            <FormItem className="max-w-xs">
-                                <FormLabel>Attendance Type</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                                    <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="monthly">Monthly Summary Input</SelectItem>
-                                        <SelectItem value="daily" disabled>Daily List (Coming Soon)</SelectItem>
-                                        <SelectItem value="qr" disabled>QR Code Based (Coming Soon)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                </CardContent>
-            </Card>
-
             <Card>
                 <CardHeader>
                     <CardTitle className="text-lg">Academic Year Settings</CardTitle>
