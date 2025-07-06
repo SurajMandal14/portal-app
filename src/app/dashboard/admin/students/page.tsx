@@ -60,12 +60,11 @@ interface ClassOption {
 const getCurrentAcademicYear = (): string => {
   const today = new Date();
   const currentMonth = today.getMonth(); // 0 (Jan) to 11 (Dec)
-  const currentYear = today.getFullYear();
   // Assuming academic year starts in June (month 5)
   if (currentMonth >= 5) { 
-    return `${currentYear}-${currentYear + 1}`;
+    return `${today.getFullYear()}-${today.getFullYear() + 1}`;
   } else { 
-    return `${currentYear - 1}-${currentYear}`;
+    return `${today.getFullYear() - 1}-${today.getFullYear()}`;
   }
 };
 
@@ -93,6 +92,8 @@ export default function AdminStudentManagementPage() {
         academicYear: getCurrentAcademicYear(),
         enableBusTransport: false, busRouteLocation: "", busClassCategory: "",
         fatherName: "", motherName: "", dob: "", section: "", rollNo: "", examNo: "", aadharNo: "",
+        dateOfJoining: "",
+        dateOfLeaving: "",
         // New detailed fields
         bloodGroup: "", nationality: "Indian", religion: "", caste: "", subcaste: "",
         identificationMarks: "", isPermanentSameAsPresent: false,
