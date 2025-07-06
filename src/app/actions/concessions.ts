@@ -3,14 +3,14 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { FeeConcession, FeeConcessionFormData, ApplyFeeConcessionResult, GetFeeConcessionsResult, RevokeFeeConcessionResult } from '@/types/concessions';
+import type { FeeConcession, FeeConcessionFormData, ApplyFeeConcessionResult, GetFeeConcessionsResult, RevokeFeeConcessionResult, FeeConcessionType } from '@/types/concessions';
 import { feeConcessionFormSchema } from '@/types/concessions';
 import type { User } from '@/types/user';
 import type { School } from '@/types/school';
 import { ObjectId } from 'mongodb';
 import { revalidatePath } from 'next/cache';
 
-export async function applyFeeConcession(payload: FeeConcessionFormData, superAdminId: string): Promise<ApplyFeeConcessionResult> {
+export async function applyFeeConcession(payload: FeeConcessionFormData, masterAdminId: string): Promise<ApplyFeeConcessionResult> {
   try {
     const validatedPayload = feeConcessionFormSchema.safeParse(payload);
     if (!validatedPayload.success) {
@@ -20,7 +20,7 @@ export async function applyFeeConcession(payload: FeeConcessionFormData, superAd
 
     const { studentId, schoolId, academicYear, concessionType, amount, reason } = validatedPayload.data;
 
-    if (!ObjectId.isValid(studentId) || !ObjectId.isValid(schoolId) || !ObjectId.isValid(superAdminId)) {
+    if (!ObjectId.isValid(studentId) || !ObjectId.isValid(schoolId) || !ObjectId.isValid(masterAdminId)) {
       return { success: false, message: 'Invalid ID format for student, school, or admin.' };
     }
 
@@ -38,9 +38,9 @@ export async function applyFeeConcession(payload: FeeConcessionFormData, superAd
     if (!school) {
       return { success: false, message: 'School not found.' };
     }
-    const superAdmin = await usersCollection.findOne({ _id: new ObjectId(superAdminId), role: 'superadmin' });
-     if (!superAdmin) {
-      return { success: false, message: 'Super admin not found or invalid ID.' };
+    const masterAdmin = await usersCollection.findOne({ _id: new ObjectId(masterAdminId), role: 'masteradmin' });
+     if (!masterAdmin) {
+      return { success: false, message: 'Master admin not found or invalid ID.' };
     }
 
 
@@ -51,7 +51,7 @@ export async function applyFeeConcession(payload: FeeConcessionFormData, superAd
       concessionType,
       amount,
       reason,
-      appliedBySuperAdminId: new ObjectId(superAdminId),
+      appliedByMasterAdminId: new ObjectId(masterAdminId),
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -61,7 +61,7 @@ export async function applyFeeConcession(payload: FeeConcessionFormData, superAd
       return { success: false, message: 'Failed to apply fee concession.', error: 'Database insertion failed.' };
     }
 
-    revalidatePath('/dashboard/super-admin/concessions');
+    revalidatePath('/dashboard/master-admin/concessions');
     // Potentially revalidate student/admin fee pages if they show net amounts
     revalidatePath(`/dashboard/student/fees`); 
     revalidatePath(`/dashboard/admin/fees`);
@@ -73,12 +73,12 @@ export async function applyFeeConcession(payload: FeeConcessionFormData, superAd
       _id: result.insertedId.toString(),
       studentId: newConcessionDoc.studentId.toString(),
       schoolId: newConcessionDoc.schoolId.toString(),
-      appliedBySuperAdminId: newConcessionDoc.appliedBySuperAdminId.toString(),
+      appliedByMasterAdminId: newConcessionDoc.appliedByMasterAdminId.toString(),
       createdAt: newConcessionDoc.createdAt.toISOString(),
       updatedAt: newConcessionDoc.updatedAt.toISOString(),
       studentName: student.name, // Add for immediate display if needed
       schoolName: school.schoolName,
-      appliedBySuperAdminName: superAdmin.name,
+      appliedByMasterAdminName: masterAdmin.name,
     };
 
     return {
@@ -129,7 +129,7 @@ export async function getFeeConcessionsForSchool(schoolId: string, academicYear?
       {
         $lookup: {
           from: 'users',
-          localField: 'appliedBySuperAdminId',
+          localField: 'appliedByMasterAdminId',
           foreignField: '_id',
           as: 'adminInfo',
         },
@@ -138,10 +138,10 @@ export async function getFeeConcessionsForSchool(schoolId: string, academicYear?
       {
         $project: {
           _id: 1, studentId: 1, schoolId: 1, academicYear: 1, concessionType: 1, amount: 1, reason: 1,
-          appliedBySuperAdminId: 1, createdAt: 1, updatedAt: 1,
+          appliedByMasterAdminId: 1, createdAt: 1, updatedAt: 1,
           studentName: '$studentInfo.name',
           schoolName: '$schoolInfo.schoolName',
-          appliedBySuperAdminName: '$adminInfo.name',
+          appliedByMasterAdminName: '$adminInfo.name',
         },
       },
       { $sort: { createdAt: -1 } },
@@ -155,10 +155,10 @@ export async function getFeeConcessionsForSchool(schoolId: string, academicYear?
       concessionType: doc.concessionType,
       amount: doc.amount,
       reason: doc.reason,
-      appliedBySuperAdminId: (doc.appliedBySuperAdminId as ObjectId).toString(),
+      appliedByMasterAdminId: (doc.appliedByMasterAdminId as ObjectId).toString(),
       studentName: doc.studentName || 'N/A',
       schoolName: doc.schoolName || 'N/A',
-      appliedBySuperAdminName: doc.appliedBySuperAdminName || 'N/A',
+      appliedByMasterAdminName: doc.appliedByMasterAdminName || 'N/A',
       createdAt: new Date(doc.createdAt).toISOString(),
       updatedAt: new Date(doc.updatedAt).toISOString(),
     }));
@@ -196,10 +196,10 @@ export async function getFeeConcessionsForStudent(studentId: string, schoolId: s
       concessionType: doc.concessionType as FeeConcessionType,
       amount: doc.amount,
       reason: doc.reason,
-      appliedBySuperAdminId: (doc.appliedBySuperAdminId as ObjectId).toString(),
+      appliedByMasterAdminId: (doc.appliedByMasterAdminId as ObjectId).toString(),
       createdAt: new Date(doc.createdAt).toISOString(),
       updatedAt: new Date(doc.updatedAt).toISOString(),
-      // studentName, schoolName, appliedBySuperAdminName could be looked up if needed here too
+      // studentName, schoolName, appliedByMasterAdminName could be looked up if needed here too
     }));
 
     return { success: true, concessions: clientConcessions };
@@ -227,7 +227,7 @@ export async function revokeFeeConcession(concessionId: string): Promise<RevokeF
       return { success: false, message: 'Concession not found or already revoked.', error: 'Concession not found.' };
     }
 
-    revalidatePath('/dashboard/super-admin/concessions');
+    revalidatePath('/dashboard/master-admin/concessions');
     // Potentially revalidate student/admin fee pages
     revalidatePath(`/dashboard/student/fees`); 
     revalidatePath(`/dashboard/admin/fees`);

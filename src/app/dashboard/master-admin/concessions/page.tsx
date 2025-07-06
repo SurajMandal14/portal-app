@@ -260,10 +260,10 @@ export default function MasterAdminConcessionPage() {
                   <TableCell>{con.studentName || 'N/A'}</TableCell><TableCell>{con.schoolName || 'N/A'}</TableCell><TableCell>{con.academicYear}</TableCell><TableCell>{con.concessionType}</TableCell>
                   <TableCell className="text-right"><span className="font-sans">₹</span>{con.amount.toLocaleString()}</TableCell>
                   <TableCell className="max-w-xs truncate" title={con.reason}>{con.reason}</TableCell>
-                  <TableCell>{con.appliedBySuperAdminName || 'N/A'}</TableCell><TableCell>{format(new Date(con.createdAt), "PP")}</TableCell>
+                  <TableCell>{con.appliedByMasterAdminName || 'N/A'}</TableCell><TableCell>{format(new Date(con.createdAt), "PP")}</TableCell>
                   <TableCell>
                     <AlertDialog open={concessionToRevoke?._id === con._id} onOpenChange={(open) => !open && setConcessionToRevoke(null)}>
-                      <Button variant="ghost" size="icon" onClick={() => setConcessionToRevoke(con)} disabled={isRevoking} className="text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setConcessionToRevoke(con)} disabled={isRevoking} className="text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button>
                       {concessionToRevoke && concessionToRevoke._id === con._id && (
                         <AlertDialogContent>
                           <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will revoke the concession of <span className="font-sans">₹</span>{concessionToRevoke.amount} for {concessionToRevoke.studentName}. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>

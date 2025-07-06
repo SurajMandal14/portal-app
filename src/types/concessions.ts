@@ -22,7 +22,7 @@ export const feeConcessionFormSchema = z.object({
   concessionType: z.enum(CONCESSION_TYPES, { required_error: "Concession type is required." }),
   amount: z.coerce.number().positive("Concession amount must be a positive number."),
   reason: z.string().min(5, "Reason must be at least 5 characters long.").max(500, "Reason too long."),
-  // appliedBySuperAdminId will be added in the server action
+  // appliedByMasterAdminId will be added in the server action
 });
 export type FeeConcessionFormData = z.infer<typeof feeConcessionFormSchema>;
 
@@ -37,8 +37,8 @@ export interface FeeConcession {
   concessionType: FeeConcessionType;
   amount: number;
   reason: string;
-  appliedBySuperAdminId: string; // User._id of the super admin
-  appliedBySuperAdminName?: string; // For display
+  appliedByMasterAdminId: string; // User._id of the master admin
+  appliedByMasterAdminName?: string; // For display
   createdAt: string; // ISOString
   updatedAt: string; // ISOString
 }
