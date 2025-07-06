@@ -133,7 +133,7 @@ export default function MasterAdminSettingsPage() {
                                 <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                                     <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value="monthly">Monthly Calendar View</SelectItem>
+                                        <SelectItem value="monthly">Monthly Summary Input</SelectItem>
                                         <SelectItem value="daily" disabled>Daily List (Coming Soon)</SelectItem>
                                         <SelectItem value="qr" disabled>QR Code Based (Coming Soon)</SelectItem>
                                     </SelectContent>

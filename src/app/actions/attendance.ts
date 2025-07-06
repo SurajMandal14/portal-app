@@ -3,11 +3,9 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { MonthlyAttendanceRecord, MonthlyAttendanceSubmissionPayload, MonthlyAttendanceEntry } from '@/types/attendance';
+import type { MonthlyAttendanceRecord, MonthlyAttendanceSubmissionPayload, DailyAttendanceOverview, AttendanceRecord } from '@/types/attendance';
 import { ObjectId } from 'mongodb';
 import { revalidatePath } from 'next/cache';
-import type { User } from '@/types/user';
-
 
 // New schema for submitting monthly attendance
 const monthlyAttendanceSubmissionPayloadSchema = z.object({
@@ -136,7 +134,7 @@ export async function getMonthlyAttendanceForClass(
       schoolId: record.schoolId.toString(),
       classId: record.classId.toString(),
       studentId: record.studentId.toString(),
-      markedByTeacherId: record.markedByTeacherId.toString(),
+      markedByTeacherId: record.markedByTeacherId?.toString(),
     }));
 
     return { success: true, records: recordsWithStrId };

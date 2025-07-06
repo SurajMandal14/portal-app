@@ -29,6 +29,14 @@ export const REPORT_CARD_TEMPLATES = {
 
 export type ReportCardTemplateKey = keyof typeof REPORT_CARD_TEMPLATES;
 
+export const ATTENDANCE_TYPES = {
+  monthly: 'Monthly Summary Input',
+  daily: 'Daily List (Coming Soon)',
+  qr: 'QR Code Based (Coming Soon)',
+} as const;
+export type AttendanceTypeKey = keyof typeof ATTENDANCE_TYPES;
+
+
 // Main School interface
 export interface School {
   _id: string; // MongoDB ObjectId as string
@@ -37,6 +45,7 @@ export interface School {
   tuitionFees: ClassTuitionFeeConfig[];
   busFeeStructures?: BusFeeLocationCategory[]; // Added new field
   reportCardTemplate?: ReportCardTemplateKey;
+  attendanceType?: AttendanceTypeKey; // New field for attendance type
   allowStudentsToViewPublishedReports?: boolean; // New field
   // Operational Settings
   activeAcademicYear?: string;
@@ -46,7 +55,6 @@ export interface School {
   };
   createdAt: Date | string; // Allow string for client-side
   updatedAt: Date | string; // Allow string for client-side
-  academicYear?: string; // Added from student data context
 }
 
 // Zod schema for term fees
@@ -77,6 +85,9 @@ export const schoolFormSchema = z.object({
   reportCardTemplate: z.custom<ReportCardTemplateKey>((val) => {
     return typeof val === 'string' && Object.keys(REPORT_CARD_TEMPLATES).includes(val);
   }, { message: "Invalid report card template selected." }).optional().default('none'),
+  attendanceType: z.custom<AttendanceTypeKey>((val) => {
+    return typeof val === 'string' && Object.keys(ATTENDANCE_TYPES).includes(val);
+  }, { message: "Invalid attendance type selected."}).optional().default('monthly'),
   allowStudentsToViewPublishedReports: z.boolean().default(false).optional(),
 });
 
@@ -85,6 +96,9 @@ export type SchoolFormData = z.infer<typeof schoolFormSchema>;
 // Zod schema for operational settings form
 export const operationalSettingsSchema = z.object({
   activeAcademicYear: z.string().regex(/^\d{4}-\d{4}$/, "Invalid academic year format (e.g., 2024-2025)").optional(),
+  attendanceType: z.custom<AttendanceTypeKey>((val) => {
+    return typeof val === 'string' && Object.keys(ATTENDANCE_TYPES).includes(val);
+  }, { message: "Invalid attendance type selected."}).optional().default('monthly'),
   marksEntryLocks: z.object({
     FA1: z.boolean().default(false),
     FA2: z.boolean().default(false),

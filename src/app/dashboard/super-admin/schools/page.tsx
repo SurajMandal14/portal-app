@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2, Bus, Eye } from "lucide-react";
+import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2, Bus, Eye, CheckSquare } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import {
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchool, getSchools, updateSchool, deleteSchool } from "@/app/actions/schools";
-import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey, type TermFee } from '@/types/school'; 
+import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey, type TermFee, ATTENDANCE_TYPES } from '@/types/school'; 
 import type { School as SchoolType } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
 
@@ -58,6 +58,7 @@ export default function SchoolManagementPage() {
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
       allowStudentsToViewPublishedReports: false,
+      attendanceType: 'monthly',
     },
   });
 
@@ -95,6 +96,7 @@ export default function SchoolManagementPage() {
     schoolLogoUrl: school.schoolLogoUrl || "", 
     reportCardTemplate: school.reportCardTemplate || 'none',
     allowStudentsToViewPublishedReports: school.allowStudentsToViewPublishedReports || false,
+    attendanceType: school.attendanceType || 'monthly',
     tuitionFees: school.tuitionFees?.length > 0 ? school.tuitionFees.map(tf => ({ 
       className: tf.className,
       terms: tf.terms && tf.terms.length === 3 ? tf.terms.map(t => ({term: t.term, amount: t.amount || 0})) : [...DEFAULT_TERMS],
@@ -121,6 +123,7 @@ export default function SchoolManagementPage() {
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
       allowStudentsToViewPublishedReports: false,
+      attendanceType: 'monthly',
     });
   };
 
@@ -249,6 +252,32 @@ export default function SchoolManagementPage() {
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name="attendanceType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center"><CheckSquare className="mr-2 h-4 w-4 text-muted-foreground" /> Attendance Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || 'monthly'} disabled={isSubmitting}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select attendance type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Object.entries(ATTENDANCE_TYPES).map(([key, label]) => (
+                            <SelectItem key={key} value={key} disabled={key !== 'monthly'}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                  <FormField
                   control={form.control}
                   name="allowStudentsToViewPublishedReports"
@@ -487,6 +516,7 @@ export default function SchoolManagementPage() {
                     {school.tuitionFees?.length || 0} tuition config(s), {school.busFeeStructures?.length || 0} bus fee config(s)
                   </p>
                   <p className="text-xs text-muted-foreground">Report Card: <span className="font-medium">{REPORT_CARD_TEMPLATES[school.reportCardTemplate || 'none']}</span></p>
+                  <p className="text-xs text-muted-foreground">Attendance: <span className="font-medium">{ATTENDANCE_TYPES[school.attendanceType || 'monthly']}</span></p>
                   <p className="text-xs text-muted-foreground">Student Report View: 
                     <span className={`font-medium ${school.allowStudentsToViewPublishedReports ? 'text-green-600' : 'text-red-600'}`}>
                       {school.allowStudentsToViewPublishedReports ? ' Enabled' : ' Disabled'}
