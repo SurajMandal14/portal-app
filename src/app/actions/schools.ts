@@ -30,7 +30,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
 
     const newSchoolData: Omit<School, '_id' | 'createdAt' | 'updatedAt'> = {
       schoolName,
-      tuitionFees: tuitionFees.map(tf => ({
+      tuitionFees: (tuitionFees || []).map(tf => ({
         className: tf.className,
         terms: tf.terms.map(termFee => ({
           term: termFee.term,
@@ -112,7 +112,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
 
     const updateData: Partial<Omit<School, '_id' | 'createdAt'>> = {
       schoolName,
-      tuitionFees: tuitionFees.map(tf => ({
+      tuitionFees: (tuitionFees || []).map(tf => ({
         className: tf.className,
         terms: tf.terms.map(termFee => ({
           term: termFee.term,
