@@ -39,7 +39,6 @@ export interface School {
   reportCardTemplate?: ReportCardTemplateKey;
   allowStudentsToViewPublishedReports?: boolean; // New field
   // Operational Settings
-  attendanceType?: 'daily' | 'monthly' | 'qr';
   activeAcademicYear?: string;
   marksEntryLocks?: {
     FA1: boolean; FA2: boolean; FA3: boolean; FA4: boolean;
@@ -79,14 +78,12 @@ export const schoolFormSchema = z.object({
     return typeof val === 'string' && Object.keys(REPORT_CARD_TEMPLATES).includes(val);
   }, { message: "Invalid report card template selected." }).optional().default('none'),
   allowStudentsToViewPublishedReports: z.boolean().default(false).optional(),
-  attendanceType: z.enum(['daily', 'monthly', 'qr']).default('monthly').optional(),
 });
 
 export type SchoolFormData = z.infer<typeof schoolFormSchema>;
 
 // Zod schema for operational settings form
 export const operationalSettingsSchema = z.object({
-  attendanceType: z.enum(['daily', 'monthly', 'qr']).default('monthly'),
   activeAcademicYear: z.string().regex(/^\d{4}-\d{4}$/, "Invalid academic year format (e.g., 2024-2025)").optional(),
   marksEntryLocks: z.object({
     FA1: z.boolean().default(false),

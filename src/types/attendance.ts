@@ -2,45 +2,40 @@
 import type { ObjectId } from 'mongodb';
 import type { AuthUser as CentralAuthUser } from './user'; // Import central AuthUser
 
-export type AttendanceStatus = 'present' | 'absent' | 'late';
-
-export interface AttendanceEntry {
+// New Monthly Attendance Types
+export interface MonthlyAttendanceEntry {
   studentId: string;
   studentName: string;
-  status: AttendanceStatus;
+  daysPresent: number | null;
 }
 
-export interface AttendanceSubmissionPayload {
-  classId: string; // Actual Class _id
-  className: string; // Human-readable class name
+export interface MonthlyAttendanceSubmissionPayload {
+  classId: string;
   schoolId: string;
-  date: Date;
-  entries: AttendanceEntry[];
+  month: number;
+  year: number;
+  totalWorkingDays: number;
+  entries: MonthlyAttendanceEntry[];
   markedByTeacherId: string;
 }
 
-export interface AttendanceRecord {
+export interface MonthlyAttendanceRecord {
   _id: ObjectId | string;
-  studentId: string; 
-  studentName: string;
-  classId: ObjectId | string; // Actual Class _id stored in DB
-  className: string; // Human-readable class name stored in DB
+  studentId: ObjectId | string;
+  studentName?: string;
+  classId: ObjectId | string;
+  className?: string; // For display on admin page
   schoolId: ObjectId | string;
-  date: Date;
-  status: AttendanceStatus;
-  markedByTeacherId: ObjectId | string;
-  markedByTeacherName?: string; 
-  createdAt: Date;
-  updatedAt: Date;
+  month: number; // 0-11
+  year: number;
+  daysPresent: number;
+  totalWorkingDays: number;
+  markedByTeacherId?: ObjectId | string;
+  markedByTeacherName?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-// Use the centrally defined AuthUser
+
+// This remains the same, used for session data
 export type AuthUser = CentralAuthUser;
-
-export interface DailyAttendanceOverview {
-  totalStudents: number;
-  present: number;
-  absent: number;
-  late: number;
-  percentage: number;
-}

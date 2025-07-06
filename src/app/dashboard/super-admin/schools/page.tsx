@@ -4,13 +4,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label"; // Added import for Label
-import { Switch } from "@/components/ui/switch"; // Added import for Switch
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2, Bus, Eye, EyeOff, CheckSquare } from "lucide-react";
+import { PlusCircle, School as SchoolIconUI, DollarSign, Loader2, Edit, XCircle, FileText, Image as ImageIcon, Trash2, Bus, Eye } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
-import * as z from "zod";
+import { useForm, useFieldArray } from "react-hook-form";
 import {
   Form,
   FormControl,
@@ -28,11 +27,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { createSchool, getSchools, updateSchool, deleteSchool } from "@/app/actions/schools";
-import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey, type TermFee, type BusFeeLocationCategory } from '@/types/school'; 
+import { schoolFormSchema, type SchoolFormData, REPORT_CARD_TEMPLATES, type ReportCardTemplateKey, type TermFee } from '@/types/school'; 
 import type { School as SchoolType } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
 
@@ -60,7 +58,6 @@ export default function SchoolManagementPage() {
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
       allowStudentsToViewPublishedReports: false,
-      attendanceType: 'monthly', // Default new setting
     },
   });
 
@@ -98,7 +95,6 @@ export default function SchoolManagementPage() {
     schoolLogoUrl: school.schoolLogoUrl || "", 
     reportCardTemplate: school.reportCardTemplate || 'none',
     allowStudentsToViewPublishedReports: school.allowStudentsToViewPublishedReports || false,
-    attendanceType: school.attendanceType || 'monthly',
     tuitionFees: school.tuitionFees?.length > 0 ? school.tuitionFees.map(tf => ({ 
       className: tf.className,
       terms: tf.terms && tf.terms.length === 3 ? tf.terms.map(t => ({term: t.term, amount: t.amount || 0})) : [...DEFAULT_TERMS],
@@ -125,7 +121,6 @@ export default function SchoolManagementPage() {
       schoolLogoUrl: "",
       reportCardTemplate: 'none',
       allowStudentsToViewPublishedReports: false,
-      attendanceType: 'monthly',
     });
   };
 
@@ -230,25 +225,6 @@ export default function SchoolManagementPage() {
                 )}
               />
               
-              <FormField
-                control={form.control}
-                name="attendanceType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center"><CheckSquare className="mr-2 h-4 w-4 text-muted-foreground"/>Attendance Marking Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || 'monthly'} disabled={isSubmitting}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select attendance type" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="monthly">Monthly Calendar View</SelectItem>
-                        <SelectItem value="daily" disabled>Daily List (Coming Soon)</SelectItem>
-                        <SelectItem value="qr" disabled>QR Code Based (Coming Soon)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
                 <FormField
                   control={form.control}
                   name="reportCardTemplate"

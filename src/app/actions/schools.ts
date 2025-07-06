@@ -23,7 +23,7 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate, busFeeStructures, allowStudentsToViewPublishedReports, attendanceType } = validatedFields.data;
+    const { schoolName, tuitionFees, schoolLogoUrl, reportCardTemplate, busFeeStructures, allowStudentsToViewPublishedReports } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<Omit<School, '_id'>>('schools');
@@ -49,7 +49,6 @@ export async function createSchool(values: SchoolFormData): Promise<CreateSchool
       reportCardTemplate: reportCardTemplate || 'none',
       allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false,
       // Default operational settings
-      attendanceType: attendanceType || 'monthly',
       activeAcademicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
       marksEntryLocks: { FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false },
     };
@@ -105,7 +104,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl, busFeeStructures, allowStudentsToViewPublishedReports, attendanceType } = validatedFields.data;
+    const { schoolName, tuitionFees, reportCardTemplate, schoolLogoUrl, busFeeStructures, allowStudentsToViewPublishedReports } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<School>('schools');
@@ -129,7 +128,6 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
       })) : [],
       reportCardTemplate: reportCardTemplate || 'none',
       allowStudentsToViewPublishedReports: allowStudentsToViewPublishedReports || false,
-      attendanceType: attendanceType || 'monthly',
       updatedAt: new Date(),
     };
     
@@ -158,7 +156,7 @@ export async function updateSchool(schoolId: string, values: SchoolFormData): Pr
         _id: updatedSchoolDoc._id.toString(),
         createdAt: new Date(updatedSchoolDoc.createdAt).toISOString(), 
         updatedAt: new Date(updatedSchoolDoc.updatedAt).toISOString(),
-        allowStudentsToViewPublishedReports: updatedSchoolDoc.allowStudentsToViewPublishedReports, // Ensure it's included
+        allowStudentsToViewPublishedReports: updatedSchoolDoc.allowStudentsToViewPublishedReports,
      };
 
     return {
@@ -197,7 +195,6 @@ export async function getSchools(): Promise<GetSchoolsResult> {
       })),
       reportCardTemplate: doc.reportCardTemplate,
       allowStudentsToViewPublishedReports: doc.allowStudentsToViewPublishedReports === undefined ? false : doc.allowStudentsToViewPublishedReports,
-      attendanceType: doc.attendanceType || 'monthly',
       activeAcademicYear: doc.activeAcademicYear,
       marksEntryLocks: doc.marksEntryLocks || { FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false },
       createdAt: new Date(doc.createdAt).toISOString(),
@@ -249,7 +246,6 @@ export async function getSchoolById(schoolId: string): Promise<GetSchoolByIdResu
       })),
       reportCardTemplate: schoolDoc.reportCardTemplate,
       allowStudentsToViewPublishedReports: schoolDoc.allowStudentsToViewPublishedReports === undefined ? false : schoolDoc.allowStudentsToViewPublishedReports, // Default to false if missing
-      attendanceType: schoolDoc.attendanceType || 'monthly',
       activeAcademicYear: schoolDoc.activeAcademicYear,
       marksEntryLocks: schoolDoc.marksEntryLocks || { FA1: false, FA2: false, FA3: false, FA4: false, SA1: false, SA2: false },
       createdAt: new Date(schoolDoc.createdAt).toISOString(),
@@ -311,7 +307,6 @@ export async function setSchoolReportVisibility(schoolId: string, allowVisibilit
     }
     
     revalidatePath(`/dashboard/admin/settings`); // Revalidate admin settings page
-    // Potentially revalidate student results pages indirectly if they were cached
     revalidatePath('/dashboard/student/results', 'layout'); 
 
 
@@ -349,7 +344,6 @@ export async function deleteSchool(schoolId: string): Promise<DeleteSchoolResult
     const schoolObjectId = new ObjectId(schoolId);
     const { db } = await connectToDatabase();
     
-    // Check for dependencies first
     const usersCount = await db.collection('users').countDocuments({ schoolId: schoolObjectId });
     if (usersCount > 0) {
       return { success: false, message: 'Cannot delete school. Please remove all assigned users (Admins, Teachers, Students) first.' };
@@ -391,13 +385,12 @@ export async function updateSchoolOperationalSettings(schoolId: string, values: 
       return { success: false, message: 'Validation failed', error: errors };
     }
 
-    const { attendanceType, activeAcademicYear, marksEntryLocks } = validatedFields.data;
+    const { activeAcademicYear, marksEntryLocks } = validatedFields.data;
 
     const { db } = await connectToDatabase();
     const schoolsCollection = db.collection<School>('schools');
 
     const updateData = {
-      attendanceType,
       activeAcademicYear,
       marksEntryLocks,
       updatedAt: new Date(),

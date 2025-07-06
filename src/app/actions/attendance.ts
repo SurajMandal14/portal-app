@@ -3,288 +3,238 @@
 
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/mongodb';
-import type { AttendanceRecord, AttendanceSubmissionPayload, AttendanceStatus, DailyAttendanceOverview } from '@/types/attendance';
+import type { MonthlyAttendanceRecord, MonthlyAttendanceSubmissionPayload, MonthlyAttendanceEntry } from '@/types/attendance';
 import { ObjectId } from 'mongodb';
 import { revalidatePath } from 'next/cache';
 import type { User } from '@/types/user';
 
-const attendanceEntrySchema = z.object({
-  studentId: z.string().min(1),
-  studentName: z.string().min(1),
-  status: z.enum(['present', 'absent', 'late']),
-});
 
-// Updated schema to reflect classId is the actual ID and className is the name
-const attendanceSubmissionPayloadSchema = z.object({
-  classId: z.string().min(1, "Class ID is required."), // This is the actual Class _id
-  className: z.string().min(1, "Class name is required."),
+// New schema for submitting monthly attendance
+const monthlyAttendanceSubmissionPayloadSchema = z.object({
+  classId: z.string().min(1, "Class ID is required."),
   schoolId: z.string().min(1, "School ID is required."),
-  date: z.date(),
-  entries: z.array(attendanceEntrySchema).min(1, "At least one student entry is required."),
+  month: z.number().min(0).max(11), // 0 for Jan, 11 for Dec
+  year: z.number().min(2000),
+  totalWorkingDays: z.coerce.number().min(0).max(31, "Working days cannot exceed 31."),
+  entries: z.array(z.object({
+    studentId: z.string().min(1),
+    studentName: z.string().min(1),
+    daysPresent: z.coerce.number().min(0, "Days present must be a positive number.").nullable(),
+  })).min(1, "At least one student entry is required."),
   markedByTeacherId: z.string().min(1),
 });
 
-export interface SubmitAttendanceResult {
+export interface SubmitMonthlyAttendanceResult {
   success: boolean;
   message: string;
   error?: string;
   count?: number;
 }
 
-export async function submitAttendance(payload: AttendanceSubmissionPayload): Promise<SubmitAttendanceResult> {
+export async function submitMonthlyAttendance(payload: MonthlyAttendanceSubmissionPayload): Promise<SubmitMonthlyAttendanceResult> {
   try {
-    const validatedPayload = attendanceSubmissionPayloadSchema.safeParse(payload);
+    const validatedPayload = monthlyAttendanceSubmissionPayloadSchema.safeParse(payload);
     if (!validatedPayload.success) {
       const errors = validatedPayload.error.errors.map(e => e.message).join(' ');
       return { success: false, message: 'Validation failed', error: errors || 'Invalid payload!' };
     }
 
-    const { classId, className, schoolId, date, entries, markedByTeacherId } = validatedPayload.data;
+    const { classId, schoolId, month, year, totalWorkingDays, entries, markedByTeacherId } = validatedPayload.data;
 
     if (!ObjectId.isValid(classId) || !ObjectId.isValid(schoolId) || !ObjectId.isValid(markedByTeacherId)) {
-        return { success: false, message: 'Invalid ID format for class, school, or teacher.', error: 'Invalid ID format.' };
+      return { success: false, message: 'Invalid ID format for class, school, or teacher.', error: 'Invalid ID format.' };
     }
 
     const { db } = await connectToDatabase();
-    const attendanceCollection = db.collection<Omit<AttendanceRecord, '_id'>>('attendances');
-    const classObjectId = new ObjectId(classId);
-    const schoolObjectId = new ObjectId(schoolId);
-    const teacherObjectId = new ObjectId(markedByTeacherId);
-    const normalizedDate = new Date(date.setHours(0, 0, 0, 0)); // Normalize date to midnight UTC
+    const collection = db.collection<Omit<MonthlyAttendanceRecord, '_id'>>('monthly_attendances');
 
-    const recordsToInsert: Omit<AttendanceRecord, '_id'>[] = entries.map(entry => ({
-      studentId: entry.studentId, // Assuming studentId from payload is already string _id
-      studentName: entry.studentName,
-      classId: classObjectId, // Store ObjectId of class
-      className, // Store human-readable name
-      schoolId: schoolObjectId,
-      date: normalizedDate,
-      status: entry.status as AttendanceStatus,
-      markedByTeacherId: teacherObjectId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
+    const bulkOps = entries.map(entry => {
+      if (entry.daysPresent === null || entry.daysPresent > totalWorkingDays) {
+        throw new Error(`Invalid days present for ${entry.studentName}. Value must be between 0 and ${totalWorkingDays}.`);
+      }
 
-    // Delete existing records for this classId (actual ID), schoolId, and date
-    await attendanceCollection.deleteMany({
-      classId: classObjectId,
-      schoolId: schoolObjectId,
-      date: normalizedDate,
+      return {
+        updateOne: {
+          filter: {
+            studentId: new ObjectId(entry.studentId),
+            classId: new ObjectId(classId),
+            schoolId: new ObjectId(schoolId),
+            month,
+            year,
+          },
+          update: {
+            $set: {
+              daysPresent: entry.daysPresent,
+              totalWorkingDays: totalWorkingDays,
+              markedByTeacherId: new ObjectId(markedByTeacherId),
+              studentName: entry.studentName,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: {
+              createdAt: new Date(),
+            }
+          },
+          upsert: true,
+        },
+      };
     });
 
-    const result = await attendanceCollection.insertMany(recordsToInsert);
-
-    if (result.insertedCount === 0 && recordsToInsert.length > 0) {
-      return { success: false, message: 'Failed to save attendance records.', error: 'Database insertion failed.' };
+    if (bulkOps.length === 0) {
+      return { success: true, message: "No attendance data provided to submit.", count: 0 };
     }
+
+    const result = await collection.bulkWrite(bulkOps as any);
+
+    const processedCount = result.upsertedCount + result.modifiedCount;
     
     revalidatePath('/dashboard/teacher/attendance');
     revalidatePath('/dashboard/admin/attendance');
     revalidatePath('/dashboard/student/attendance');
 
-
     return {
       success: true,
-      message: `Successfully submitted attendance for ${result.insertedCount} students.`,
-      count: result.insertedCount,
+      message: `Successfully saved monthly attendance for ${processedCount} students.`,
+      count: processedCount,
     };
 
   } catch (error) {
-    console.error('Submit attendance server action error:', error);
+    console.error('Submit monthly attendance server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, message: 'An unexpected error occurred during attendance submission.', error: errorMessage };
   }
 }
 
-export interface GetAttendanceRecordsResult {
+export interface GetMonthlyAttendanceResult {
   success: boolean;
-  records?: AttendanceRecord[];
+  records?: MonthlyAttendanceRecord[];
   error?: string;
   message?: string;
 }
 
-export async function getDailyAttendanceForSchool(schoolId: string, date: Date): Promise<GetAttendanceRecordsResult> {
+export async function getMonthlyAttendanceForClass(
+  schoolId: string,
+  classId: string,
+  month: number,
+  year: number
+): Promise<GetMonthlyAttendanceResult> {
+  try {
+    if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(classId)) {
+      return { success: false, message: 'Invalid ID format.', error: 'Invalid ID format.' };
+    }
+
+    const { db } = await connectToDatabase();
+    const records = await db.collection<MonthlyAttendanceRecord>('monthly_attendances').find({
+      schoolId: new ObjectId(schoolId) as any,
+      classId: new ObjectId(classId) as any,
+      month,
+      year,
+    }).toArray();
+    
+    const recordsWithStrId = records.map(record => ({
+      ...record,
+      _id: record._id.toString(),
+      schoolId: record.schoolId.toString(),
+      classId: record.classId.toString(),
+      studentId: record.studentId.toString(),
+      markedByTeacherId: record.markedByTeacherId.toString(),
+    }));
+
+    return { success: true, records: recordsWithStrId };
+  } catch (error) {
+    console.error('Get monthly attendance server action error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: errorMessage, message: 'Failed to fetch attendance records.' };
+  }
+}
+
+export async function getMonthlyAttendanceForAdmin(
+  schoolId: string,
+  month: number,
+  year: number
+): Promise<GetMonthlyAttendanceResult> {
   try {
     if (!ObjectId.isValid(schoolId)) {
         return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.'};
     }
 
     const { db } = await connectToDatabase();
-    
-    const targetDate = new Date(date);
-    targetDate.setUTCHours(0,0,0,0);
-
-    const startDate = new Date(targetDate);
-    const endDate = new Date(targetDate);
-    endDate.setDate(startDate.getDate() + 1);
-    
-    const recordsWithTeacherName = await db.collection('attendances').aggregate([
-      {
-        $match: {
-          schoolId: new ObjectId(schoolId) as any,
-          date: {
-            $gte: startDate,
-            $lt: endDate,
-          },
-        }
-      },
+    const recordsWithDetails = await db.collection('monthly_attendances').aggregate([
+      { $match: { schoolId: new ObjectId(schoolId), month, year } },
       {
         $lookup: {
-          from: 'users', 
-          localField: 'markedByTeacherId', 
-          foreignField: '_id', 
-          as: 'teacherInfo' 
+          from: 'users',
+          localField: 'markedByTeacherId',
+          foreignField: '_id',
+          as: 'teacherInfo'
         }
       },
+      { $unwind: { path: '$teacherInfo', preserveNullAndEmptyArrays: true } },
       {
-        $unwind: { 
-          path: '$teacherInfo',
-          preserveNullAndEmptyArrays: true 
+        $lookup: {
+          from: 'school_classes',
+          localField: 'classId',
+          foreignField: '_id',
+          as: 'classInfo'
         }
       },
+      { $unwind: { path: '$classInfo', preserveNullAndEmptyArrays: true } },
       {
-        $project: { 
-          _id: 1,
-          studentId: 1,
-          studentName: 1,
-          classId: 1, // This is ObjectId
-          className: 1, // This is the name string
-          schoolId: 1,
-          date: 1,
-          status: 1,
-          markedByTeacherId: 1,
-          markedByTeacherName: '$teacherInfo.name', 
-          createdAt: 1,
-          updatedAt: 1,
+        $project: {
+          _id: 1, studentId: 1, studentName: 1, classId: 1, schoolId: 1,
+          month: 1, year: 1, daysPresent: 1, totalWorkingDays: 1,
+          markedByTeacherName: '$teacherInfo.name',
+          className: { $concat: ["$classInfo.name", " - ", "$classInfo.section"] },
         }
       },
       { $sort: { className: 1, studentName: 1 } }
     ]).toArray();
     
-    const recordsWithStrId = recordsWithTeacherName.map(record => ({
-      ...record,
-      _id: (record._id as ObjectId).toString(),
-      schoolId: (record.schoolId as ObjectId).toString(),
-      classId: (record.classId as ObjectId).toString(), // Convert classId to string
-      markedByTeacherId: (record.markedByTeacherId as ObjectId).toString(),
-      markedByTeacherName: record.markedByTeacherName || 'N/A', 
-    })) as AttendanceRecord[];
+    const clientRecords: MonthlyAttendanceRecord[] = recordsWithDetails.map(doc => ({
+      _id: (doc._id as ObjectId).toString(),
+      studentId: (doc.studentId as ObjectId).toString(),
+      schoolId: (doc.schoolId as ObjectId).toString(),
+      classId: (doc.classId as ObjectId).toString(),
+      studentName: doc.studentName || 'N/A',
+      className: doc.className || 'N/A',
+      month: doc.month,
+      year: doc.year,
+      daysPresent: doc.daysPresent,
+      totalWorkingDays: doc.totalWorkingDays,
+      markedByTeacherName: doc.markedByTeacherName || 'N/A',
+    }));
 
-    return { success: true, records: recordsWithStrId };
+    return { success: true, records: clientRecords };
   } catch (error) {
-    console.error('Get daily attendance server action error:', error);
+    console.error('Get monthly admin attendance error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
-    return { success: false, error: errorMessage, message: 'Failed to fetch attendance records.' };
+    return { success: false, error: errorMessage, message: 'Failed to fetch monthly attendance.' };
   }
 }
 
-export async function getStudentAttendanceRecords(studentId: string, schoolId: string): Promise<GetAttendanceRecordsResult> {
+
+export async function getStudentMonthlyAttendance(studentId: string): Promise<GetMonthlyAttendanceResult> {
   try {
-    if (!ObjectId.isValid(schoolId) || !ObjectId.isValid(studentId)) {
-        return { success: false, message: 'Invalid Student ID or School ID format.', error: 'Invalid ID format.'};
+    if (!ObjectId.isValid(studentId)) {
+      return { success: false, message: 'Invalid Student ID format.', error: 'Invalid ID format.' };
     }
 
     const { db } = await connectToDatabase();
-    const attendanceCollection = db.collection<AttendanceRecord>('attendances');
-    
-    const records = await attendanceCollection.find({
-      studentId: studentId, 
-      schoolId: new ObjectId(schoolId) as any,
-    }).sort({ date: -1 }).toArray();
+    const records = await db.collection<MonthlyAttendanceRecord>('monthly_attendances').find({
+      studentId: new ObjectId(studentId) as any,
+    }).sort({ year: -1, month: -1 }).toArray();
     
     const recordsWithStrId = records.map(record => ({
       ...record,
       _id: record._id.toString(),
       schoolId: record.schoolId.toString(),
-      classId: record.classId.toString(), // Convert classId to string
-      markedByTeacherId: record.markedByTeacherId.toString(),
+      classId: record.classId.toString(),
+      studentId: record.studentId.toString(),
     }));
 
     return { success: true, records: recordsWithStrId };
   } catch (error) {
-    console.error('Get student attendance records server action error:', error);
+    console.error('Get student monthly attendance error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return { success: false, error: errorMessage, message: 'Failed to fetch student attendance records.' };
   }
 }
-
-
-export interface GetDailyAttendanceOverviewResult {
-    success: boolean;
-    summary?: DailyAttendanceOverview;
-    error?: string;
-    message?: string;
-}
-
-export async function getDailyAttendanceOverviewForSchool(schoolId: string, date: Date): Promise<GetDailyAttendanceOverviewResult> {
-    try {
-        if (!ObjectId.isValid(schoolId)) {
-            return { success: false, message: 'Invalid School ID format.', error: 'Invalid School ID.' };
-        }
-
-        const { db } = await connectToDatabase();
-        const usersCollection = db.collection<User>('users');
-        const attendanceCollection = db.collection<AttendanceRecord>('attendances');
-
-        const totalStudents = await usersCollection.countDocuments({
-            schoolId: new ObjectId(schoolId) as any,
-            role: 'student'
-        });
-
-        if (totalStudents === 0) {
-            return { success: true, summary: { totalStudents: 0, present: 0, absent: 0, late: 0, percentage: 0 } };
-        }
-        
-        const targetDate = new Date(date);
-        targetDate.setUTCHours(0,0,0,0);
-        const startDate = new Date(targetDate);
-        const endDate = new Date(targetDate);
-        endDate.setDate(startDate.getDate() + 1);
-
-        const attendanceRecords = await attendanceCollection.find({
-            schoolId: new ObjectId(schoolId) as any,
-            date: { $gte: startDate, $lt: endDate },
-        }).toArray();
-
-        let present = 0;
-        let late = 0;
-        
-
-        attendanceRecords.forEach(record => {
-            if (record.status === 'present') {
-                present++;
-                
-            } else if (record.status === 'late') {
-                late++;
-                
-            }
-        });
-        
-        const schoolStudents = await usersCollection.find({ schoolId: new ObjectId(schoolId) as any, role: 'student' }).project({ _id: 1 }).toArray();
-        const totalStudentCountForSchool = schoolStudents.length;
-
-        const markedPresentOrLate = present + late;
-        
-        const calculatedAbsent = totalStudentCountForSchool - markedPresentOrLate;
-        const absent = calculatedAbsent < 0 ? 0 : calculatedAbsent; 
-
-        const percentage = totalStudentCountForSchool > 0 ? Math.round(((present + late) / totalStudentCountForSchool) * 100) : 0;
-
-        return { 
-            success: true, 
-            summary: { 
-                totalStudents: totalStudentCountForSchool, 
-                present, 
-                absent, 
-                late, 
-                percentage 
-            } 
-        };
-
-    } catch (error) {
-        console.error('Get daily attendance overview server action error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
-        return { success: false, error: errorMessage, message: 'Failed to fetch daily attendance overview.' };
-    }
-}
-
