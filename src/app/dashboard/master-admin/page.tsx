@@ -1,9 +1,10 @@
+
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, Settings, BarChart3, Loader2, TicketPercent, GraduationCap, School, BookCopy, CalendarClock, Lock, UserCog } from "lucide-react";
+import { Users, Settings, BarChart3, Loader2, TicketPercent, GraduationCap, School, BookCopy, CalendarClock, Lock, UserCog, CheckSquare } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { AuthUser } from "@/types/user";
 
@@ -96,6 +97,19 @@ export default function MasterAdminDashboardPage() {
             <CardDescription>Upload PDF links for subjects to be displayed in student dashboards.</CardDescription>
             <Button asChild className="mt-4" variant="outline">
               <Link href="/dashboard/master-admin/courses">Manage Courses</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <CheckSquare className="h-10 w-10 text-primary mb-2" />
+            <CardTitle>Attendance Dashboard</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription>View and monitor student attendance for your assigned school.</CardDescription>
+            <Button asChild className="mt-4" variant="outline">
+              <Link href="/dashboard/master-admin/attendance">View Attendance</Link>
             </Button>
           </CardContent>
         </Card>

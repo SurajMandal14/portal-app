@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,8 +12,7 @@ import { Input } from "@/components/ui/input";
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import type { School } from "@/types/school";
-import type { User as AppUser } from "@/types/user";
-import { getSchools } from "@/app/actions/schools";
+import type { User as AppUser, AuthUser } from "@/types/user";
 import { getClassesForSchoolAsOptions } from "@/app/actions/classes";
 import { getStudentsByClass } from "@/app/actions/schoolUsers";
 import { promoteStudents, discontinueStudents } from "@/app/actions/promoteStudents"; 
@@ -24,8 +24,7 @@ interface ClassOption {
 
 export default function MasterAdminPromoteStudentsPage() {
     const { toast } = useToast();
-    const [schools, setSchools] = useState<School[]>([]);
-    const [selectedSchoolId, setSelectedSchoolId] = useState("");
+    const [authUser, setAuthUser] = useState<AuthUser | null>(null);
     const [classesInSchool, setClassesInSchool] = useState<ClassOption[]>([]);
     
     const [fromAcademicYear, setFromAcademicYear] = useState(`${new Date().getFullYear() - 1}-${new Date().getFullYear()}`);
@@ -37,45 +36,44 @@ export default function MasterAdminPromoteStudentsPage() {
     const [students, setStudents] = useState<AppUser[]>([]);
     const [selectedStudents, setSelectedStudents] = useState<Record<string, boolean>>({});
 
-    const [isLoadingSchools, setIsLoadingSchools] = useState(true);
-    const [isLoadingClasses, setIsLoadingClasses] = useState(false);
+    const [isLoadingClasses, setIsLoadingClasses] = useState(true);
     const [isLoadingStudents, setIsLoadingStudents] = useState(false);
     const [isPromoting, setIsPromoting] = useState(false);
     const [isDiscontinuing, setIsDiscontinuing] = useState(false);
 
     useEffect(() => {
-        async function loadSchools() {
-            setIsLoadingSchools(true);
-            const result = await getSchools();
-            if(result.success && result.schools) {
-                setSchools(result.schools);
-            } else {
-                toast({ variant: 'destructive', title: 'Error', description: 'Could not load schools.' });
-            }
-            setIsLoadingSchools(false);
+        const storedUser = localStorage.getItem('loggedInUser');
+        if (storedUser && storedUser !== 'undefined') {
+            try {
+                const parsedUser: AuthUser = JSON.parse(storedUser);
+                if (parsedUser.role === 'masteradmin' && parsedUser.schoolId) {
+                    setAuthUser(parsedUser);
+                }
+            } catch (e) { console.error(e); }
         }
-        loadSchools();
-    }, [toast]);
+    }, []);
 
-    const handleSchoolChange = useCallback(async (schoolId: string) => {
-        setSelectedSchoolId(schoolId);
-        setFromClassId("");
-        setToClassId("");
-        setStudents([]);
-        setSelectedStudents({});
+    const fetchClasses = useCallback(async (schoolId: string) => {
         setIsLoadingClasses(true);
         const classOptions = await getClassesForSchoolAsOptions(schoolId);
         setClassesInSchool(classOptions);
         setIsLoadingClasses(false);
     }, []);
 
+    useEffect(() => {
+        if (authUser?.schoolId) {
+            fetchClasses(authUser.schoolId.toString());
+        }
+    }, [authUser, fetchClasses]);
+
+
     const handleLoadStudents = useCallback(async () => {
-        if (!fromClassId) {
+        if (!fromClassId || !authUser?.schoolId) {
             toast({ variant: 'warning', title: 'Selection Missing', description: 'Please select a "From" class.' });
             return;
         }
         setIsLoadingStudents(true);
-        const result = await getStudentsByClass(selectedSchoolId, fromClassId);
+        const result = await getStudentsByClass(authUser.schoolId.toString(), fromClassId);
         if (result.success && result.users) {
             const activeStudents = result.users.filter(u => u.status !== 'discontinued');
             setStudents(activeStudents);
@@ -89,7 +87,7 @@ export default function MasterAdminPromoteStudentsPage() {
             setStudents([]);
         }
         setIsLoadingStudents(false);
-    }, [fromClassId, selectedSchoolId, toast]);
+    }, [fromClassId, authUser, toast]);
 
     const { selectedIds, unselectedIds } = useMemo(() => {
         const studentIds = students.map(s => s._id!.toString());
@@ -100,7 +98,7 @@ export default function MasterAdminPromoteStudentsPage() {
 
 
     const handlePromote = async () => {
-        if (selectedIds.length === 0) {
+        if (selectedIds.length === 0 || !authUser?.schoolId) {
             toast({ variant: "info", title: "No students selected", description: "Please select students to promote."});
             return;
         }
@@ -110,7 +108,7 @@ export default function MasterAdminPromoteStudentsPage() {
         }
         setIsPromoting(true);
         const result = await promoteStudents({
-            schoolId: selectedSchoolId,
+            schoolId: authUser.schoolId.toString(),
             toClassId: toClassId,
             studentIds: selectedIds,
             academicYear: toAcademicYear,
@@ -118,7 +116,6 @@ export default function MasterAdminPromoteStudentsPage() {
 
         if (result.success) {
             toast({ title: "Promotion Successful", description: result.message });
-            // Refresh student list
             handleLoadStudents();
         } else {
             toast({ variant: "destructive", title: "Promotion Failed", description: result.error || result.message });
@@ -127,13 +124,13 @@ export default function MasterAdminPromoteStudentsPage() {
     };
 
     const handleDiscontinue = async () => {
-        if (unselectedIds.length === 0) {
+        if (unselectedIds.length === 0 || !authUser?.schoolId) {
             toast({ variant: "info", title: "No students to discontinue", description: "All students are selected for promotion."});
             return;
         }
         setIsDiscontinuing(true);
         const result = await discontinueStudents({
-            schoolId: selectedSchoolId,
+            schoolId: authUser.schoolId.toString(),
             studentIds: unselectedIds,
         });
         if (result.success) {
@@ -145,7 +142,6 @@ export default function MasterAdminPromoteStudentsPage() {
         setIsDiscontinuing(false);
     };
 
-
     const handleSelectAll = (checked: boolean) => {
         const newSelections: Record<string, boolean> = {};
         students.forEach(s => {
@@ -156,6 +152,15 @@ export default function MasterAdminPromoteStudentsPage() {
 
     const allSelected = useMemo(() => students.length > 0 && selectedIds.length === students.length, [students, selectedIds]);
 
+    if (!authUser) {
+      return (
+        <Card>
+          <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
+          <CardContent><p>Please log in as a Master Admin.</p></CardContent>
+        </Card>
+      );
+    }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -164,7 +169,7 @@ export default function MasterAdminPromoteStudentsPage() {
             <GraduationCap className="mr-2 h-6 w-6" /> Student Promotion Module
           </CardTitle>
           <CardDescription>
-            Promote students to the next class and manage academic year transitions.
+            Promote students to the next class and manage academic year transitions for your assigned school.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -172,17 +177,10 @@ export default function MasterAdminPromoteStudentsPage() {
       <Card>
           <CardHeader>
               <CardTitle>Promotion Setup</CardTitle>
-              <CardDescription>Select the school, classes, and academic years for the promotion.</CardDescription>
+              <CardDescription>Select the classes and academic years for the promotion.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                      <Label>School</Label>
-                      <Select onValueChange={handleSchoolChange} value={selectedSchoolId} disabled={isLoadingSchools}>
-                          <SelectTrigger><SelectValue placeholder="Select a school"/></SelectTrigger>
-                          <SelectContent>{schools.map(s => <SelectItem key={s._id} value={s._id}>{s.schoolName}</SelectItem>)}</SelectContent>
-                      </Select>
-                  </div>
                    <div>
                       <Label>From Academic Year</Label>
                       <Input value={fromAcademicYear} onChange={e => setFromAcademicYear(e.target.value)} placeholder="YYYY-YYYY"/>
@@ -191,16 +189,17 @@ export default function MasterAdminPromoteStudentsPage() {
                       <Label>To Academic Year</Label>
                       <Input value={toAcademicYear} onChange={e => setToAcademicYear(e.target.value)} placeholder="YYYY-YYYY"/>
                   </div>
+                  <div/>
                   <div>
                       <Label>From Class</Label>
-                      <Select onValueChange={setFromClassId} value={fromClassId} disabled={isLoadingClasses || !selectedSchoolId}>
+                      <Select onValueChange={setFromClassId} value={fromClassId} disabled={isLoadingClasses}>
                           <SelectTrigger><SelectValue placeholder="Select 'from' class"/></SelectTrigger>
                           <SelectContent>{classesInSchool.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                       </Select>
                   </div>
                    <div>
                       <Label>To Class</Label>
-                       <Select onValueChange={setToClassId} value={toClassId} disabled={isLoadingClasses || !selectedSchoolId}>
+                       <Select onValueChange={setToClassId} value={toClassId} disabled={isLoadingClasses}>
                           <SelectTrigger><SelectValue placeholder="Select 'to' class"/></SelectTrigger>
                           <SelectContent>{classesInSchool.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                       </Select>
@@ -258,7 +257,6 @@ export default function MasterAdminPromoteStudentsPage() {
             </CardContent>
         </Card>
       )}
-
     </div>
   );
 }

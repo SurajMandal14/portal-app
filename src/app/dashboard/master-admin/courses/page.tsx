@@ -12,14 +12,13 @@ import { useForm } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { getSchools } from "@/app/actions/schools";
 import { getClassesForSchoolAsOptions } from "@/app/actions/classes";
 import { createCourseMaterial, getCourseMaterialsForClass, deleteCourseMaterial } from "@/app/actions/courses";
 import { getSubjects } from "@/app/actions/subjects";
-import type { School as SchoolType } from "@/types/school";
 import type { CourseMaterial, CourseMaterialFormData } from "@/types/course";
 import { courseMaterialSchema } from "@/types/course";
 import type { Subject } from "@/types/subject";
+import type { AuthUser } from "@/types/user";
 import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 
@@ -30,16 +29,14 @@ interface ClassOption {
 
 export default function MasterAdminCoursesPage() {
   const { toast } = useToast();
-  const [schools, setSchools] = useState<SchoolType[]>([]);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [classesInSchool, setClassesInSchool] = useState<ClassOption[]>([]);
   const [masterSubjects, setMasterSubjects] = useState<Subject[]>([]);
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [materialToDelete, setMaterialToDelete] = useState<CourseMaterial | null>(null);
 
-  const [isLoadingSchools, setIsLoadingSchools] = useState(true);
-  const [isLoadingClasses, setIsLoadingClasses] = useState(false);
-  const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
+  const [isLoadingClasses, setIsLoadingClasses] = useState(true);
+  const [isLoadingSubjects, setIsLoadingSubjects] = useState(true);
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -51,16 +48,25 @@ export default function MasterAdminCoursesPage() {
 
   const selectedClassId = form.watch("classId");
 
-  const fetchInitialData = useCallback(async () => {
-    setIsLoadingSchools(true);
-    const schoolsResult = await getSchools();
-    if (schoolsResult.success && schoolsResult.schools) {
-      setSchools(schoolsResult.schools);
-    } else {
-      toast({ variant: "destructive", title: "Error", description: "Failed to load schools." });
+  useEffect(() => {
+    const storedUser = localStorage.getItem('loggedInUser');
+    if (storedUser && storedUser !== "undefined") {
+      try {
+        const parsedUser: AuthUser = JSON.parse(storedUser);
+        if (parsedUser.role === 'masteradmin' && parsedUser.schoolId) {
+            setAuthUser(parsedUser);
+            form.setValue("schoolId", parsedUser.schoolId.toString());
+        }
+      } catch (e) { console.error("Failed to parse user", e); }
     }
-    setIsLoadingSchools(false);
-    
+  }, [form]);
+
+  const fetchInitialData = useCallback(async (schoolId: string) => {
+    setIsLoadingClasses(true);
+    const classesResult = await getClassesForSchoolAsOptions(schoolId);
+    setClassesInSchool(classesResult);
+    setIsLoadingClasses(false);
+
     setIsLoadingSubjects(true);
     const subjectsResult = await getSubjects();
     if (subjectsResult.success && subjectsResult.subjects) {
@@ -73,21 +79,11 @@ export default function MasterAdminCoursesPage() {
   }, [toast]);
 
   useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
-
-  const fetchClassesForSchool = useCallback(async (schoolId: string) => {
-    if (!schoolId) {
-      setClassesInSchool([]);
-      form.resetField("classId");
-      return;
+    if (authUser?.schoolId) {
+      fetchInitialData(authUser.schoolId.toString());
     }
-    setIsLoadingClasses(true);
-    const classesResult = await getClassesForSchoolAsOptions(schoolId);
-    setClassesInSchool(classesResult);
-    setIsLoadingClasses(false);
-  }, [form]);
-  
+  }, [authUser, fetchInitialData]);
+
   const fetchMaterialsForClass = useCallback(async (classId: string) => {
     if (!classId) {
       setMaterials([]);
@@ -106,13 +102,6 @@ export default function MasterAdminCoursesPage() {
 
 
   useEffect(() => {
-    if (selectedSchoolId) {
-      fetchClassesForSchool(selectedSchoolId);
-      form.setValue("schoolId", selectedSchoolId);
-    }
-  }, [selectedSchoolId, fetchClassesForSchool, form]);
-  
-  useEffect(() => {
     if (selectedClassId) {
       fetchMaterialsForClass(selectedClassId);
     } else {
@@ -121,6 +110,7 @@ export default function MasterAdminCoursesPage() {
   }, [selectedClassId, fetchMaterialsForClass]);
 
   async function onSubmit(values: CourseMaterialFormData) {
+    if (!authUser?.schoolId) return;
     setIsSubmitting(true);
     const result = await createCourseMaterial(values);
     setIsSubmitting(false);
@@ -147,6 +137,15 @@ export default function MasterAdminCoursesPage() {
     }
   };
 
+  if (!authUser) {
+      return (
+        <Card>
+            <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
+            <CardContent><p>Please log in as a Master Admin.</p></CardContent>
+        </Card>
+      )
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -168,17 +167,9 @@ export default function MasterAdminCoursesPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField control={form.control} name="schoolId" render={({ field }) => (
-                  <FormItem><FormLabel>School</FormLabel>
-                    <Select onValueChange={(value) => { field.onChange(value); setSelectedSchoolId(value); }} value={field.value} disabled={isLoadingSchools}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select a school" /></SelectTrigger></FormControl>
-                      <SelectContent>{schools.map(school => <SelectItem key={school._id} value={school._id}>{school.schoolName}</SelectItem>)}</SelectContent>
-                    </Select><FormMessage />
-                  </FormItem>
-                )}/>
                 <FormField control={form.control} name="classId" render={({ field }) => (
                   <FormItem><FormLabel>Class</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingClasses || !selectedSchoolId}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingClasses}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Select a class" /></SelectTrigger></FormControl>
                       <SelectContent>{classesInSchool.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent>
                     </Select><FormMessage />
@@ -208,7 +199,7 @@ export default function MasterAdminCoursesPage() {
         <CardHeader>
             <CardTitle>Uploaded Materials</CardTitle>
             <CardDescription>
-                {selectedClassId ? `Showing materials for the selected class.` : `Please select a school and class to view materials.`}
+                {selectedClassId ? `Showing materials for the selected class.` : `Please select a class to view materials.`}
             </CardDescription>
         </CardHeader>
         <CardContent>

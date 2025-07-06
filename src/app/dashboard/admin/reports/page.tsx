@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChartBig, Loader2, Info, Download, DollarSign, FileText, BadgePercent, Users, ShieldCheck, ShieldOff, BookOpenCheck, CheckCircle2, XCircleIcon } from "lucide-react";
+import { BarChartBig, Loader2, Info, Download, DollarSign, FileText, BadgePercent, Users, ShieldCheck, ShieldOff, BookOpenCheck, CheckCircle2, XCircleIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -23,7 +23,10 @@ import { getSchoolUsers } from "@/app/actions/schoolUsers";
 import { getSchoolById } from "@/app/actions/schools";
 import { getFeePaymentsBySchool } from "@/app/actions/fees";
 import { getFeeConcessionsForSchool } from "@/app/actions/concessions";
+import { getMonthlyAttendanceForAdmin } from "@/app/actions/attendance";
+import type { MonthlyAttendanceRecord } from "@/types/attendance";
 import Link from "next/link";
+import { format } from "date-fns";
 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -62,7 +65,6 @@ interface ClassOption {
   name?: string;
 }
 
-
 export default function AdminReportsPage() {
   const [allSchoolStudents, setAllSchoolStudents] = useState<AppUser[]>([]);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
@@ -70,6 +72,12 @@ export default function AdminReportsPage() {
   const [allSchoolConcessions, setAllSchoolConcessions] = useState<FeeConcession[]>([]);
   const [feeClassSummaries, setFeeClassSummaries] = useState<ClassFeeSummary[]>([]);
   const [feeOverallSummary, setFeeOverallSummary] = useState<OverallFeeSummary | null>(null);
+  
+  const [attendanceRecords, setAttendanceRecords] = useState<MonthlyAttendanceRecord[]>([]);
+  const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
+  const [attendanceMonth, setAttendanceMonth] = useState<number>(new Date().getMonth());
+  const [attendanceYear, setAttendanceYear] = useState<number>(new Date().getFullYear());
+
 
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloadingFeePdf, setIsDownloadingFeePdf] = useState(false);
@@ -267,11 +275,27 @@ export default function AdminReportsPage() {
     setIsLoading(false);
   }, [authUser, toast, lastFetchedSchoolId, filterAcademicYear]);
 
+  const fetchAttendance = useCallback(async () => {
+    if (!authUser || !authUser.schoolId) return;
+
+    setIsLoadingAttendance(true);
+    const result = await getMonthlyAttendanceForAdmin(authUser.schoolId.toString(), attendanceMonth, attendanceYear);
+    if (result.success && result.records) {
+      setAttendanceRecords(result.records);
+    } else {
+      setAttendanceRecords([]);
+      toast({ variant: "warning", title: "Attendance Report", description: result.message || "Could not fetch attendance data."});
+    }
+    setIsLoadingAttendance(false);
+  }, [authUser, attendanceMonth, attendanceYear, toast]);
+
+
   useEffect(() => {
     if (authUser && authUser.schoolId) {
       loadReportData(false);
+      fetchAttendance();
     }
-  }, [authUser, loadReportData, filterAcademicYear]);
+  }, [authUser, loadReportData, fetchAttendance, filterAcademicYear]);
 
 
   const handleDownloadFeePdf = async () => {
@@ -364,6 +388,21 @@ export default function AdminReportsPage() {
   };
 
   const reportsThatExistCount = reportsForBulkPublish.filter(r => r.hasReport).length;
+  
+  const handleAttendanceMonthChange = (direction: 'prev' | 'next') => {
+    let newMonth = attendanceMonth;
+    let newYear = attendanceYear;
+    if (direction === 'prev') {
+        newMonth = newMonth === 0 ? 11 : newMonth - 1;
+        newYear = newMonth === 11 ? newYear - 1 : newYear;
+    } else {
+        newMonth = newMonth === 11 ? 0 : newMonth + 1;
+        newYear = newMonth === 0 ? newYear + 1 : newYear;
+    }
+    setAttendanceMonth(newMonth);
+    setAttendanceYear(newYear);
+    fetchAttendance();
+  };
 
 
   return (
@@ -483,11 +522,55 @@ export default function AdminReportsPage() {
 
       <Card>
         <CardHeader>
-            <CardTitle>Attendance Report</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground">
-              Daily attendance reports are unavailable with the new monthly attendance system. Please refer to the main <Link href="/dashboard/admin/attendance" className="text-primary underline">Attendance page</Link> for monthly records.
-            </CardDescription>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                <div>
+                    <CardTitle>Attendance Report</CardTitle>
+                    <CardDescription>Monthly attendance summary for the school.</CardDescription>
+                </div>
+                 <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" onClick={() => handleAttendanceMonthChange('prev')}><ChevronLeft className="h-4 w-4" /></Button>
+                    <span className="text-lg font-semibold w-32 text-center">{format(new Date(attendanceYear, attendanceMonth), 'MMM yyyy')}</span>
+                    <Button variant="outline" size="icon" onClick={() => handleAttendanceMonthChange('next')}><ChevronRight className="h-4 w-4" /></Button>
+                 </div>
+            </div>
         </CardHeader>
+        <CardContent>
+             {isLoadingAttendance ? (
+                 <div className="flex items-center justify-center py-10">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="ml-2">Loading attendance report...</p>
+                </div>
+             ) : attendanceRecords.length > 0 ? (
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Student Name</TableHead>
+                            <TableHead>Class</TableHead>
+                            <TableHead>Days Present</TableHead>
+                            <TableHead>Total Working Days</TableHead>
+                            <TableHead>Percentage</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {attendanceRecords.map((record) => (
+                            <TableRow key={record._id.toString()}>
+                                <TableCell>{record.studentName}</TableCell>
+                                <TableCell>{record.className}</TableCell>
+                                <TableCell>{record.daysPresent}</TableCell>
+                                <TableCell>{record.totalWorkingDays}</TableCell>
+                                <TableCell>{record.totalWorkingDays > 0 ? `${Math.round((record.daysPresent / record.totalWorkingDays) * 100)}%` : 'N/A'}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+             ) : (
+                <div className="text-center py-10">
+                    <Info className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <p className="mt-4 text-lg font-semibold">No Attendance Data</p>
+                    <p className="text-muted-foreground">No attendance has been submitted for this month.</p>
+                </div>
+             )}
+        </CardContent>
       </Card>
 
 
