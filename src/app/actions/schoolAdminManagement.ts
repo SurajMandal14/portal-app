@@ -187,21 +187,25 @@ export interface GetSchoolAdminsResult {
   message?: string;
 }
 
-export async function getSchoolAdmins(): Promise<GetSchoolAdminsResult> {
+export async function getSchoolAdmins(schoolId: string): Promise<GetSchoolAdminsResult> {
   try {
+    if (!ObjectId.isValid(schoolId)) {
+        return { success: false, message: "Invalid School ID provided." };
+    }
+
     const { db } = await connectToDatabase();
     const adminsWithSchool = await db.collection<User>('users').aggregate([
       {
-        $match: { role: 'admin' } 
+        $match: { 
+            role: 'admin',
+            schoolId: new ObjectId(schoolId) 
+        } 
       },
       {
         $lookup: {
           from: 'schools', 
-          let: { schoolIdObj: '$schoolId' }, 
-          pipeline: [
-            { $match: { $expr: { $eq: ['$_id', '$$schoolIdObj'] } } },
-            { $project: { schoolName: 1 } } 
-          ],
+          localField: 'schoolId', 
+          foreignField: '_id',
           as: 'schoolInfo' 
         }
       },

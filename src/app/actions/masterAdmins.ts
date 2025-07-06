@@ -8,6 +8,7 @@ import type { User, MasterAdminFormData } from '@/types/user';
 import { masterAdminFormSchema } from '@/types/user';
 import { revalidatePath } from 'next/cache';
 import { ObjectId } from 'mongodb';
+import type { School } from '@/types/school';
 
 export interface MasterAdminResult {
   success: boolean;
@@ -18,16 +19,21 @@ export interface MasterAdminResult {
 
 export async function createMasterAdmin(values: MasterAdminFormData): Promise<MasterAdminResult> {
   try {
-    if (!values.password || values.password.length < 6) {
-      return { success: false, message: 'Validation failed', error: 'Password is required and must be at least 6 characters for new master admins.' };
-    }
     const validatedFields = masterAdminFormSchema.safeParse(values);
     if (!validatedFields.success) {
       const errors = validatedFields.error.errors.map(e => e.message).join(' ');
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { name, email, password } = validatedFields.data;
+    const { name, email, password, schoolId } = validatedFields.data;
+    
+    if (!password || password.length < 6) {
+      return { success: false, message: 'Validation failed', error: 'Password is required and must be at least 6 characters for new master admins.' };
+    }
+
+    if (!ObjectId.isValid(schoolId)) {
+        return { success: false, message: 'Invalid School ID provided.' };
+    }
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<Omit<User, '_id'>>('users');
@@ -37,13 +43,19 @@ export async function createMasterAdmin(values: MasterAdminFormData): Promise<Ma
       return { success: false, message: 'User with this email already exists.', error: 'Email already in use.' };
     }
     
-    const hashedPassword = await bcrypt.hash(password!, 10); 
+    const school = await db.collection<School>('schools').findOne({ _id: new ObjectId(schoolId) as any });
+    if (!school) {
+      return { success: false, message: 'Selected school not found.' };
+    }
+    
+    const hashedPassword = await bcrypt.hash(password, 10); 
 
     const newUser: Omit<User, '_id'> = {
       name,
       email,
       password: hashedPassword,
       role: 'masteradmin',
+      schoolId: new ObjectId(schoolId), // Assign schoolId
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -63,6 +75,7 @@ export async function createMasterAdmin(values: MasterAdminFormData): Promise<Ma
       user: { 
         ...userWithoutPassword, 
         _id: result.insertedId.toString(),
+        schoolId: newUser.schoolId.toString(),
       },
     };
 
@@ -86,7 +99,11 @@ export async function updateMasterAdmin(userId: string, values: MasterAdminFormD
       return { success: false, message: 'Validation failed', error: errors || 'Invalid fields!' };
     }
 
-    const { name, email, password } = validatedFields.data;
+    const { name, email, password, schoolId } = validatedFields.data;
+
+    if (!ObjectId.isValid(schoolId)) {
+        return { success: false, message: 'Invalid School ID provided.' };
+    }
 
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
@@ -96,9 +113,15 @@ export async function updateMasterAdmin(userId: string, values: MasterAdminFormD
       return { success: false, message: 'This email is already in use by another account.', error: 'Email already in use.' };
     }
     
+    const school = await db.collection<School>('schools').findOne({ _id: new ObjectId(schoolId) as any });
+    if (!school) {
+      return { success: false, message: 'Selected school not found.' };
+    }
+
     const updateData: Partial<Omit<User, '_id'>> = {
       name,
       email,
+      schoolId: new ObjectId(schoolId),
       updatedAt: new Date(),
     };
 
@@ -145,7 +168,7 @@ export async function updateMasterAdmin(userId: string, values: MasterAdminFormD
 
 export interface GetMasterAdminsResult {
   success: boolean;
-  admins?: Partial<User>[]; 
+  admins?: (Partial<User> & { schoolName?: string })[]; 
   error?: string;
   message?: string;
 }
@@ -153,17 +176,33 @@ export interface GetMasterAdminsResult {
 export async function getMasterAdmins(): Promise<GetMasterAdminsResult> {
   try {
     const { db } = await connectToDatabase();
-    const adminsList = await db.collection<User>('users').find(
-        { role: 'masteradmin' },
-        { projection: { password: 0 } }
-    ).sort({ createdAt: -1 }).toArray();
+    const adminsList = await db.collection<User>('users').aggregate([
+        { $match: { role: 'masteradmin' } },
+        {
+            $lookup: {
+                from: 'schools',
+                localField: 'schoolId',
+                foreignField: '_id',
+                as: 'schoolInfo'
+            }
+        },
+        { $unwind: { path: '$schoolInfo', preserveNullAndEmptyArrays: true } },
+        {
+            $project: {
+                password: 0,
+                schoolName: '$schoolInfo.schoolName'
+            }
+        },
+        { $sort: { createdAt: -1 } }
+    ]).toArray();
     
     const admins = adminsList.map(admin => ({
       ...admin,
       _id: admin._id.toString(),
+      schoolId: admin.schoolId?.toString(),
     }));
 
-    return { success: true, admins: admins };
+    return { success: true, admins: admins as (Partial<User> & { schoolName?: string })[] };
   } catch (error) {
     console.error('Get master admins server action error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -186,8 +225,7 @@ export async function deleteMasterAdmin(userId: string): Promise<DeleteMasterAdm
     const { db } = await connectToDatabase();
     const usersCollection = db.collection<User>('users');
 
-    // Add dependency check here if Master Admins manage other resources
-    const schoolAdminsCount = await usersCollection.countDocuments({ role: 'admin', "masterAdminId": new ObjectId(userId) }); // Assuming a linking field
+    const schoolAdminsCount = await usersCollection.countDocuments({ role: 'admin', "masterAdminId": new ObjectId(userId) }); // This check might need adjustment based on how you link admins
     if(schoolAdminsCount > 0) {
         return { success: false, message: "Cannot delete Master Admin.", error: "This Master Admin still manages school administrators. Please reassign them first."};
     }

@@ -4,8 +4,9 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, Edit3, Trash2, Loader2, XCircle } from "lucide-react";
+import { Users, PlusCircle, Edit3, Trash2, Loader2, XCircle, Building } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
@@ -32,14 +33,17 @@ import { useToast } from "@/hooks/use-toast";
 import { createMasterAdmin, getMasterAdmins, updateMasterAdmin, deleteMasterAdmin } from "@/app/actions/masterAdmins";
 import type { MasterAdminFormData, User } from "@/types/user";
 import { masterAdminFormSchema } from "@/types/user";
+import { getSchools } from "@/app/actions/schools";
+import type { School } from "@/types/school";
 import { useEffect, useState, useCallback } from "react";
 import { format } from 'date-fns';
 
-type MasterAdmin = Partial<User>;
+type MasterAdmin = Partial<User> & { schoolName?: string };
 
 export default function SuperAdminMasterAdminsPage() {
   const { toast } = useToast();
   const [admins, setAdmins] = useState<MasterAdmin[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<MasterAdmin | null>(null);
@@ -48,23 +52,34 @@ export default function SuperAdminMasterAdminsPage() {
 
   const form = useForm<MasterAdminFormData>({
     resolver: zodResolver(masterAdminFormSchema),
-    defaultValues: { name: "", email: "", password: "" },
+    defaultValues: { name: "", email: "", password: "", schoolId: "" },
   });
 
-  const fetchAdmins = useCallback(async () => {
+  const fetchAdminsAndSchools = useCallback(async () => {
     setIsLoading(true);
-    const result = await getMasterAdmins();
-    if (result.success && result.admins) {
-      setAdmins(result.admins);
+    const [adminsResult, schoolsResult] = await Promise.all([
+      getMasterAdmins(),
+      getSchools()
+    ]);
+    
+    if (adminsResult.success && adminsResult.admins) {
+      setAdmins(adminsResult.admins);
     } else {
-      toast({ variant: "destructive", title: "Failed to load master admins", description: result.error || "Could not fetch admin data." });
+      toast({ variant: "destructive", title: "Failed to load master admins", description: adminsResult.error || "Could not fetch admin data." });
     }
+
+    if (schoolsResult.success && schoolsResult.schools) {
+        setSchools(schoolsResult.schools);
+    } else {
+        toast({ variant: "destructive", title: "Failed to load schools", description: schoolsResult.error || "Could not fetch school list."});
+    }
+
     setIsLoading(false);
   }, [toast]);
 
   useEffect(() => {
-    fetchAdmins();
-  }, [fetchAdmins]);
+    fetchAdminsAndSchools();
+  }, [fetchAdminsAndSchools]);
 
   useEffect(() => {
     if (editingAdmin) {
@@ -72,9 +87,10 @@ export default function SuperAdminMasterAdminsPage() {
         name: editingAdmin.name || "",
         email: editingAdmin.email || "",
         password: "",
+        schoolId: editingAdmin.schoolId?.toString() || "",
       });
     } else {
-      form.reset({ name: "", email: "", password: "" });
+      form.reset({ name: "", email: "", password: "", schoolId: "" });
     }
   }, [editingAdmin, form]);
 
@@ -89,7 +105,7 @@ export default function SuperAdminMasterAdminsPage() {
     if (result.success) {
       toast({ title: editingAdmin ? "Master Admin Updated" : "Master Admin Created", description: result.message });
       setEditingAdmin(null); 
-      fetchAdmins(); 
+      fetchAdminsAndSchools(); 
     } else {
       toast({ variant: "destructive", title: `Error ${editingAdmin ? "Updating" : "Creating"} Admin`, description: result.error || result.message });
     }
@@ -102,7 +118,7 @@ export default function SuperAdminMasterAdminsPage() {
     setIsDeleting(false);
     if (result.success) {
       toast({ title: "Master Admin Deleted", description: result.message });
-      fetchAdmins();
+      fetchAdminsAndSchools();
     } else {
       toast({ variant: "destructive", title: "Deletion Failed", description: result.error || result.message });
     }
@@ -134,15 +150,26 @@ export default function SuperAdminMasterAdminsPage() {
                 <FormField control={form.control} name="email" render={({ field }) => (
                   <FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" placeholder="master@scholr.com" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>
                 )}/>
+                <FormField control={form.control} name="schoolId" render={({ field }) => (
+                    <FormItem><FormLabel className="flex items-center"><Building className="mr-2 h-4 w-4 text-muted-foreground"/>Assign to School</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || isLoading}>
+                        <FormControl><SelectTrigger><SelectValue placeholder={isLoading ? "Loading schools..." : "Select a school"} /></SelectTrigger></FormControl>
+                        <SelectContent>
+                            {schools.map((school) => (<SelectItem key={school._id} value={school._id.toString()}>{school.schoolName}</SelectItem>))}
+                            {schools.length === 0 && !isLoading && <SelectItem value="no-school" disabled>No schools available</SelectItem>}
+                        </SelectContent>
+                        </Select><FormMessage />
+                    </FormItem>
+                )}/>
                 <FormField control={form.control} name="password" render={({ field }) => (
-                  <FormItem className="md:col-span-2"><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} /></FormControl>
+                  <FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} /></FormControl>
                     {editingAdmin && <FormDescription className="text-xs">Leave blank to keep current password.</FormDescription>}
                     <FormMessage />
                   </FormItem>
                 )}/>
               </div>
               <div className="flex gap-2 items-center">
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" disabled={isSubmitting || isLoading}>
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : editingAdmin ? <Edit3 className="mr-2 h-4 w-4" /> : <PlusCircle className="mr-2 h-4 w-4" />}
                   {editingAdmin ? "Update Admin" : "Create Master Admin"}
                 </Button>
@@ -159,11 +186,13 @@ export default function SuperAdminMasterAdminsPage() {
           {isLoading ? (<div className="flex items-center justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Loading administrators...</p></div>)
           : admins.length > 0 ? (
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>School Assigned</TableHead><TableHead>Date Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {admins.map((admin) => (
                 <TableRow key={admin._id?.toString()}>
-                  <TableCell>{admin.name}</TableCell><TableCell>{admin.email}</TableCell>
+                  <TableCell>{admin.name}</TableCell>
+                  <TableCell>{admin.email}</TableCell>
+                  <TableCell>{admin.schoolName || 'N/A'}</TableCell>
                   <TableCell>{admin.createdAt ? format(new Date(admin.createdAt as string), "PP") : 'N/A'}</TableCell>
                   <TableCell className="space-x-1">
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setEditingAdmin(admin)} disabled={isSubmitting || isDeleting}><Edit3 className="h-4 w-4" /></Button>

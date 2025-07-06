@@ -200,5 +200,6 @@ export const masterAdminFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }).optional().or(z.literal('')),
+  schoolId: z.string().min(1, "School assignment is required."),
 });
 export type MasterAdminFormData = z.infer<typeof masterAdminFormSchema>;
