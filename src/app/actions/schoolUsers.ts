@@ -237,9 +237,6 @@ export async function updateSchoolUser(userId: string, schoolId: string, values:
 
 
     if (password && password.trim() !== "") {
-      if (password.length < 6) {
-         return { success: false, message: 'Validation failed', error: 'New password must be at least 6 characters.' };
-      }
       updateData.password = await bcrypt.hash(password, 10);
     }
 
@@ -515,5 +512,3 @@ export async function getStudentDetailsForReportCard(admissionIdQuery: string, s
     return { success: false, error: errorMessage, message: 'Failed to fetch student details for report card.' };
   }
 }
-
-    

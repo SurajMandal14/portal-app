@@ -102,7 +102,7 @@ export const createSchoolUserFormSchema = z.object({
   // System fields (may be grouped separately in UI)
   admissionId: z.string().min(1, { message: "Admission ID is required."}),
   email: z.string().email({ message: "A valid email is required." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  password: z.string().min(1, { message: "Password is required." }),
   role: z.enum(['teacher', 'student'], { required_error: "Role is required." }),
   
   // Admission Details
@@ -156,7 +156,7 @@ export const createSchoolUserFormSchema = z.object({
 export type CreateSchoolUserFormData = z.infer<typeof createSchoolUserFormSchema>;
 
 export const updateSchoolUserFormSchema = createSchoolUserFormSchema.extend({
-  password: z.string().min(6, { message: "New password must be at least 6 characters." }).optional().or(z.literal('')), // Optional for update
+  password: z.string().optional().or(z.literal('')), // Optional for update
 });
 
 export type UpdateSchoolUserFormData = z.infer<typeof updateSchoolUserFormSchema>;
