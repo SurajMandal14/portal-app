@@ -86,7 +86,11 @@ export default function AdminStudentManagementPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   const currentForm = useForm<CreateSchoolUserFormData>({
-    resolver: zodResolver(createSchoolUserFormSchema),
+    resolver: async (data, context, options) => {
+        // Use update schema if we are editing, create schema otherwise
+        const schema = editingStudent ? updateSchoolUserFormSchema : createSchoolUserFormSchema;
+        return zodResolver(schema)(data, context, options);
+    },
     defaultValues: { 
         name: "", email: "", password: "", admissionId: "", classId: "", 
         academicYear: getCurrentAcademicYear(),
@@ -342,7 +346,18 @@ export default function AdminStudentManagementPage() {
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FormField control={currentForm.control} name="admissionId" render={({ field }) => (<FormItem><FormLabel>Admission ID (for Login)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage/></FormItem>)}/>
             <FormField control={currentForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email Address</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage/></FormItem>)}/>
-            <FormField control={currentForm.control} name="password" render={({ field }) => (<FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" placeholder="••••••••" /></FormControl><FormDescription className="text-xs">{editingStudent ? "Leave blank to keep current password." : "Min. 6 characters."}</FormDescription><FormMessage/></FormItem>)}/>
+            <FormField control={currentForm.control} name="password" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                        <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                        {editingStudent ? "Leave blank to keep current password." : "A password is required for new students."}
+                    </FormDescription>
+                    <FormMessage/>
+                </FormItem>
+            )}/>
         </CardContent>
       </Card>
     </div>
