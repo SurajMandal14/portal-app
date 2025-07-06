@@ -98,6 +98,10 @@ export default function MasterAdminAttendancePage() {
     setSelectedYear(newYear);
   };
 
+  const handleFilterChange = (value: string) => {
+    setFilterClassId(value === "all" ? "" : value);
+  };
+
   const filteredRecords = filterClassId
     ? attendanceRecords.filter(record => record.classId === filterClassId)
     : attendanceRecords;
@@ -132,12 +136,12 @@ export default function MasterAdminAttendancePage() {
                   <Button variant="outline" size="icon" onClick={() => handleMonthChange('next')}><ChevronRight className="h-4 w-4" /></Button>
                 </div>
                 <div>
-                  <Select onValueChange={setFilterClassId} value={filterClassId}>
+                  <Select onValueChange={handleFilterChange} value={filterClassId || 'all'}>
                     <SelectTrigger className="w-full sm:w-[200px]">
                       <SelectValue placeholder="Filter by class..."/>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Classes</SelectItem>
+                      <SelectItem value="all">All Classes</SelectItem>
                       {classOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
