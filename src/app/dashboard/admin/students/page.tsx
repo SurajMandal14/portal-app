@@ -178,9 +178,23 @@ export default function AdminStudentManagementPage() {
         bloodGroup: editingStudent.bloodGroup || "", nationality: editingStudent.nationality || "Indian",
         religion: editingStudent.religion || "", caste: editingStudent.caste || "",
         subcaste: editingStudent.subcaste || "", identificationMarks: editingStudent.identificationMarks || "",
-        presentAddress: editingStudent.presentAddress || { houseNo: "", street: "", village: "", mandal: "", district: "", state: "" },
+        presentAddress: {
+          houseNo: editingStudent.presentAddress?.houseNo || "",
+          street: editingStudent.presentAddress?.street || "",
+          village: editingStudent.presentAddress?.village || "",
+          mandal: editingStudent.presentAddress?.mandal || "",
+          district: editingStudent.presentAddress?.district || "",
+          state: editingStudent.presentAddress?.state || "",
+        },
         isPermanentSameAsPresent: false, // Default to false for editing
-        permanentAddress: editingStudent.permanentAddress || { houseNo: "", street: "", village: "", mandal: "", district: "", state: "" },
+        permanentAddress: {
+          houseNo: editingStudent.permanentAddress?.houseNo || "",
+          street: editingStudent.permanentAddress?.street || "",
+          village: editingStudent.permanentAddress?.village || "",
+          mandal: editingStudent.permanentAddress?.mandal || "",
+          district: editingStudent.permanentAddress?.district || "",
+          state: editingStudent.permanentAddress?.state || "",
+        },
         fatherMobile: editingStudent.fatherMobile || "", motherMobile: editingStudent.motherMobile || "",
         fatherAadhar: editingStudent.fatherAadhar || "", motherAadhar: editingStudent.motherAadhar || "",
         fatherQualification: editingStudent.fatherQualification || "", motherQualification: editingStudent.motherQualification || "",
@@ -215,7 +229,7 @@ export default function AdminStudentManagementPage() {
   }
 
   const handleEditClick = (student: SchoolStudent) => { setEditingStudent(student); setIsFormOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); };
-  const handleAddClick = () => { setEditingStudent(null); currentForm.reset(); setIsFormOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const handleAddClick = () => { setEditingStudent(null); currentForm.reset(); setIsFormOpen(true); };
   const handleCancelClick = () => { setIsFormOpen(false); setEditingStudent(null); };
   const handleActionClick = (user: SchoolStudent) => { setUserToUpdate(user); setIsActionDialogOpen(true); };
   
@@ -393,5 +407,3 @@ export default function AdminStudentManagementPage() {
     </div>
   );
 }
-
-    
