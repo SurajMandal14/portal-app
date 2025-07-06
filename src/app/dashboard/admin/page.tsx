@@ -8,11 +8,16 @@ import { Users, DollarSign, CheckSquare, BarChart2, Settings, Briefcase, BookOpe
 import { useState, useEffect } from "react";
 import type { AuthUser } from "@/types/user";
 import type { School } from "@/types/school";
-import type { DailyAttendanceOverview } from "@/types/attendance";
 import { getSchoolUserRoleCounts, type SchoolUserRoleCounts } from "@/app/actions/schoolUsers";
-import { getDailyAttendanceOverviewForSchool } from "@/app/actions/attendance";
+import { getMonthlyAttendanceForAdmin } from "@/app/actions/attendance";
 import { getSchoolById } from "@/app/actions/schools";
 import { useToast } from "@/hooks/use-toast";
+
+interface MonthlyAttendanceOverview {
+  totalPresentDays: number;
+  totalWorkingDays: number;
+  percentage: number;
+}
 
 interface StatCardProps {
   title: string;
@@ -52,7 +57,7 @@ export default function AdminDashboardPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [userCounts, setUserCounts] = useState<SchoolUserRoleCounts | null>(null);
-  const [attendanceOverview, setAttendanceOverview] = useState<DailyAttendanceOverview | null>(null);
+  const [attendanceOverview, setAttendanceOverview] = useState<MonthlyAttendanceOverview | null>(null);
 
   const [isLoadingSchoolName, setIsLoadingSchoolName] = useState(true);
   const [isLoadingUserCounts, setIsLoadingUserCounts] = useState(true);
@@ -109,13 +114,28 @@ export default function AdminDashboardPage() {
         }
         setIsLoadingUserCounts(false);
       });
-
-      getDailyAttendanceOverviewForSchool(authUser.schoolId.toString(), new Date()).then(result => {
-        if (result.success && result.summary) {
-          setAttendanceOverview(result.summary);
+      
+      const today = new Date();
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+      getMonthlyAttendanceForAdmin(authUser.schoolId.toString(), currentMonth, currentYear).then(result => {
+        if (result.success && result.records) {
+            const records = result.records;
+            if (records.length > 0) {
+                const totalPresentDays = records.reduce((sum, r) => sum + r.daysPresent, 0);
+                const totalWorkingDays = records.reduce((sum, r) => sum + r.totalWorkingDays, 0);
+                const percentage = totalWorkingDays > 0 ? Math.round((totalPresentDays / totalWorkingDays) * 100) : 0;
+                setAttendanceOverview({
+                    totalPresentDays,
+                    totalWorkingDays,
+                    percentage,
+                });
+            } else {
+                setAttendanceOverview({ totalPresentDays: 0, totalWorkingDays: 0, percentage: 0 });
+            }
         } else {
-          toast({ variant: "warning", title: "Attendance Stats", description: result.message || "Could not load today's attendance overview."});
-           setAttendanceOverview({ totalStudents: userCounts?.students || 0, present: 0, absent: userCounts?.students || 0, late: 0, percentage: 0 });
+            toast({ variant: "warning", title: "Attendance Stats", description: result.message || "Could not load this month's attendance overview."});
+            setAttendanceOverview(null);
         }
         setIsLoadingAttendance(false);
       });
@@ -128,7 +148,6 @@ export default function AdminDashboardPage() {
       setIsLoadingUserCounts(false);
       setIsLoadingAttendance(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser, toast]);
 
   const schoolNameDisplay = schoolDetails?.schoolName || (isLoadingSchoolName ? "Loading..." : "Your School");
@@ -161,11 +180,11 @@ export default function AdminDashboardPage() {
             linkText="Manage Teachers"
         />
         <StatCard
-            title="Today's Attendance"
+            title="This Month's Attendance"
             value={`${attendanceOverview?.percentage ?? 'N/A'}%`}
             icon={Percent}
             isLoading={isLoadingAttendance}
-            description={attendanceOverview ? `${attendanceOverview.present + attendanceOverview.late} / ${attendanceOverview.totalStudents} attended` : "Loading data..."}
+            description={attendanceOverview ? `${attendanceOverview.totalPresentDays} / ${attendanceOverview.totalWorkingDays} cumulative days` : "No data this month"}
             link="/dashboard/admin/attendance"
             linkText="View Details"
         />

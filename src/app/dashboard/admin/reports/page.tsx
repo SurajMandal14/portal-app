@@ -3,21 +3,17 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChartBig, CalendarDays, Loader2, Info, Download, DollarSign, FileText, BadgePercent, Users, ShieldCheck, ShieldOff, UploadCloud, BookOpenCheck, CheckCircle2, XCircleIcon } from "lucide-react";
+import { BarChartBig, Loader2, Info, Download, DollarSign, FileText, BadgePercent, Users, ShieldCheck, ShieldOff, BookOpenCheck, CheckCircle2, XCircleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect, useCallback } from "react";
-import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { getDailyAttendanceForSchool } from "@/app/actions/attendance";
-import type { AttendanceRecord, AuthUser } from "@/types/attendance";
+import type { AuthUser } from "@/types/attendance";
 import type { User as AppUser } from "@/types/user";
-import type { School, TermFee } from "@/types/school";
+import type { School } from "@/types/school";
 import type { FeePayment } from "@/types/fees";
 import type { FeeConcession } from "@/types/concessions";
 import { getReportCardsForClass, setReportPublicationStatusForClass } from "@/app/actions/reports"; 
@@ -42,24 +38,6 @@ const getCurrentAcademicYear = (): string => {
     return `${currentYear - 1}-${currentYear}`;
   }
 };
-
-
-interface ClassAttendanceSummary {
-  className: string;
-  totalStudents: number;
-  present: number;
-  absent: number;
-  late: number;
-  attendancePercentage: number;
-}
-
-interface OverallAttendanceSummary {
-    totalStudents: number;
-    totalPresent: number;
-    totalAbsent: number;
-    totalLate: number;
-    overallAttendancePercentage: number;
-}
 
 interface ClassFeeSummary {
   className: string;
@@ -86,11 +64,6 @@ interface ClassOption {
 
 
 export default function AdminReportsPage() {
-  const [reportDate, setReportDate] = useState<Date | undefined>(undefined);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-  const [classSummaries, setClassSummaries] = useState<ClassAttendanceSummary[]>([]);
-  const [overallSummary, setOverallSummary] = useState<OverallAttendanceSummary | null>(null);
-
   const [allSchoolStudents, setAllSchoolStudents] = useState<AppUser[]>([]);
   const [schoolDetails, setSchoolDetails] = useState<School | null>(null);
   const [allSchoolPayments, setAllSchoolPayments] = useState<FeePayment[]>([]);
@@ -99,7 +72,6 @@ export default function AdminReportsPage() {
   const [feeOverallSummary, setFeeOverallSummary] = useState<OverallFeeSummary | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isDownloadingAttendancePdf, setIsDownloadingAttendancePdf] = useState(false);
   const [isDownloadingFeePdf, setIsDownloadingFeePdf] = useState(false);
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -116,8 +88,6 @@ export default function AdminReportsPage() {
 
 
   useEffect(() => {
-    setReportDate(new Date());
-
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser && storedUser !== "undefined" && storedUser !== "null") {
         try {
@@ -156,121 +126,6 @@ export default function AdminReportsPage() {
     if (!classFeeConfig || !classFeeConfig.terms) return 0;
     return classFeeConfig.terms.reduce((sum, term) => sum + (term.amount || 0), 0);
   }, []);
-
-  const processAttendanceData = useCallback(() => {
-    if (allSchoolStudents.length === 0 && attendanceRecords.length === 0) {
-      setClassSummaries([]);
-      setOverallSummary(null);
-      return;
-    }
-    if (allSchoolStudents.length > 0 && attendanceRecords.length === 0 && reportDate) {
-        const summaries: ClassAttendanceSummary[] = allSchoolStudents
-            .reduce((acc, student) => {
-                if (student.classId) {
-                    const classObj = classOptions.find(c => c.value === student.classId);
-                    const classNameForSummary = classObj?.label || student.classId;
-                    let classGroup = acc.find(g => g.className === classNameForSummary);
-                    if (!classGroup) {
-                        classGroup = { className: classNameForSummary, students: [] };
-                        acc.push(classGroup);
-                    }
-                    classGroup.students.push(student);
-                }
-                return acc;
-            }, [] as { className: string; students: AppUser[] }[])
-            .map(group => ({
-                className: group.className,
-                totalStudents: group.students.length,
-                present: 0,
-                absent: group.students.length,
-                late: 0,
-                attendancePercentage: 0,
-            }))
-            .sort((a, b) => a.className.localeCompare(b.className));
-
-        setClassSummaries(summaries);
-        setOverallSummary({
-            totalStudents: allSchoolStudents.length,
-            totalPresent: 0,
-            totalAbsent: allSchoolStudents.length,
-            totalLate: 0,
-            overallAttendancePercentage: 0,
-        });
-        return;
-    }
-
-    const classMap = new Map<string, { students: AppUser[], present: number, absent: number, late: number }>();
-
-    allSchoolStudents.forEach(student => {
-      if (student.classId) {
-        const classObj = classOptions.find(c => c.value === student.classId);
-        const classNameForSummary = classObj?.label || student.classId;
-        if (!classMap.has(classNameForSummary)) {
-          classMap.set(classNameForSummary, { students: [], present: 0, absent: 0, late: 0 });
-        }
-        classMap.get(classNameForSummary)!.students.push(student);
-      }
-    });
-
-    attendanceRecords.forEach(record => {
-      const classObj = classOptions.find(c => c.value === record.classId.toString()); // classId from attendance is ObjectId string
-      const classNameForSummary = classObj?.label || record.className; // Use record.className as fallback if classId mapping fails
-      if (classMap.has(classNameForSummary)) {
-        const classData = classMap.get(classNameForSummary)!;
-        if (record.status === 'present') classData.present++;
-        else if (record.status === 'absent') classData.absent++;
-        else if (record.status === 'late') classData.late++;
-      }
-    });
-
-    let totalSchoolStudents = 0;
-    let totalSchoolPresent = 0;
-    let totalSchoolAbsent = 0;
-    let totalSchoolLate = 0;
-
-    const summaries: ClassAttendanceSummary[] = [];
-    for (const [className, data] of classMap.entries()) {
-      const totalStudentsInClass = data.students.length;
-      const markedStudentsCount = data.present + data.absent + data.late;
-      const unmarkedAsAbsent = totalStudentsInClass - markedStudentsCount;
-
-      const actualPresent = data.present;
-      const actualLate = data.late;
-      const actualAbsent = data.absent + (unmarkedAsAbsent > 0 ? unmarkedAsAbsent : 0) ;
-
-      const attendedInClass = actualPresent + actualLate;
-      const attendancePercentage = totalStudentsInClass > 0 ? Math.round((attendedInClass / totalStudentsInClass) * 100) : 0;
-
-      summaries.push({
-        className,
-        totalStudents: totalStudentsInClass,
-        present: actualPresent,
-        absent: actualAbsent,
-        late: actualLate,
-        attendancePercentage,
-      });
-
-      totalSchoolStudents += totalStudentsInClass;
-      totalSchoolPresent += actualPresent;
-      totalSchoolAbsent += actualAbsent;
-      totalSchoolLate += actualLate;
-    }
-
-    const overallAttended = totalSchoolPresent + totalSchoolLate;
-    const overallAttendancePercentage = totalSchoolStudents > 0 ? Math.round((overallAttended / totalSchoolStudents) * 100) : 0;
-
-    setOverallSummary({
-        totalStudents: totalSchoolStudents,
-        totalPresent: totalSchoolPresent,
-        totalAbsent: totalSchoolAbsent,
-        totalLate: totalSchoolLate,
-        overallAttendancePercentage
-    });
-
-    setClassSummaries(summaries.sort((a, b) => a.className.localeCompare(b.className)));
-
-  }, [allSchoolStudents, attendanceRecords, reportDate, classOptions]);
-
 
  const processFeeData = useCallback(() => {
     if (!allSchoolStudents.length || !schoolDetails || !allSchoolPayments) {
@@ -350,10 +205,6 @@ export default function AdminReportsPage() {
 
 
   useEffect(() => {
-    processAttendanceData();
-  }, [allSchoolStudents, attendanceRecords, processAttendanceData]);
-
-  useEffect(() => {
     processFeeData();
   }, [allSchoolStudents, schoolDetails, allSchoolPayments, allSchoolConcessions, processFeeData]);
 
@@ -365,7 +216,6 @@ export default function AdminReportsPage() {
     }
 
     setIsLoading(true);
-    let schoolDataFetchedThisRun = false;
 
     if (isManualRefresh || lastFetchedSchoolId !== authUser.schoolId.toString()) {
       try {
@@ -408,96 +258,21 @@ export default function AdminReportsPage() {
         }
 
         setLastFetchedSchoolId(authUser.schoolId.toString());
-        schoolDataFetchedThisRun = true;
       } catch (error) {
          toast({ variant: "destructive", title: "Error Fetching School Data", description: "An error occurred while fetching school-wide information."});
          console.error("Error fetching school-wide data:", error);
       }
     }
-
-    if (reportDate) {
-        try {
-            const attendanceResult = await getDailyAttendanceForSchool(authUser.schoolId.toString(), reportDate);
-            if (attendanceResult.success && attendanceResult.records) {
-                setAttendanceRecords(attendanceResult.records);
-                if (attendanceResult.records.length === 0 && allSchoolStudents.length > 0 && (isManualRefresh || schoolDataFetchedThisRun)) {
-                    toast({ title: "No Attendance Data", description: "No attendance records found for the selected date." });
-                }
-            } else {
-                toast({ variant: "destructive", title: "Attendance Data Error", description: attendanceResult.error || "Could not fetch attendance data." });
-                setAttendanceRecords([]);
-            }
-        } catch (error) {
-            toast({ variant: "destructive", title: "Error Fetching Attendance", description: "An error occurred while fetching attendance."});
-            console.error("Error fetching attendance data:", error);
-            setAttendanceRecords([]);
-        }
-    } else {
-        setAttendanceRecords([]);
-    }
-
+    
     setIsLoading(false);
-  }, [authUser, reportDate, toast, lastFetchedSchoolId, allSchoolStudents.length, filterAcademicYear]);
+  }, [authUser, toast, lastFetchedSchoolId, filterAcademicYear]);
 
   useEffect(() => {
     if (authUser && authUser.schoolId) {
       loadReportData(false);
     }
-  }, [authUser, reportDate, loadReportData, filterAcademicYear]);
+  }, [authUser, loadReportData, filterAcademicYear]);
 
-
-  const handleDownloadAttendancePdf = async () => {
-    const reportContent = document.getElementById('attendanceReportContent');
-    if (!reportContent) {
-      toast({ variant: "destructive", title: "Error", description: "Attendance report content not found for PDF generation." });
-      return;
-    }
-    if (!reportDate) {
-        toast({ variant: "info", title: "Select Date", description: "Please select a date for the attendance report." });
-        return;
-    }
-
-    setIsDownloadingAttendancePdf(true);
-    try {
-      const canvas = await html2canvas(reportContent, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgProps = pdf.getImageProperties(imgData);
-      const imgWidth = imgProps.width;
-      const imgHeight = imgProps.height;
-
-      const ratio = imgWidth / imgHeight;
-      let newImgWidth = pdfWidth - 20;
-      let newImgHeight = newImgWidth / ratio;
-
-      if (newImgHeight > pdfHeight - 20) {
-        newImgHeight = pdfHeight - 20;
-        newImgWidth = newImgHeight * ratio;
-      }
-
-      const x = (pdfWidth - newImgWidth) / 2;
-      const y = (pdfHeight - newImgHeight) / 2;
-
-      pdf.addImage(imgData, 'PNG', x, y, newImgWidth, newImgHeight);
-      pdf.save(`Attendance_Report_${format(reportDate, "yyyy-MM-dd")}.pdf`);
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      toast({ variant: "destructive", title: "PDF Error", description: "Could not generate attendance PDF. See console for details."});
-    } finally {
-      setIsDownloadingAttendancePdf(false);
-    }
-  };
 
   const handleDownloadFeePdf = async () => {
     const reportContent = document.getElementById('feeReportContent');
@@ -708,136 +483,11 @@ export default function AdminReportsPage() {
 
       <Card>
         <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-                <CardTitle>Daily Attendance Summary Report</CardTitle>
-                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2 w-full sm:w-auto">
-                    <div className="w-full sm:w-auto">
-                        <Label htmlFor="report-date-picker" className="mb-1 block text-sm font-medium">Select Date</Label>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                            <Button
-                                id="report-date-picker"
-                                variant={"outline"}
-                                className="w-full sm:w-[240px] justify-start text-left font-normal"
-                                disabled={isLoading || !authUser || !reportDate}
-                            >
-                                <CalendarDays className="mr-2 h-4 w-4" />
-                                {reportDate ? format(reportDate, "PPP") : <span>Pick a date</span>}
-                            </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                            <Calendar
-                                mode="single"
-                                selected={reportDate}
-                                onSelect={setReportDate}
-                                initialFocus
-                                disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
-                            />
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-                    <Button
-                        variant="default"
-                        onClick={() => loadReportData(true)}
-                        disabled={isLoading || !authUser || !reportDate}
-                        className="w-full sm:w-auto"
-                    >
-                        {isLoading && !isDownloadingAttendancePdf && !isDownloadingFeePdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <BarChartBig className="mr-0 sm:mr-2 h-4 w-4"/>}
-                        <span className="sm:inline hidden">Generate Report</span>
-                        <span className="sm:hidden inline">Generate</span>
-                    </Button>
-                     <Button
-                        variant="outline"
-                        onClick={handleDownloadAttendancePdf}
-                        disabled={isLoading || isDownloadingAttendancePdf || !authUser || !reportDate || !overallSummary}
-                        className="w-full sm:w-auto"
-                    >
-                        {isDownloadingAttendancePdf ? <Loader2 className="mr-0 sm:mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-0 sm:mr-2 h-4 w-4"/>}
-                        <span className="sm:inline hidden">Download PDF</span>
-                        <span className="sm:hidden inline">PDF</span>
-                    </Button>
-                </div>
-            </div>
+            <CardTitle>Attendance Report</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">
+              Daily attendance reports are unavailable with the new monthly attendance system. Please refer to the main <Link href="/dashboard/admin/attendance" className="text-primary underline">Attendance page</Link> for monthly records.
+            </CardDescription>
         </CardHeader>
-        <CardContent>
-          {isLoading && !isDownloadingAttendancePdf && !isDownloadingFeePdf ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2">Generating attendance report...</p>
-            </div>
-          ) : !authUser ? (
-             <p className="text-center text-muted-foreground py-4">Please log in as a school admin to view reports.</p>
-          ) : !reportDate ? (
-             <p className="text-center text-muted-foreground py-4">Please select a date to generate the attendance report.</p>
-          ) : classSummaries.length > 0 && overallSummary ? (
-            <div id="attendanceReportContent" className="p-4 bg-card rounded-md">
-            <Card className="mb-6 bg-secondary/30 border-none shadow-none">
-                <CardHeader className="pt-2 pb-2">
-                    <CardTitle className="text-lg">Overall School Attendance - {format(reportDate, "PPP")}</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center pb-2">
-                    <div>
-                        <p className="text-sm text-muted-foreground">Total Students</p>
-                        <p className="text-2xl font-bold">{overallSummary.totalStudents}</p>
-                    </div>
-                    <div>
-                        <p className="text-sm text-muted-foreground">Present</p>
-                        <p className="text-2xl font-bold text-green-600">{overallSummary.totalPresent}</p>
-                    </div>
-                     <div>
-                        <p className="text-sm text-muted-foreground">Absent</p>
-                        <p className="text-2xl font-bold text-red-600">{overallSummary.totalAbsent}</p>
-                    </div>
-                    <div>
-                        <p className="text-sm text-muted-foreground">Late</p>
-                        <p className="text-2xl font-bold text-yellow-600">{overallSummary.totalLate}</p>
-                    </div>
-                    <div>
-                        <p className="text-sm text-muted-foreground">Attendance %</p>
-                        <p className="text-2xl font-bold text-blue-600">{overallSummary.overallAttendancePercentage}%</p>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Class Name</TableHead>
-                  <TableHead className="text-center">Total Students</TableHead>
-                  <TableHead className="text-center">Present</TableHead>
-                  <TableHead className="text-center">Absent</TableHead>
-                  <TableHead className="text-center">Late</TableHead>
-                  <TableHead className="text-center">Attendance %</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {classSummaries.map((summary) => (
-                  <TableRow key={summary.className}>
-                    <TableCell className="font-medium">{summary.className}</TableCell>
-                    <TableCell className="text-center">{summary.totalStudents}</TableCell>
-                    <TableCell className="text-center text-green-600 font-medium">{summary.present}</TableCell>
-                    <TableCell className="text-center text-red-600 font-medium">{summary.absent}</TableCell>
-                    <TableCell className="text-center text-yellow-600 font-medium">{summary.late}</TableCell>
-                    <TableCell className={`text-center font-bold ${summary.attendancePercentage >= 90 ? 'text-green-600' : summary.attendancePercentage >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
-                        {summary.attendancePercentage}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            </div>
-          ) : (
-            <div className="text-center py-10">
-                <Info className="mx-auto h-12 w-12 text-muted-foreground" />
-                <p className="mt-4 text-lg font-semibold">No Attendance Data to Display</p>
-                <p className="text-muted-foreground">
-                    {(allSchoolStudents.length > 0 && attendanceRecords.length === 0) ? "No attendance was marked for this date, or all students were absent." :
-                     (allSchoolStudents.length === 0) ? "No students found for this school. Please add students via User Management." :
-                     "No attendance data for the selected date."}
-                </p>
-            </div>
-          )}
-        </CardContent>
       </Card>
 
 
