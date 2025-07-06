@@ -187,10 +187,15 @@ export async function getMasterAdmins(): Promise<GetMasterAdminsResult> {
             }
         },
         { $unwind: { path: '$schoolInfo', preserveNullAndEmptyArrays: true } },
+        { 
+            $addFields: {
+                schoolName: '$schoolInfo.schoolName'
+            }
+        },
         {
             $project: {
                 password: 0,
-                schoolName: '$schoolInfo.schoolName'
+                schoolInfo: 0,
             }
         },
         { $sort: { createdAt: -1 } }
