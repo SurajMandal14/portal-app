@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase, Award, UserCog, FileQuestion, BookOpen } from "lucide-react";
+import { School as ScholrIcon, UserCircle, LogOut, Menu, Settings, Users, DollarSign, CheckSquare, LayoutDashboard, BookUser, ShieldAlert, User as UserIcon, BookCopy, TicketPercent, BarChart2, Briefcase, Award, UserCog, FileQuestion, BookOpen, CalendarFold } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,6 +25,7 @@ const navLinksBase = {
     { href: "/dashboard/super-admin", label: "SA Dashboard", icon: ShieldAlert },
     { href: "/dashboard/super-admin/schools", label: "Schools", icon: ScholrIcon },
     { href: "/dashboard/super-admin/master-admins", label: "Master Admins", icon: UserCog },
+    { href: "/dashboard/super-admin/academic-years", label: "Academic Years", icon: CalendarFold },
   ],
   masteradmin: [
     { href: "/dashboard/master-admin", label: "Master Admin Panel", icon: UserCog },
@@ -105,7 +106,7 @@ export function Header() {
         const parsedUser: AuthUser = JSON.parse(storedUser);
         if (parsedUser && parsedUser.role) {
           setAuthUser(parsedUser);
-          if (parsedUser.schoolId && parsedUser.role !== 'superadmin' && parsedUser.role !== 'masteradmin') {
+          if (parsedUser.schoolId && parsedUser.role !== 'superadmin') {
             fetchSchoolDetails(parsedUser.schoolId.toString());
           } else {
             setDisplaySchoolName(null);
@@ -160,7 +161,7 @@ export function Header() {
 
   const HeaderTitleContent = () => (
     <>
-      {authUser?.role !== 'superadmin' && authUser?.role !== 'masteradmin' ? (
+      {authUser?.role !== 'superadmin' ? (
         <>
           {displaySchoolLogoUrl ? (
             <img
