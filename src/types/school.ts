@@ -72,7 +72,7 @@ export const classTuitionFeeSchema = z.object({
 // New Zod schema for Bus Fee Location Category
 export const busFeeLocationCategorySchema = z.object({
   location: z.string().min(1, "Location name is required."),
-  classCategory: z.string().min(1, "Class category is required (e.g., Nursery-UKG, I-V)."),
+  classCategory: z.string().min(1, "Station is required."),
   terms: z.array(termFeeSchema).length(3, "Exactly 3 terms are required for bus fees."),
 });
 

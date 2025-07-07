@@ -32,7 +32,7 @@ import {
 
 import { useToast } from "@/hooks/use-toast";
 import { applyFeeConcession, getFeeConcessionsForSchool, revokeFeeConcession } from "@/app/actions/concessions";
-import { getSchoolUsers } from "@/app/actions/schoolUsers";
+import { getStudentDetailsForReportCard } from "@/app/actions/schoolUsers";
 import type { FeeConcessionFormData, FeeConcession } from '@/types/concessions';
 import { feeConcessionFormSchema, CONCESSION_TYPES } from '@/types/concessions';
 import type { User as AppUser, AuthUser } from "@/types/user";
@@ -43,10 +43,8 @@ export default function MasterAdminConcessionPage() {
   const { toast } = useToast();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   
-  const [studentsInSchool, setStudentsInSchool] = useState<AppUser[]>([]);
   const [concessions, setConcessions] = useState<FeeConcession[]>([]);
   
-  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [isLoadingConcessions, setIsLoadingConcessions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -54,6 +52,11 @@ export default function MasterAdminConcessionPage() {
   const [isRevoking, setIsRevoking] = useState(false);
   
   const [academicYearFilter, setAcademicYearFilter] = useState<string>(`${new Date().getFullYear()}-${new Date().getFullYear() + 1}`);
+  
+  // State for student search
+  const [admissionIdInput, setAdmissionIdInput] = useState("");
+  const [foundStudentName, setFoundStudentName] = useState<string | null>(null);
+  const [isSearchingStudent, setIsSearchingStudent] = useState(false);
 
   const form = useForm<FeeConcessionFormData>({
     resolver: zodResolver(feeConcessionFormSchema),
@@ -83,18 +86,6 @@ export default function MasterAdminConcessionPage() {
     } else { setAuthUser(null); }
   }, [toast, form]);
 
-  const fetchStudentsForSchool = useCallback(async (schoolId: string) => {
-    setIsLoadingStudents(true);
-    const studentsResult = await getSchoolUsers(schoolId);
-    if (studentsResult.success && studentsResult.users) {
-      setStudentsInSchool(studentsResult.users.filter(u => u.role === 'student'));
-    } else {
-      toast({ variant: "warning", title: "Students", description: studentsResult.message || "Failed to load students."});
-      setStudentsInSchool([]);
-    }
-    setIsLoadingStudents(false);
-  }, [toast]);
-
   const fetchConcessionsForSchool = useCallback(async (schoolId: string, year?: string) => {
     setIsLoadingConcessions(true);
     const concessionsResult = await getFeeConcessionsForSchool(schoolId, year);
@@ -109,14 +100,37 @@ export default function MasterAdminConcessionPage() {
 
   useEffect(() => {
     if (authUser?.schoolId) {
-      fetchStudentsForSchool(authUser.schoolId.toString());
       fetchConcessionsForSchool(authUser.schoolId.toString(), academicYearFilter);
     }
-  }, [authUser, academicYearFilter, fetchStudentsForSchool, fetchConcessionsForSchool]);
+  }, [authUser, academicYearFilter, fetchConcessionsForSchool]);
+
+  const handleSearchStudent = async () => {
+    if (!admissionIdInput.trim() || !authUser?.schoolId) {
+      toast({ variant: "destructive", title: "Input Missing", description: "Please provide an admission number." });
+      return;
+    }
+    setIsSearchingStudent(true);
+    setFoundStudentName(null);
+    form.setValue('studentId', '');
+
+    const result = await getStudentDetailsForReportCard(admissionIdInput, authUser.schoolId.toString());
+    if (result.success && result.student) {
+      setFoundStudentName(result.student.name);
+      form.setValue('studentId', result.student._id.toString());
+      toast({ title: "Student Found", description: `Selected: ${result.student.name}` });
+    } else {
+      toast({ variant: "destructive", title: "Student Not Found", description: result.message || "No student found with that admission number." });
+    }
+    setIsSearchingStudent(false);
+  };
 
   async function onSubmit(values: FeeConcessionFormData) {
     if (!authUser?._id) {
       toast({ variant: "destructive", title: "Error", description: "Admin session not found."});
+      return;
+    }
+    if (!values.studentId) {
+      toast({ variant: "destructive", title: "Student Not Selected", description: "Please search for and select a student first." });
       return;
     }
     setIsSubmitting(true);
@@ -125,6 +139,8 @@ export default function MasterAdminConcessionPage() {
     if (result.success) {
       toast({ title: "Concession Applied", description: result.message });
       form.reset({ ...form.getValues(), studentId: "", amount: 0, reason: "", concessionType: undefined });
+      setAdmissionIdInput("");
+      setFoundStudentName(null);
       if (authUser.schoolId) fetchConcessionsForSchool(authUser.schoolId.toString(), academicYearFilter);
     } else {
       toast({ variant: "destructive", title: "Application Failed", description: result.error || result.message });
@@ -169,14 +185,32 @@ export default function MasterAdminConcessionPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <FormField control={form.control} name="studentId" render={({ field }) => (
-                  <FormItem><FormLabel className="flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Select Student</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || isLoadingStudents || studentsInSchool.length === 0}>
-                      <FormControl><SelectTrigger><SelectValue placeholder={isLoadingStudents ? "Loading students..." : (studentsInSchool.length === 0 ? "No students in school" : "Select a student")} /></SelectTrigger></FormControl>
-                      <SelectContent>{studentsInSchool.map((student) => (<SelectItem key={student._id!.toString()} value={student._id!.toString()}>{student.name} ({student.admissionId || 'N/A'})</SelectItem>))}</SelectContent>
-                    </Select><FormMessage />
-                  </FormItem>
-                )}/>
+                <div className="lg:col-span-1">
+                  <FormLabel className="flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Student Admission Number</FormLabel>
+                  <div className="flex items-center gap-2">
+                      <Input 
+                          placeholder="Type admission number"
+                          value={admissionIdInput}
+                          onChange={(e) => {
+                              setAdmissionIdInput(e.target.value);
+                              setFoundStudentName(null);
+                              form.setValue('studentId', '');
+                          }}
+                          disabled={isSubmitting}
+                      />
+                      <Button type="button" onClick={handleSearchStudent} disabled={isSubmitting || !admissionIdInput || isSearchingStudent}>
+                          {isSearchingStudent ? <Loader2 className="h-4 w-4 animate-spin"/> : <Search className="h-4 w-4"/>}
+                      </Button>
+                  </div>
+                  {foundStudentName && <p className="text-sm text-green-600 mt-1">Student Found: <span className="font-semibold">{foundStudentName}</span></p>}
+                  <FormField control={form.control} name="studentId" render={({ field }) => (
+                      <FormItem>
+                          <FormControl><Input type="hidden" {...field} /></FormControl>
+                          <FormMessage />
+                      </FormItem>
+                  )}/>
+                </div>
+                
                 <FormField control={form.control} name="academicYear" render={({ field }) => (
                   <FormItem><FormLabel className="flex items-center"><CalendarFold className="mr-2 h-4 w-4 text-muted-foreground"/>Academic Year</FormLabel>
                     <FormControl><Input placeholder="e.g., 2023-2024" {...field} disabled={isSubmitting} /></FormControl><FormMessage />
@@ -201,7 +235,7 @@ export default function MasterAdminConcessionPage() {
                   </FormItem>
                 )}/>
               </div>
-              <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || !form.formState.isValid}>
+              <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || !form.formState.isValid || !foundStudentName}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>} Apply Concession
               </Button>
             </form>
@@ -234,7 +268,9 @@ export default function MasterAdminConcessionPage() {
                   <TableCell>{con.appliedByMasterAdminName || 'N/A'}</TableCell><TableCell>{format(new Date(con.createdAt), "PP")}</TableCell>
                   <TableCell>
                     <AlertDialog open={concessionToRevoke?._id === con._id} onOpenChange={(open) => !open && setConcessionToRevoke(null)}>
-                        <Button variant="ghost" size="icon" onClick={() => setConcessionToRevoke(con)} disabled={isRevoking} className="text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button>
+                        <AlertDialogTrigger asChild>
+                           <Button variant="ghost" size="icon" onClick={() => setConcessionToRevoke(con)} disabled={isRevoking} className="text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button>
+                        </AlertDialogTrigger>
                       {concessionToRevoke && concessionToRevoke._id === con._id && (
                         <AlertDialogContent>
                           <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will revoke the concession of <span className="font-sans">₹</span>{concessionToRevoke.amount} for {concessionToRevoke.studentName}. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>

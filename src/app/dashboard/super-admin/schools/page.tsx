@@ -404,9 +404,9 @@ export default function SchoolManagementPage() {
                                 name={`busFeeStructures.${busIndex}.classCategory`}
                                 render={({ field: categoryField }) => (
                                 <FormItem>
-                                    <FormLabel>Class Category</FormLabel>
+                                    <FormLabel>Stations</FormLabel>
                                     <FormControl>
-                                    <Input placeholder="e.g., Nursery-UKG, I-V, VI-X" {...categoryField} disabled={isSubmitting} />
+                                    <Input placeholder="e.g., Station 1, Station 2" {...categoryField} disabled={isSubmitting} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

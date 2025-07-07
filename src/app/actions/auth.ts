@@ -42,6 +42,10 @@ export async function loginUser(values: z.infer<typeof loginSchema>): Promise<Lo
       }
     } else { // Treat as admission number (only for students)
       user = await usersCollection.findOne({ admissionId: identifier, role: 'student' });
+       // Explicit case-sensitive check for admission ID.
+      if (user && user.admissionId !== identifier) {
+        return { error: 'User not found or admission ID case mismatch.', success: false };
+      }
     }
 
     if (!user) {
